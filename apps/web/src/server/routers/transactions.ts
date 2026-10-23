@@ -1,0 +1,143 @@
+import { and, desc, eq } from "drizzle-orm";
+import { z } from "zod";
+import { schema } from "@beobeo/db";
+import { invalidateUserComputations } from "../cache";
+import { protectedProcedure, router } from "../trpc";
+
+const decimalString = z
+  .string()
+  .regex(/^-?\d+(\.\d+)?$/, "must be a decimal number");
+const positiveDecimalString = z
+  .string()
+  .regex(/^\d+(\.\d+)?$/, "must be a non-negative decimal")
+  .refine((s) => Number(s) > 0 || s.startsWith("0."), {
+    message: "must be positive",
+  });
+
+export const transactionInput = z.object({
+  accountId: z.uuid(),
+  assetId: z.uuid(),
+  type: z.enum([
+    "buy",
+    "sell",
+    "dividend",
+    "split",
+    "transfer_in",
+    "transfer_out",
+    "fee",
+  ]),
+  quantity: positiveDecimalString,
+  pricePerUnit: decimalString.nullable(),
+  fees: decimalString.default("0"),
+  tradedAt: z.date(),
+  note: z.string().max(500).optional(),
+  source: z.string().max(50).default("manual"),
+});
+
+export const transactionsRouter = router({
+  list: protectedProcedure
+    .input(
+      z
+        .object({
+          assetId: z.uuid().optional(),
+          accountId: z.uuid().optional(),
+          portfolioId: z.uuid().optional(),
+          limit: z.number().int().min(1).max(500).default(200),
+        })
+        .default({ limit: 200 }),
+    )
+    .query(async ({ ctx, input }) => {
+      const conditions = [eq(schema.transactions.userId, ctx.userId)];
+      if (input.assetId) conditions.push(eq(schema.transactions.assetId, input.assetId));
+      if (input.accountId)
+        conditions.push(eq(schema.transactions.accountId, input.accountId));
+      if (input.portfolioId)
+        conditions.push(eq(schema.accounts.portfolioId, input.portfolioId));
+
+      return ctx.db
+        .select({
+          txn: schema.transactions,
+          asset: schema.assets,
+          account: schema.accounts,
+        })
+        .from(schema.transactions)
+        .innerJoin(schema.assets, eq(schema.transactions.assetId, schema.assets.id))
+        .innerJoin(schema.accounts, eq(schema.transactions.accountId, schema.accounts.id))
+        .where(and(...conditions))
+        .orderBy(desc(schema.transactions.tradedAt))
+        .limit(input.limit);
+    }),
+
+  create: protectedProcedure
+    .input(transactionInput)
+    .mutation(async ({ ctx, input }) => {
+      await assertOwnAccount(ctx, input.accountId);
+      const [txn] = await ctx.db
+        .insert(schema.transactions)
+        .values({ ...input, userId: ctx.userId })
+        .returning();
+      await invalidateUserComputations(ctx.userId);
+      return txn!;
+    }),
+
+  bulkCreate: protectedProcedure
+    .input(z.object({ transactions: z.array(transactionInput).min(1).max(2000) }))
+    .mutation(async ({ ctx, input }) => {
+      const accountIds = [...new Set(input.transactions.map((t) => t.accountId))];
+      for (const id of accountIds) await assertOwnAccount(ctx, id);
+      const rows = await ctx.db
+        .insert(schema.transactions)
+        .values(input.transactions.map((t) => ({ ...t, userId: ctx.userId })))
+        .returning({ id: schema.transactions.id });
+      await invalidateUserComputations(ctx.userId);
+      return { inserted: rows.length };
+    }),
+
+  update: protectedProcedure
+    .input(z.object({ id: z.uuid(), data: transactionInput.partial() }))
+    .mutation(async ({ ctx, input }) => {
+      if (input.data.accountId) await assertOwnAccount(ctx, input.data.accountId);
+      const [txn] = await ctx.db
+        .update(schema.transactions)
+        .set(input.data)
+        .where(
+          and(
+            eq(schema.transactions.id, input.id),
+            eq(schema.transactions.userId, ctx.userId),
+          ),
+        )
+        .returning();
+      await invalidateUserComputations(ctx.userId);
+      return txn ?? null;
+    }),
+
+  remove: protectedProcedure
+    .input(z.object({ id: z.uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db
+        .delete(schema.transactions)
+        .where(
+          and(
+            eq(schema.transactions.id, input.id),
+            eq(schema.transactions.userId, ctx.userId),
+          ),
+        );
+      await invalidateUserComputations(ctx.userId);
+    }),
+});
+
+async function assertOwnAccount(
+  ctx: { db: typeof import("@beobeo/db").db; userId: string },
+  accountId: string,
+) {
+  const rows = await ctx.db
+    .select({ id: schema.accounts.id })
+    .from(schema.accounts)
+    .where(
+      and(eq(schema.accounts.id, accountId), eq(schema.accounts.userId, ctx.userId)),
+    );
+  if (rows.length === 0) {
+    const { TRPCError } = await import("@trpc/server");
+    throw new TRPCError({ code: "FORBIDDEN", message: "Not your account" });
+  }
+}

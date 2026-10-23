@@ -1,0 +1,28 @@
+{
+  "name": "@beobeo/market-data",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./popular": "./src/popular.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "backfill": "tsx scripts/backfill.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "dotenv": "^17.4.2",
+    "tsx": "^4.23.0",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "@beobeo/core": "workspace:*",
+    "@beobeo/db": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "zod": "^4.4.3"
+  }
+}

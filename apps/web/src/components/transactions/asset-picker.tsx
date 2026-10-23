@@ -1,0 +1,237 @@
+"use client";
+
+import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
+import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { searchPopular } from "@beobeo/market-data/popular";
+import { AssetLogo } from "@/components/asset-logo";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandList,
+} from "@/components/ui/command";
+import { CommandItem } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useTRPC } from "@/lib/trpc";
+
+export interface PickedAsset {
+  id: string;
+  symbol: string;
+  name: string;
+  class: string;
+}
+
+function useDebounced<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(t);
+  }, [value, delayMs]);
+  return debounced;
+}
+
+const CLASS_LABEL: Record<string, string> = {
+  stock: "Stock",
+  etf: "ETF",
+  fund: "Fund",
+  crypto: "Crypto",
+  cash: "Cash",
+};
+
+function AssetRow({
+  symbol,
+  name,
+  assetClass,
+  selected,
+}: {
+  symbol: string;
+  name: string;
+  assetClass: string;
+  selected?: boolean;
+}) {
+  return (
+    <>
+      <AssetLogo symbol={symbol} assetClass={assetClass} size={28} />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="flex items-center gap-1.5">
+          <span className="font-semibold">{symbol}</span>
+          {selected && <Check className="size-3.5 text-muted-foreground" />}
+        </span>
+        <span className="truncate text-xs text-muted-foreground">{name}</span>
+      </span>
+      <Badge variant="outline" className="ml-2 shrink-0 text-[10px] uppercase">
+        {CLASS_LABEL[assetClass] ?? assetClass}
+      </Badge>
+    </>
+  );
+}
+
+export function AssetPicker({
+  value,
+  onChange,
+}: {
+  value: PickedAsset | null;
+  onChange: (asset: PickedAsset) => void;
+}) {
+  const trpc = useTRPC();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const debouncedQuery = useDebounced(query.trim(), 200);
+
+  // Famous tickers match synchronously on every keystroke — zero latency.
+  // The server round-trip (user's own assets + provider search) fills in
+  // behind them.
+  const popular = searchPopular(query.trim(), 6);
+
+  const search = useQuery({
+    ...trpc.assets.search.queryOptions({ query: debouncedQuery }),
+    enabled: debouncedQuery.length >= 2,
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60_000,
+  });
+
+  const ensure = useMutation(trpc.assets.ensure.mutationOptions());
+
+  async function pickRemote(r: {
+    symbol: string;
+    name: string;
+    class: "stock" | "etf" | "fund" | "crypto" | "cash";
+    providerRef?: string;
+  }) {
+    const asset = await ensure.mutateAsync(r);
+    onChange({ id: asset.id, symbol: asset.symbol, name: asset.name, class: asset.class });
+    setOpen(false);
+  }
+
+  const searching = search.isFetching || query.trim() !== debouncedQuery;
+
+  // Merge, deduping across the three sections (local wins, then popular).
+  const local = search.data?.local ?? [];
+  const seen = new Set(local.map((a) => `${a.symbol}:${a.class}`));
+  const popularRows = popular.filter((p) => !seen.has(`${p.symbol}:${p.class}`));
+  for (const p of popularRows) seen.add(`${p.symbol}:${p.class}`);
+  const remoteRows = (search.data?.remote ?? []).filter(
+    (r) => !seen.has(`${r.symbol}:${r.class}`),
+  );
+  const hasResults = local.length > 0 || popularRows.length > 0 || remoteRows.length > 0;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-11 w-full justify-between font-normal"
+        >
+          {value ? (
+            <span className="flex min-w-0 items-center gap-2.5">
+              <AssetLogo symbol={value.symbol} assetClass={value.class} size={22} />
+              <span className="font-semibold">{value.symbol}</span>
+              <span className="truncate text-muted-foreground">{value.name}</span>
+            </span>
+          ) : (
+            <span className="text-muted-foreground">Search symbol or name…</span>
+          )}
+          <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder="AAPL, Meta, bitcoin…"
+            value={query}
+            onValueChange={setQuery}
+          />
+          <CommandList>
+            {query.trim().length === 0 ? (
+              <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                Type a ticker or company name
+              </p>
+            ) : (
+              <>
+                {!hasResults && (
+                  <CommandEmpty>
+                    {searching ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <Loader2 className="size-3.5 animate-spin" /> Searching…
+                      </span>
+                    ) : (
+                      "No matches"
+                    )}
+                  </CommandEmpty>
+                )}
+                {popularRows.length > 0 && (
+                  <CommandGroup heading="Popular">
+                    {popularRows.map((r) => (
+                      <CommandItem
+                        key={`pop-${r.symbol}:${r.class}`}
+                        value={`pop-${r.symbol}-${r.class}`}
+                        className="gap-2.5 py-2"
+                        disabled={ensure.isPending}
+                        onSelect={() => void pickRemote(r)}
+                      >
+                        <AssetRow symbol={r.symbol} name={r.name} assetClass={r.class} />
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
+                {local.length > 0 && (
+                  <CommandGroup heading="Your assets">
+                    {local.map((a) => (
+                      <CommandItem
+                        key={a.id}
+                        value={`local-${a.id}`}
+                        className="gap-2.5 py-2"
+                        onSelect={() => {
+                          onChange({
+                            id: a.id,
+                            symbol: a.symbol,
+                            name: a.name,
+                            class: a.class,
+                          });
+                          setOpen(false);
+                        }}
+                      >
+                        <AssetRow
+                          symbol={a.symbol}
+                          name={a.name}
+                          assetClass={a.class}
+                          selected={value?.id === a.id}
+                        />
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
+                {remoteRows.length > 0 && (
+                  <CommandGroup heading="Markets">
+                    {remoteRows.map((r, i) => (
+                      <CommandItem
+                        key={`${r.symbol}:${r.class}:${i}`}
+                        value={`remote-${r.symbol}-${r.class}-${i}`}
+                        className="gap-2.5 py-2"
+                        disabled={ensure.isPending}
+                        onSelect={() => void pickRemote(r)}
+                      >
+                        <AssetRow symbol={r.symbol} name={r.name} assetClass={r.class} />
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
+                {hasResults && searching && (
+                  <p className="flex items-center justify-center gap-2 border-t py-1.5 text-xs text-muted-foreground">
+                    <Loader2 className="size-3 animate-spin" /> updating…
+                  </p>
+                )}
+              </>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}

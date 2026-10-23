@@ -1,0 +1,70 @@
+export {
+  D,
+  Decimal,
+  ZERO,
+  DAY_MS,
+  toIsoDate,
+  EngineError,
+  type Numeric,
+  type TransactionType,
+  type EngineTransaction,
+  type Lot,
+  type RealizedGain,
+  type IsoDate,
+} from "./types";
+export { buildLots, isLongTerm, type LotEngineResult } from "./lots";
+export { positionFromLots, type PositionSnapshot } from "./position";
+export { realizedByYear, type YearlyRealized } from "./realized";
+export {
+  portfolioTimeSeries,
+  type DailyPoint,
+  type PriceSeries,
+} from "./timeseries";
+export { xirr, type DatedCashFlow } from "./xirr";
+export {
+  dailyReturns,
+  chainReturns,
+  annualize,
+  maxDrawdown,
+  currentDrawdown,
+  valueDrawdown,
+  volatility,
+  sharpe,
+  bestWorstDay,
+  type MetricSeriesPoint,
+  type DailyReturn,
+} from "./metrics";
+export { adjustForSplits, splitFactorAfter, type SplitEvent } from "./splits";
+export {
+  extractCashFlows,
+  replayDca,
+  type CashFlow,
+  type BenchmarkComponent,
+  type DcaReplayResult,
+} from "./dca";
+export {
+  totalTax,
+  explainNetting,
+  type TaxRates,
+  type NettingBreakdown,
+} from "./tax-netting";
+export {
+  detectWashSaleBlocks,
+  type RecentBuyTxn,
+  type LossLotCandidate,
+  type WashSaleBlock,
+} from "./tax-wash-sale";
+export {
+  planSale,
+  planFifo,
+  planHighestCostFirst,
+  ripeningSoon,
+  summarizeHarvest,
+  type TaxLot,
+  type TaxProfile,
+  type RipeningInfo,
+  type PlannedSale,
+  type TaxPlan,
+  type PlanSaleOpts,
+  type HarvestBreakdown,
+} from "./tax-optimizer";

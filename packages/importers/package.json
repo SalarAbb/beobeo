@@ -1,0 +1,22 @@
+{
+  "name": "@beobeo/importers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "@types/papaparse": "^5.5.2",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "papaparse": "^5.5.4",
+    "zod": "^4.4.3"
+  }
+}
