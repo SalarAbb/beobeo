@@ -50,7 +50,7 @@ scripts/install-launchd.sh [--remove]   # arm/disarm the daily 08:00 cycle (Laun
 - **DB:** Postgres 18 on Neon (serverless HTTP driver `@neondatabase/serverless` 1.x), Drizzle ORM 0.45
 - **Money math:** decimal.js (precision 40) in `@beobeo/core`; Postgres `numeric` columns travel as strings
 - **Charts:** lightweight-charts v5 (time series; note v5 API `chart.addSeries(AreaSeries, opts)`), Recharts 3 (donut, bars)
-- **Agent:** `@anthropic-ai/sdk` (beta tool runner + `betaZodTool`), model `claude-opus-4-8`, adaptive thinking, streaming
+- **Agent:** `@anthropic-ai/sdk` (beta tool runner + `betaZodTool`), model `claude-opus-4-8`, adaptive thinking at low effort, streaming, preloaded portfolio snapshot
 - **CSV:** papaparse
 - **Tests:** Vitest 4
 - **Simulation:** Playwright 1.64 (drives the installed Google Chrome via `channel: "chrome"`, falls back to bundled Chromium), Node's built-in `node:sqlite` for the journal (no native deps), persona minds on `claude-sonnet-5-5`
@@ -134,7 +134,7 @@ Pure TS, zero framework/DB deps. Exhaustive Vitest fixtures in `packages/core/te
 ### `packages/agent`
 - Never touches the DB. Tools are built against the `PortfolioApi` interface (`api.ts`); the **user-scoped read-only implementation** lives in `apps/web/src/server/agent-api.ts` (`makePortfolioApi(userId)`).
 - Six tools (betaZodTool): `get_portfolio_summary`, `get_position_details`, `get_transactions`, `get_realized_gains`, `run_dca_comparison`, `get_price_history`. Tool results are JSON strings; big series get trimmed before hitting the context (last 30 closes, endpoints-only for DCA).
-- `runPortfolioAgentTurn` — streaming tool runner (`stream: true`, `max_iterations: 8`), emits `{type: text|tool|done|error}` events. System prompt: ground numbers in tool results, no personalized investment advice.
+- `runPortfolioAgentTurn` — streaming tool runner (`stream: true`, `max_iterations: 8`), emits `{type: text|tool|done|error}` events. **Speed + verdict-first (backlog #1, 2026-10-25):** every turn first awaits `PortfolioApi.getContextSnapshot()` (holdings with weights, totals labeled `realizedAllTime`/`dividendsAllTime`, `contributions` = first trade date + net invested all-time/last 12 months from the cached timeseries, accounts with type, saved tax rates federal+state + YTD) and puts it in a second, uncached system block after the cached static prompt (`cache_control` on the static block caches tools+prompt). That removed the summary-tool round trip nearly every question started with. Thinking is adaptive at `output_config.effort: "low"` — measured on sim personas: thinking off started in ~1.3s but dodged questions and narrated tool calls; medium doubled the first-word wait. System prompt: first sentence is the answer (yes/no + key number), ~120 words, no headings, tables only when asked or ≥4 rows, plain words, state assumptions instead of asking, never end with an offer/question, convert saved tax rates into dollars, and when the user names options say which one their data leans toward with one reason (the user's chosen advice line). `get_transactions` rows carry the account name and honor `portfolioId`.
 - `/api/chat` route: SSE (`data: {json}\n\n`); creates thread on first message (title = first 80 chars), persists user+assistant text turns, `maxDuration = 120`.
 
 ### `packages/sim` — the self-evolving loop's simulated users (see PLAN.md → The loop)

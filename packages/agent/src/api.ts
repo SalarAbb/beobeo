@@ -4,6 +4,9 @@
  * touches the database directly, and every method is read-only by design.
  */
 export interface PortfolioApi {
+  /** Compact snapshot (holdings, totals, accounts, saved tax rates) that is
+   *  preloaded into every turn, so most questions need no tool round trip. */
+  getContextSnapshot(): Promise<unknown>;
   getPortfolioSummary(): Promise<unknown>;
   getPositionDetails(symbol: string): Promise<unknown>;
   getTransactions(filter: { symbol?: string; limit?: number }): Promise<unknown>;

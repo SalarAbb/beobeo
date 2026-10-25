@@ -10,7 +10,7 @@ export function buildPortfolioTools(api: PortfolioApi) {
     betaZodTool({
       name: "get_portfolio_summary",
       description:
-        "Current portfolio overview: every holding with quantity, cost basis, latest price, market value, and unrealized P/L, plus portfolio-level totals (value, unrealized, realized, dividends). Call this first for any portfolio-wide question.",
+        "Current portfolio overview: every holding with quantity, cost basis, latest price, market value, and unrealized P/L, plus portfolio-level totals (value, unrealized, realized, dividends). The turn's snapshot already holds this; call it only to refresh.",
       inputSchema: z.object({}),
       run: async () => json(await api.getPortfolioSummary()),
     }),

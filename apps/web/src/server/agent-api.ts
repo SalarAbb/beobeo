@@ -7,8 +7,10 @@ import {
   computeDcaComparison,
   computeOverview,
   computePosition,
+  computeTimeseries,
   loadEngineTransactions,
 } from "./portfolio";
+import { computeTaxProfile } from "./tax-center";
 
 /** Resolve a symbol to an asset the user actually holds/held. */
 async function findUserAsset(userId: string, symbol: string) {
@@ -28,6 +30,68 @@ async function findUserAsset(userId: string, symbol: string) {
 /** Read-only PortfolioApi bound to one authenticated user. */
 export function makePortfolioApi(userId: string, portfolioId?: string): PortfolioApi {
   return {
+    async getContextSnapshot() {
+      const accountFilter = [eq(schema.accounts.userId, userId)];
+      if (portfolioId) accountFilter.push(eq(schema.accounts.portfolioId, portfolioId));
+      const [overview, series, tax, accounts] = await Promise.all([
+        computeOverview(userId, portfolioId),
+        computeTimeseries(userId, undefined, portfolioId).catch(() => []),
+        computeTaxProfile(userId, portfolioId).catch(() => null),
+        db
+          .select({ name: schema.accounts.name, type: schema.accounts.accountType })
+          .from(schema.accounts)
+          .where(and(...accountFilter)),
+      ]);
+      const { value } = overview.totals;
+      // "Am I on track?" needs the saving pace; without it the agent spent a
+      // slow round trip paging through transactions to estimate it.
+      const first = series[0];
+      const last = series[series.length - 1];
+      const yearAgo = toIsoDate(new Date(Date.now() - 365 * 86_400_000));
+      const atYearAgo = series.findLast((p) => p.date <= yearAgo);
+      const contributions = first && last && {
+        firstTradeDate: first.date,
+        netInvestedAllTime: last.invested,
+        netInvestedLast12Months: last.invested - (atYearAgo?.invested ?? 0),
+      };
+      return {
+        contributions,
+        totals: {
+          value,
+          costBasis: overview.totals.cost,
+          unrealized: overview.totals.unrealized,
+          unrealizedPct: overview.totals.unrealizedPct,
+          realizedAllTime: overview.totals.realized,
+          dividendsAllTime: overview.totals.dividends,
+        },
+        holdings: overview.holdings.map((h) => ({
+          symbol: h.symbol,
+          name: h.name,
+          class: h.class,
+          quantity: h.quantity,
+          avgCost: h.avgCost,
+          costBasis: h.costBasis,
+          price: h.price,
+          priceDate: h.priceDate,
+          marketValue: h.marketValue,
+          weightPct: value > 0 && h.marketValue !== null ? (h.marketValue / value) * 100 : null,
+          unrealized: h.unrealizedGain,
+          unrealizedPct: h.unrealizedGainPct,
+        })),
+        dataIssues: overview.dataIssues,
+        accounts,
+        taxProfile: tax && {
+          // Federal + state, the same combination the Tax Center uses.
+          shortTermRatePct: tax.federalOrdinaryRatePct + tax.stateOrdinaryRatePct,
+          longTermRatePct: tax.federalLtcgRatePct + tax.stateLtcgRatePct,
+          ytdShortTermGain: tax.ytdShortTermOverride ?? tax.ytdShortTermComputed,
+          ytdLongTermGain: tax.ytdLongTermOverride ?? tax.ytdLongTermComputed,
+          carryforwardShortTerm: tax.carryforwardShortTerm,
+          carryforwardLongTerm: tax.carryforwardLongTerm,
+        },
+      };
+    },
+
     async getPortfolioSummary() {
       return computeOverview(userId, portfolioId);
     },
@@ -43,6 +107,7 @@ export function makePortfolioApi(userId: string, portfolioId?: string): Portfoli
 
     async getTransactions({ symbol, limit = 50 }) {
       const conditions = [eq(schema.transactions.userId, userId)];
+      if (portfolioId) conditions.push(eq(schema.accounts.portfolioId, portfolioId));
       if (symbol) {
         const asset = await findUserAsset(userId, symbol);
         if (!asset) return { error: `No transactions found for ${symbol}` };
@@ -57,9 +122,11 @@ export function makePortfolioApi(userId: string, portfolioId?: string): Portfoli
           fees: schema.transactions.fees,
           tradedAt: schema.transactions.tradedAt,
           note: schema.transactions.note,
+          account: schema.accounts.name,
         })
         .from(schema.transactions)
         .innerJoin(schema.assets, eq(schema.transactions.assetId, schema.assets.id))
+        .innerJoin(schema.accounts, eq(schema.transactions.accountId, schema.accounts.id))
         .where(and(...conditions))
         .orderBy(desc(schema.transactions.tradedAt))
         .limit(limit);

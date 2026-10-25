@@ -108,9 +108,11 @@ Commands: `pnpm sim:bootstrap`, `pnpm sim:day`, `pnpm sim:digest`,
 work that comes from the plan and from the personas. It's ranked, and the loop re-ranks
 it against each digest; items cite the theme keys that motivated them.
 
-1. **Answer in a heartbeat, verdict first.** The assistant's first word takes 4.8 s
-   typically and 28 s at worst; answers bury the yes/no under tables. Stream sooner,
-   lead with a one-line verdict, keep tables for those who ask. Themes:
+1. **Answer in a heartbeat, verdict first.** First slice shipped 2026-10-25 (preloaded
+   snapshot, low-effort thinking, verdict-first prompt). Left: questions that need a
+   tool still take 5–15 s to the first word. Next: preload what those tools return
+   most often (this year's realized gains, lots turning long-term soon), and remember
+   facts the user stated (age, targets) across threads. Themes:
    `slow-chat-first-token`, `chat-too-long-jargony`, `chat-no-direct-on-track-answer`.
 2. **Quiet the Tax Center's zero states.** "-$0.00" savings, rows of $0.00 boxes, and
    jargon ("loss lot", "wash-sale rule") for users who've never sold. Lead with the
@@ -151,7 +153,7 @@ format: Status is `built`, `partial` or `missing`.
 | Product | Lot-level portfolio tracking (FIFO, splits, realized by year) | built | core engine, 96 golden tests |
 | Product | Tax Center: raise cash, harvest losses, wash-sale radar | built | deterministic, no LLM |
 | Product | DCA counterfactual vs. benchmarks | built | compare page, up to 4 benchmarks |
-| Product | Chat companion grounded in your data | partial | personas rate it 2.6/5: slow first token, verbose, no verdict (backlog #1) |
+| Product | Chat companion grounded in your data | partial | rated 3.0/5 before the snapshot + verdict-first prompt (2026-10-25); first word still 5–15s when a tool is needed (backlog #1) |
 | Product | Crypto wash-sale exemption | missing | part of R-003 |
 | Product | Proactive tax moves (free-money alerts) | partial | Now tab shows ripening lots; no alerts yet (R-003) |
 | Product | "I have $n" picks one of your candidates | missing | R-004 |
@@ -186,6 +188,8 @@ format: Status is `built`, `partial` or `missing`.
 
 One entry per cycle, newest first: date · branch · what shipped · theme ids
 answered · before/after signal.
+
+- **2026-10-25 · Chat: snapshot preloaded, verdict first.** Every chat turn now starts with a portfolio snapshot (holdings and weights, totals, how much was put in and how fast, accounts, saved tax rates) in the system prompt, so most questions need no tool call. Thinking runs at low effort, and the prompt was rewritten: answer in the first sentence, ~120 words, plain words, state assumptions instead of asking, turn saved tax rates into dollars, and lean toward one of the user's named options. Probed on 5 sim personas before → after: total time Luna 22s → 6.7s (first word 1.9s, no tool calls), Samwell over 60s → 15s with "Roughly yes" up front, Fred ~20s → 8s, Gilderoy 37s → 17s, Olenna 35s → 21s. Tool-heavy questions still take 5–15s to the first word. · `slow-chat-first-token`, `chat-too-long-jargony`, `chat-no-direct-on-track-answer`, `chat-ignores-stated-tax-profile` · expected signal: chat:first-token p50 under 3s, chat:total p50 under 12s, fewer "wall of text" notes.
 
 - **2026-10-25 · R-001 phase 2: position, transactions, accounts, account pages.** The dashboard's building blocks (`PageHeader`, `Section`, `StatStrip`, `StatTile`) moved to a shared `page-section.tsx`, and four more pages now use them: hairline stat strips, serif section titles over rules, mono numerals, and quiet type pills on transactions. Found and fixed along the way: the position page crashed for anyone with two trades on the same day (duplicate avg-cost step timestamps), and past 12 trades the marker quantity labels smeared into an unreadable band, so they're now plain arrows. · R-001 · expected signal: look scores hold or rise; no `error-/positions` themes.
 
