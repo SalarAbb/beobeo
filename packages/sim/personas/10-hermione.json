@@ -1,5 +1,5 @@
 {
-  "id": "hermione", "version": 3,
+  "id": "hermione", "version": 4,
   "name": "Hermione Granger", "age": 40,
   "life": "Quant developer at a trading firm. Uses keyboard shortcuts for everything, exports to CSV, double-checks every number against her own Python notebook.",
   "techSavviness": 5, "patienceMs": 800,
@@ -23,7 +23,7 @@
   ],
   "biases": ["overfits to backtests", "assumes every number is wrong until proven right"],
   "goals": ["exact, auditable numbers", "fast keyboard workflow", "TWR vs MWR and risk metrics on demand", "automate tax-loss harvesting"],
-  "typicalQuestions": ["What's my TWR vs XIRR YTD?", "Show me lots with unrealized losses over $500", "What's my BTC weight right now?", "Export my realized gains for 2025"],
+  "typicalQuestions": ["What's my TWR vs XIRR YTD?", "Show me lots with unrealized losses over $500", "What's my BTC weight right now?", "Export my realized gains for 2025", "What's my Sharpe vs QQQ?", "Which lots ripen to long-term this quarter?", "How far have I drifted since the last rebalance?"],
   "discretionaryUsdPerMonth": 2000,
   "joinedOn": "2024-10-07",
   "explore": { "chance": 0.9, "steps": 14, "affinity": { "/dashboard": 2, "/transactions": 3, "/tax-center": 3, "/compare": 2, "/accounts": 1, "/chat": 1, "/account": 1 } },

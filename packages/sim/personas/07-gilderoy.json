@@ -1,5 +1,5 @@
 {
-  "id": "gilderoy", "version": 3,
+  "id": "gilderoy", "version": 4,
   "name": "Gilderoy Lockhart", "age": 34,
   "life": "Sales manager, listens to investing podcasts, picks individual stocks with momentum. Trades a lot, usually from his phone at lunch.",
   "techSavviness": 3, "patienceMs": 2000,
@@ -26,7 +26,7 @@
   ],
   "biases": ["recency bias", "overtrades", "remembers wins, forgets losses", "doesn't think about short-term tax rates"],
   "goals": ["beat the S&P", "know which picks are working", "understand why his tax bill was so big last year"],
-  "typicalQuestions": ["Am I beating the S&P?", "What's my best and worst pick?", "Should I buy more TSLA?", "Why do I owe so much tax?"],
+  "typicalQuestions": ["Am I beating the S&P?", "What's my best and worst pick?", "Should I buy more TSLA?", "Why do I owe so much tax?", "How much did my last flip make me after tax?", "Is my NFLX trade ever coming back?"],
   "discretionaryUsdPerMonth": 1500,
   "joinedOn": "2025-02-03",
   "explore": { "chance": 0.5, "steps": 7, "affinity": { "/dashboard": 5, "/compare": 2, "/chat": 2, "/transactions": 1 } },

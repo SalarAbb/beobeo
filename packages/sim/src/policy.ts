@@ -162,6 +162,22 @@ export function runPolicy(
         out.push(...rebalanceBuys(rule, holdings, market, date));
         return;
       }
+      case "lump": {
+        const symbols = Object.keys(rule.targets);
+        if (state.periods[idx] || date < rule.on || !symbols.every((s) => market.tradesOn(s, date))) return;
+        state.periods[idx] = "done";
+        out.push(...rebalanceBuys({ ...rule, kind: "rebalance", every: "month", day: 1 }, holdings, market, date).map((t) => ({ ...t, reason: "lump" })));
+        return;
+      }
+      case "withdraw": {
+        const symbols = Object.keys(rule.targets);
+        if (!symbols.every((s) => market.tradesOn(s, date))) return;
+        const { key, due } = cadencePeriod(date, rule.every, rule.day);
+        if (!due || state.periods[idx] === key) return;
+        state.periods[idx] = key;
+        out.push(...withdrawSells(rule, holdings, market, date));
+        return;
+      }
     }
   });
 
@@ -192,6 +208,38 @@ export function rebalanceBuys(
     .map((s) => {
       const share = shortSum > 0 ? short.get(s)! / shortSum : rule.targets[s]! / wSum;
       return buy(rule, s, rule.amountUsd * share, price(s), "rebalance");
+    })
+    .filter((t) => t.qty * t.price >= 1);
+}
+
+/**
+ * The mirror of `rebalanceBuys`: raise amountUsd by selling each sleeve's
+ * excess (vs. target × post-withdrawal total) pro rata; if nothing is over,
+ * sell by current weight. Never asks for more than the account holds.
+ */
+export function withdrawSells(
+  rule: Extract<Rule, { kind: "withdraw" }>,
+  holdings: Holdings,
+  market: PriceBook,
+  date: IsoDate,
+): TradeIntent[] {
+  const symbols = Object.keys(rule.targets);
+  const wSum = symbols.reduce((s, x) => s + rule.targets[x]!, 0);
+  const price = (s: string) => market.closeAsOf(s, date)!.close;
+  const current = new Map(symbols.map((s) => [s, (holdings.get(rule.account, s)?.qty ?? 0) * price(s)]));
+  const held = [...current.values()].reduce((a, b) => a + b, 0);
+  const amount = Math.min(rule.amountUsd, held);
+  if (amount < 1) return [];
+  const total = held - amount;
+  const excess = new Map(
+    symbols.map((s) => [s, Math.max(0, current.get(s)! - (rule.targets[s]! / wSum) * total)]),
+  );
+  const excessSum = [...excess.values()].reduce((a, b) => a + b, 0);
+  return symbols
+    .map((s): TradeIntent => {
+      const share = excessSum > 0 ? excess.get(s)! / excessSum : current.get(s)! / held;
+      const usd = Math.min(amount * share, current.get(s)!);
+      return { type: "sell", account: rule.account, symbol: s, qty: usd / price(s), price: price(s), reason: "withdraw" };
     })
     .filter((t) => t.qty * t.price >= 1);
 }

@@ -1,5 +1,5 @@
 {
-  "id": "samwell", "version": 3,
+  "id": "samwell", "version": 4,
   "name": "Samwell Tarly", "age": 31,
   "life": "Nurse working rotating shifts. Read 'The Simple Path to Wealth' and automated everything. Checks the app on his phone on breaks.",
   "techSavviness": 3, "patienceMs": 2500,
@@ -17,7 +17,7 @@
   ],
   "biases": ["slight FOMO when friends brag about stock picks", "checks too often during red weeks"],
   "goals": ["retire by 55", "know if his DCA beats trying to time the market", "see progress toward $1M"],
-  "typicalQuestions": ["Am I on track for my goal?", "Is DCA working for me vs lump sum?", "How much have I put in vs how much it's worth?"],
+  "typicalQuestions": ["Am I on track for my goal?", "Is DCA working for me vs lump sum?", "How much have I put in vs how much it's worth?", "Should I bump my weekly amount now that I got a raise?", "How much did I make this year so far?", "Do I need international stocks or is VOO enough?"],
   "discretionaryUsdPerMonth": 200,
   "joinedOn": "2024-10-28",
   "explore": { "chance": 0.45, "steps": 6, "affinity": { "/dashboard": 5, "/compare": 3, "/chat": 2, "/transactions": 1, "/tax-center": 1 } },

@@ -1,5 +1,5 @@
 {
-  "id": "luna", "version": 3,
+  "id": "luna", "version": 4,
   "name": "Luna Lovegood", "age": 22,
   "life": "Just graduated, first salaried job in marketing. Opened her first brokerage account two months ago after a TikTok about compound interest. Doesn't know what an ETF is exactly.",
   "techSavviness": 4, "patienceMs": 1500,
@@ -15,9 +15,9 @@
     { "symbol": "NVDA", "name": "NVIDIA Corp.", "class": "stock" },
     { "symbol": "TSLA", "name": "Tesla Inc.", "class": "stock" }
   ],
-  "biases": ["follows social media hype", "panics at first red week", "confused by jargon"],
+  "biases": ["follows social media hype", "panics at first red week", "confused by jargon", "loses interest when it feels like homework; some days she just checks the number and closes the app"],
   "goals": ["learn what she's doing", "not lose her savings", "have someone tell her where to put her next $100"],
-  "typicalQuestions": ["What is an ETF?", "Where should I put my next $100?", "Is it bad that I'm down this week?", "What does cost basis mean?"],
+  "typicalQuestions": ["What is an ETF?", "Where should I put my next $100?", "Is it bad that I'm down this week?", "What does cost basis mean?", "What's the difference between VOO and VTI?", "Should I open a Roth IRA?", "Why did NVDA go down today?"],
   "discretionaryUsdPerMonth": 100,
   "joinedOn": "2026-08-03",
   "explore": { "chance": 0.7, "steps": 8, "affinity": { "/dashboard": 3, "/chat": 3, "/compare": 2, "/tax-center": 1, "/transactions": 1, "/account": 1 } },

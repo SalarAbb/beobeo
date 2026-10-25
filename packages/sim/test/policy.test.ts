@@ -63,6 +63,36 @@ describe("replayPolicy", () => {
     expect(fills.map((f) => [f.symbol, Math.round(f.qty * f.price)])).toEqual([["BBB", 100]]);
   });
 
+  it("lump buys once, split by target weight, on the first trading day on/after its date", () => {
+    const p = persona([{ kind: "lump", on: "2026-02-01", targets: { AAA: 0.6, BBB: 0.4 }, amountUsd: 1000, account: "Brokerage" }]);
+    const b = book({ AAA: [["2026-02-02", 100], ["2026-02-03", 100]], BBB: [["2026-02-02", 10], ["2026-02-03", 10]] });
+    const fills = replayPolicy(p, new Holdings(), b, emptyPolicyState(), "2026-01-30", "2026-02-03");
+    expect(fills.map((f) => [f.date, f.symbol, Math.round(f.qty * f.price), f.reason])).toEqual([
+      ["2026-02-02", "AAA", 600, "lump"],
+      ["2026-02-02", "BBB", 400, "lump"],
+    ]);
+  });
+
+  it("withdraw sells the overweight sleeve first, once per period", () => {
+    const p = persona([{ kind: "withdraw", targets: { AAA: 0.5, BBB: 0.5 }, amountUsd: 100, every: "month", day: 1, account: "Brokerage" }]);
+    const h = new Holdings();
+    h.apply({ type: "buy", account: "Brokerage", symbol: "AAA", qty: 6, price: 100 }); // $600
+    h.apply({ type: "buy", account: "Brokerage", symbol: "BBB", qty: 40, price: 10 }); // $400
+    const b = book({ AAA: [["2026-02-02", 100], ["2026-02-03", 100]], BBB: [["2026-02-02", 10], ["2026-02-03", 10]] });
+    const fills = replayPolicy(p, h, b, emptyPolicyState(), "2026-02-01", "2026-02-03");
+    // Post-withdrawal total $900 → targets $450 each; AAA is $150 over, BBB $0 → all $100 from AAA.
+    expect(fills.map((f) => [f.date, f.type, f.symbol, Math.round(f.qty * f.price)])).toEqual([["2026-02-02", "sell", "AAA", 100]]);
+  });
+
+  it("withdraw never asks for more than the account holds", () => {
+    const p = persona([{ kind: "withdraw", targets: { AAA: 1 }, amountUsd: 500, every: "month", day: 1, account: "Brokerage" }]);
+    const h = new Holdings();
+    h.apply({ type: "buy", account: "Brokerage", symbol: "AAA", qty: 2, price: 100 });
+    const fills = replayPolicy(p, h, book({ AAA: [["2026-02-02", 100]] }), emptyPolicyState(), "2026-02-01", "2026-02-02");
+    expect(fills.map((f) => f.qty)).toEqual([2]);
+    expect(h.get("Brokerage", "AAA")!.qty).toBe(0);
+  });
+
   it("a full sell equals the exact sum of the rounded buys sent to the app (no 1e-6 oversell)", () => {
     const h = new Holdings(() => 6);
     const micros = (q: number) => BigInt(fmtQty(q, false).replace(".", "").padEnd(1, "0")) * 10n ** BigInt(6 - (fmtQty(q, false).split(".")[1]?.length ?? 0));

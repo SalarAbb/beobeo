@@ -198,6 +198,15 @@ for (const p of personas) {
     .map((r) => (JSON.parse(r.detail) as { mood: string; date: string }))
     .map((t) => `${t.date}: ${t.mood}`)
     .join(" | ");
+  // What they already asked and how it went. Without this every persona re-asked
+  // near-identical questions daily (audit 2026-10-25); real people follow up or move on.
+  const asked = journal
+    .all<{ sim_date: string; question: string; rating: number | null; note: string | null }>(
+      "SELECT r.sim_date, q.question, q.rating, q.rating_note AS note FROM questions q JOIN runs r ON r.id = q.run_id WHERE q.persona_id = ? ORDER BY q.id DESC LIMIT 3",
+      p.id,
+    )
+    .map((q) => `${q.sim_date}: you asked "${q.question}"${q.rating ? ` and rated the answer ${q.rating}/5 (${(q.note ?? "").slice(0, 160)})` : ""}`)
+    .join("\n");
   const decision = await guard("decide", () =>
     decide(
       p,
@@ -208,6 +217,8 @@ for (const p of personas) {
         habitsToday,
         discretionaryLeftUsd: Math.max(0, p.discretionaryUsdPerMonth - spentThisMonth),
         recentThoughts: recent,
+        recentQuestions: asked,
+        accountNames: p.accounts.map((a) => a.name),
       },
       { journal, runId },
     ),
@@ -220,7 +231,10 @@ for (const p of personas) {
   for (const t of decision.trades) {
     const inst = p.universe.find((i) => i.symbol === t.symbol.toUpperCase());
     const close = inst ? book.closeAsOf(inst.symbol, date) : null;
-    if (!inst || !close || !sim.accounts.has(t.account)) {
+    // The prompt lists accounts as "Webull (taxable)"; the mind sometimes echoes the suffix back.
+    const acct = [...sim.accounts.keys()].find((a) => a.toLowerCase() === t.account.replace(/\s*\(.*\)\s*$/, "").trim().toLowerCase());
+    if (acct) t.account = acct;
+    if (!inst || !close || !acct) {
       notes.push(`${p.id}: mind proposed invalid trade ${t.type} ${t.symbol} in ${t.account}`);
       continue;
     }

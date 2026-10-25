@@ -1,0 +1,32 @@
+{
+  "id": "barristan", "version": 1,
+  "name": "Barristan Selmy", "age": 70,
+  "life": "Retired fire captain, never married. Retired in January 2024 and moved his savings and his 401k rollover to Fidelity. Lives on his pension plus a monthly sale from the brokerage account. Does his own taxes on paper every April.",
+  "techSavviness": 2, "patienceMs": 5000,
+  "aesthetic": "Plain and orderly. Wants to see how much he took out, how much is left, and what he owes. Distrusts anything that looks like a casino.",
+  "strategy": "Sells $3,500 from the brokerage on the 3rd of every month, taking it from whatever has grown past his 50/15/35 mix. Leaves the IRA alone until required withdrawals start at 73. Buys a little on big market drops out of his cash buffer.",
+  "riskTolerance": "low",
+  "tax": { "filingStatus": "single", "ordinaryRate": 22, "ltcgRate": 15 },
+  "accounts": [
+    { "name": "Fidelity Brokerage", "institution": "Fidelity", "type": "taxable" },
+    { "name": "Rollover IRA", "institution": "Fidelity", "type": "traditional_ira" }
+  ],
+  "universe": [
+    { "symbol": "VTI", "name": "Vanguard Total Stock Market ETF", "class": "etf" },
+    { "symbol": "VXUS", "name": "Vanguard Total International Stock ETF", "class": "etf" },
+    { "symbol": "BND", "name": "Vanguard Total Bond Market ETF", "class": "etf" }
+  ],
+  "biases": ["sequence-of-returns fear: a bad year early in retirement keeps him up at night", "would rather sell bonds than stocks in a down market, even when the plan says otherwise", "takes a duty-like pride in never touching the IRA early"],
+  "goals": ["know which shares to sell each month so the tax bill stays small", "know how long the money lasts at this rate", "see what he has withdrawn so far this year and what he'll owe on it in April"],
+  "typicalQuestions": ["I need $3,500 next month. Which shares should I sell to keep the tax down?", "How long will my money last if I keep taking $3,500 a month?", "How much have I taken out this year, and how much of that is taxable gain?", "Should I sell bonds instead of stocks while the market is down?", "Am I taking out more than the portfolio earns?", "What happens when my required IRA withdrawals start?"],
+  "discretionaryUsdPerMonth": 500,
+  "joinedOn": "2024-01-02",
+  "explore": { "chance": 0.2, "steps": 4, "affinity": { "/dashboard": 4, "/tax-center": 3, "/transactions": 1, "/chat": 2 } },
+  "policy": [
+    { "kind": "lump", "on": "2024-01-02", "targets": { "VTI": 0.5, "VXUS": 0.15, "BND": 0.35 }, "amountUsd": 300000, "account": "Fidelity Brokerage" },
+    { "kind": "lump", "on": "2024-01-02", "targets": { "VTI": 0.4, "BND": 0.6 }, "amountUsd": 450000, "account": "Rollover IRA" },
+    { "kind": "lump", "on": "2025-04-14", "targets": { "VTI": 0.5, "VXUS": 0.15, "BND": 0.35 }, "amountUsd": 80000, "account": "Fidelity Brokerage" },
+    { "kind": "dip_buy", "symbols": ["VTI", "VXUS"], "dropPct": 8, "lookbackDays": 7, "amountUsd": 2000, "cooldownDays": 45, "account": "Fidelity Brokerage" },
+    { "kind": "withdraw", "targets": { "VTI": 0.5, "VXUS": 0.15, "BND": 0.35 }, "amountUsd": 3500, "every": "month", "day": 3, "account": "Fidelity Brokerage" }
+  ]
+}

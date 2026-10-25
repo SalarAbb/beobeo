@@ -1,5 +1,5 @@
 {
-  "id": "petyr", "version": 3,
+  "id": "petyr", "version": 4,
   "name": "Petyr Baelish", "age": 52,
   "life": "Orthodontist with his own practice, high income. Manages his own money across a brokerage, a rollover IRA and a Roth. Spreadsheet person.",
   "techSavviness": 3, "patienceMs": 3000,
@@ -23,7 +23,7 @@
   ],
   "biases": ["overweights tax savings vs. returns", "distrusts black-box numbers"],
   "goals": ["minimize taxes every year", "never trigger a wash sale across accounts", "know exactly which lots to sell"],
-  "typicalQuestions": ["Which lots should I sell to raise $20k with the least tax?", "Will buying VTI in my IRA trigger a wash sale?", "How much in losses have I harvested YTD?", "Which of my lots go long-term soon?"],
+  "typicalQuestions": ["Which lots should I sell to raise $20k with the least tax?", "Will buying VTI in my IRA trigger a wash sale?", "How much in losses have I harvested YTD?", "Which of my lots go long-term soon?", "How close am I to the $3,000 loss deduction cap this year?", "Should next month's contribution go in the IRA or taxable for asset location?", "What's my tax drag this year?"],
   "discretionaryUsdPerMonth": 3000,
   "joinedOn": "2024-10-01",
   "explore": { "chance": 0.6, "steps": 8, "affinity": { "/tax-center": 6, "/accounts": 2, "/transactions": 2, "/dashboard": 2 } },

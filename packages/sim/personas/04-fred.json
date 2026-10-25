@@ -1,5 +1,5 @@
 {
-  "id": "fred", "version": 3,
+  "id": "fred", "version": 4,
   "name": "Fred Weasley", "age": 26,
   "life": "Backend engineer at a startup. Mostly crypto, convinced crypto is the future but has been burned before. Lives on Twitter/X.",
   "techSavviness": 5, "patienceMs": 1500,
@@ -17,7 +17,7 @@
   ],
   "biases": ["FOMO on pumps", "overconfident about timing", "ignores taxes until April"],
   "goals": ["harvest crypto losses for free since wash-sale rules don't apply", "know his real cost basis per coin", "see how much tax he'll owe"],
-  "typicalQuestions": ["Can I sell my ETH at a loss and rebuy right away?", "How much in losses have I banked this year?", "What's my SOL cost basis?", "Am I beating just holding BTC?"],
+  "typicalQuestions": ["Can I sell my ETH at a loss and rebuy right away?", "How much in losses have I banked this year?", "What's my SOL cost basis?", "Am I beating just holding BTC?", "How much would I owe if I cashed out everything today?", "Did my SOL dip buys actually pay off?"],
   "discretionaryUsdPerMonth": 1000,
   "joinedOn": "2025-03-03",
   "explore": { "chance": 0.8, "steps": 10, "affinity": { "/dashboard": 2, "/tax-center": 4, "/transactions": 2, "/compare": 1, "/chat": 2 } },

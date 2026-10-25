@@ -1,5 +1,5 @@
 {
-  "id": "olenna", "version": 3,
+  "id": "olenna", "version": 4,
   "name": "Olenna Tyrell", "age": 61,
   "life": "Semi-retired accountant, plans to fully retire at 65 and live off dividends. Reads annual reports for fun.",
   "techSavviness": 2, "patienceMs": 4000,
@@ -20,7 +20,7 @@
   ],
   "biases": ["income over total return", "loyal to companies she knows"],
   "goals": ["see how much income her portfolio pays per month/year", "yield on cost", "know if she can retire at 65"],
-  "typicalQuestions": ["How much will I get in dividends this year?", "What's my yield on cost?", "Which holding pays the most?", "Can I live off this at 65?"],
+  "typicalQuestions": ["How much will I get in dividends this year?", "What's my yield on cost?", "Which holding pays the most?", "Can I live off this at 65?", "How much did I receive last quarter?", "Is Realty Income's dividend safe?", "Did any of my companies raise their dividend this year?"],
   "discretionaryUsdPerMonth": 300,
   "joinedOn": "2024-12-02",
   "explore": { "chance": 0.3, "steps": 5, "affinity": { "/dashboard": 4, "/transactions": 2, "/tax-center": 1, "/chat": 1 } },

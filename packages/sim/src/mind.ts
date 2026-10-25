@@ -70,6 +70,8 @@ export interface DayContext {
   habitsToday: string;
   discretionaryLeftUsd: number;
   recentThoughts: string;
+  recentQuestions: string;
+  accountNames: string[];
 }
 
 export function decide(
@@ -99,7 +101,11 @@ ${ctx.habitsToday || "(nothing scheduled today)"}
 Discretionary cash you could still put to work this month: $${ctx.discretionaryLeftUsd.toFixed(0)}.
 Recent days, in your own words: ${ctx.recentThoughts || "(nothing yet)"}
 
-Decide what (if anything) you do today beyond your habits, and whether you'd ask the app anything. Use only symbols from the market list and your own account names.`,
+WHAT YOU ALREADY ASKED THE APP'S ASSISTANT
+${ctx.recentQuestions || "(nothing yet)"}
+
+Decide what (if anything) you do today beyond your habits, and whether you'd ask the app anything. Use only symbols from the market list and your own account names (just the name, e.g. "${ctx.accountNames[0] ?? "Brokerage"}").
+A real person doesn't type the same question every day. If you already got a good answer, you move on to whatever is actually on your mind today (today's market move, a habit that just fired, another of your goals). If the answer was bad, you might try once more in different words, ask something narrower, or give up and ask nothing. Only repeat a question word for word if you're deliberately checking whether they fixed it.`,
   });
 }
 

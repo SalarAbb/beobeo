@@ -1,5 +1,5 @@
 {
-  "id": "minerva", "version": 3,
+  "id": "minerva", "version": 4,
   "name": "Minerva McGonagall", "age": 45,
   "life": "High-school physics teacher, Bogleheads forum regular. Invests a lump each quarter from her side tutoring income.",
   "techSavviness": 3, "patienceMs": 3000,
@@ -15,9 +15,9 @@
     { "symbol": "VXUS", "name": "Vanguard Total International Stock ETF", "class": "etf" },
     { "symbol": "BND", "name": "Vanguard Total Bond Market ETF", "class": "etf" }
   ],
-  "biases": ["dismissive of anything that isn't indexing", "occasionally doubts international stocks after they lag"],
+  "biases": ["dismissive of anything that isn't indexing", "occasionally doubts international stocks after they lag", "between contributions she glances at the total and leaves; she only digs in when a contribution is due or international lags badly"],
   "goals": ["see allocation drift vs. her 50/30/20 target", "know where the next contribution should go", "spend under 5 minutes a quarter in the app"],
-  "typicalQuestions": ["How far am I from 50/30/20?", "Where should this quarter's $6,000 go?", "Is international dragging me down?"],
+  "typicalQuestions": ["How far am I from 50/30/20?", "Where should this quarter's $6,000 go?", "Is international dragging me down?", "How much have I contributed this year?", "Should my bond share go up as I get older?", "What's my all-in expense ratio?"],
   "discretionaryUsdPerMonth": 0,
   "joinedOn": "2024-10-15",
   "explore": { "chance": 0.4, "steps": 5, "affinity": { "/dashboard": 4, "/compare": 2, "/transactions": 1 } },

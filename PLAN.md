@@ -118,12 +118,14 @@ it against each digest; items cite the theme keys that motivated them.
   (Playwright). Today every trade goes through tRPC, so the form UX is never exercised.
 - The simulator doesn't generate dividend transactions, so Olenna's
   dashboard says $0 dividends. Model dividends from a provider's distribution
-  history before trusting income-related feedback.
+  history before trusting income-related feedback. The 2026-10-25 audit left
+  `dividend-data-not-syncing-zero` open on purpose: "$0 with no explanation" also
+  hits real users who enter trades by hand, but the sim makes it louder than it is.
+- Every persona logs in and asks a question every day. Real users skip days. Revisit
+  if digests start to over-weight daily-check behaviour.
 - Fixed 2026-10-23: personas now judge numbers against the app's own overview,
   not their private ledger. Ledger fills are rounded to app precision, so there
   are no more 1e-6 oversells.
-- Arya's dip-buying ($17k) outweighs her DCA ($14k) over 21 months. Review in
-  the first `/evolve-agents` audit.
 
 ## Capability map
 
@@ -146,7 +148,7 @@ format: Status is `built`, `partial` or `missing`.
 | Product | Keyboard layer (⌘K, shortcuts) | missing | backlog #5 |
 | Product | Phone layout | partial | top-bar shell and dashboard fit 400px; other pages not yet checked at phone width |
 | Product | Visual identity matching the evolution page | partial | tokens, fonts and the dashboard done; other pages next (R-001) |
-| Simulator | Personas with habits (policy) and judgment (LLM mind) | built | 10 personas |
+| Simulator | Personas with habits (policy) and judgment (LLM mind) | built | 11 personas, incl. one retiree drawing down monthly |
 | Simulator | Real prices, no lookahead, live quotes today | built | Tiingo and Coinbase via the app's cache |
 | Simulator | Trades through the app's API | built | timed |
 | Simulator | Trades through the real add-transaction form | missing | form UX never exercised |
@@ -159,7 +161,7 @@ format: Status is `built`, `partial` or `missing`.
 | Loop | Journal, digest and insights | built | ~/beobeo-sim |
 | Loop | Theme lifecycle (ship, reopen, artifact) | built | |
 | Loop | /evolve ships on evolve/ branches | built | first cycle 2026-10-25 |
-| Loop | Weekly population audit (/evolve-agents) | partial | built, not run yet |
+| Loop | Weekly population audit (/evolve-agents) | built | first run 2026-10-25 |
 | Loop | Safety valve (propose-only) | built | 5 unmerged branches or 2 failed checks |
 | Loop | Daily 08:00 schedule | partial | installer ready, not armed |
 | Loop | Live evolution page | built | regenerated every cycle |
@@ -170,6 +172,8 @@ format: Status is `built`, `partial` or `missing`.
 
 One entry per cycle, newest first: date · branch · what shipped · theme ids
 answered · before/after signal.
+
+- **2026-10-25 · Population (first `/evolve-agents` audit).** Evidence: 3 sim days, 30 questions, 20 experience ratings. Ratings were not too agreeable (answers 2.6→3.0/5, only one would-recommend), and voices were in character. Three realism problems turned up. (1) **Monotone:** 7 of 10 personas asked nearly the same question three days running (Minerva asked about "this quarter's $6,000" every day, despite her goal of under 5 minutes a quarter). The mind only saw its past moods, never its past questions. Now it sees its last 3 questions with its own rating notes, and is told to follow up, move on or ask nothing. `typicalQuestions` were widened for 9 personas (v4). Minerva and Luna got "glance and leave" biases. (2) **Incoherent trade:** Gilderoy's NFLX sell was rejected because the mind wrote "Webull (taxable)". The next day he "rotated the NFLX cash" into AAPL without ever having sold. Account names now match case-insensitively with the suffix stripped. (3) **Irrational for who she is:** Arya's crypto dip rule fired so often that she sits at 23% crypto against her own 15% cap. Her crypto dips are now 12% with a 21-day cooldown, plus a "stops adding rather than trims at a loss" bias. **New persona: Barristan Selmy (70, retired, v1).** He sells $3,500 a month from a taxable account and leaves his IRA alone. Gap: Raise Cash is the Tax Center's headline feature, and no persona ever needed to raise cash (every sim trade in the window was a buy). New policy rules `lump` (one-time deposit) and `withdraw` (cadenced sells from overweight sleeves) were added, with tests. Bootstrapped with 74 trades since 2024-01-02.
 
 - **2026-10-25 · `evolve/2026-10-25`.** First loop cycle. (1) R-001 phase 1: the evolution page's fonts (Shippori Mincho / Hanken Grotesk / JetBrains Mono) and cool indigo tokens are live app-wide, card shadows are gone, and the dashboard was restyled into hairline-ruled chapters. (2) Phone shell: the sidebar becomes a top bar with a scrolling nav row, the dashboard no longer clips, and holdings drop Qty/Price on phones (`dashboard-mobile-clipped-layout`). (3) Undoable transaction delete plus labels on every icon button (`unlabeled-buttons-transactions`, backlog #2). Expected signal: mobile and unlabeled-button themes stop recurring, look scores hold or rise (3.4 baseline).
 - **2026-10-23 · genesis · `salarabb/phase_1`.** The loop is built: PLAN.md, `packages/sim` (10 personas named after Game of Thrones and Harry Potter characters, about 1,100 real-price trades), journal, digest, `/evolve`, `/evolve-agents`, the live evolution page. The first simulated day surfaced chat latency, verbosity and the missing verdict as the top themes. Two simulator bugs (ledger comparison, rounding oversell) were found and fixed the same day.

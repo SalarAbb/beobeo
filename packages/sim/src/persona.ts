@@ -76,6 +76,23 @@ export const ruleSchema = z.discriminatedUnion("kind", [
     day: z.number().int().min(1).max(28),
     account: z.string(),
   }),
+  /** One-time deposit split by target weight on the first trading day >= `on` (a rollover, an inheritance). */
+  z.object({
+    kind: z.literal("lump"),
+    on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    targets: z.record(z.string(), z.number().positive()),
+    amountUsd: z.number().positive(),
+    account: z.string(),
+  }),
+  /** Sell amountUsd on a cadence to live on, taken from whatever is most overweight vs targets. */
+  z.object({
+    kind: z.literal("withdraw"),
+    targets: z.record(z.string(), z.number().positive()),
+    amountUsd: z.number().positive(),
+    every: cadence,
+    day: z.number().int().min(1).max(28),
+    account: z.string(),
+  }),
 ]);
 export type Rule = z.infer<typeof ruleSchema>;
 
