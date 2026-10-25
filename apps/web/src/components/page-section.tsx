@@ -71,24 +71,32 @@ export function StatTile({
   value,
   sub,
   tone,
+  subTone,
   hero = true,
+  className,
 }: {
-  label: string;
+  label: ReactNode;
   value: string;
   sub?: string;
   tone?: string;
+  /** Defaults to `tone` (a delta under a value); set it when the sub-line is a description. */
+  subTone?: string;
   hero?: boolean;
+  /** Grid placement, e.g. a column span to fill an odd row. */
+  className?: string;
 }) {
   return (
-    <div className="min-w-0 bg-card px-5 py-4">
-      <p className="eyebrow">{label}</p>
+    <div className={`min-w-0 bg-card px-4 py-4 sm:px-5 ${className ?? ""}`}>
+      <p className="eyebrow truncate">{label}</p>
       <p
-        className={`figure mt-2 truncate ${hero ? "text-2xl sm:text-[28px]" : "text-xl"} ${tone ?? ""}`}
+        className={`figure mt-2 truncate ${hero ? "text-[22px] sm:text-[28px]" : "text-xl"} ${tone ?? ""}`}
       >
         {value}
       </p>
       {sub && (
-        <p className={`data mt-0.5 text-xs ${tone ?? "text-muted-foreground"}`}>{sub}</p>
+        <p className={`data mt-0.5 text-xs ${subTone ?? tone ?? "text-muted-foreground"}`}>
+          {sub}
+        </p>
       )}
     </div>
   );
