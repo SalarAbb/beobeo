@@ -111,13 +111,16 @@ export function PriceChart({
       cbSeries.setData(stepData);
     }
 
-    // Buy/sell markers at actual trade points.
+    // Buy/sell markers at actual trade points. Quantity labels only while
+    // they can't collide — past a dozen trades they smear into noise, and
+    // the open-lots/sales tables below carry the exact quantities.
+    const labelled = markers.length <= 12;
     const seriesMarkers: SeriesMarker<UTCTimestamp>[] = markers.map((m) => ({
       time: toTs(m.date),
       position: m.type === "buy" ? "belowBar" : "aboveBar",
       color: m.type === "buy" ? theme.gain : theme.loss,
       shape: m.type === "buy" ? "arrowUp" : "arrowDown",
-      text: `${m.type === "buy" ? "B" : "S"} ${m.quantity}`,
+      text: labelled ? `${m.type === "buy" ? "B" : "S"} ${m.quantity}` : undefined,
       size: 1,
     }));
     createSeriesMarkers(priceSeries, seriesMarkers);

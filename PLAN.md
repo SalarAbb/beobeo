@@ -160,7 +160,7 @@ format: Status is `built`, `partial` or `missing`.
 | Product | Dividend income view | missing | backlog #4 (Olenna) |
 | Product | Keyboard layer (⌘K, shortcuts) | missing | backlog #5 |
 | Product | Phone layout | partial | top-bar shell and dashboard fit 400px; other pages not yet checked at phone width |
-| Product | Visual identity matching the evolution page | partial | tokens, fonts and the dashboard done; other pages next (R-001) |
+| Product | Visual identity matching the evolution page | partial | tokens, fonts, dashboard, position, transactions, accounts, account done; tax center, compare, chat, auth next (R-001) |
 | Simulator | Personas with habits (policy) and judgment (LLM mind) | built | 11 personas, incl. one retiree drawing down monthly |
 | Simulator | Real prices, no lookahead, live quotes today | built | Tiingo and Coinbase via the app's cache |
 | Simulator | Trades through the app's API | built | timed |
@@ -186,6 +186,8 @@ format: Status is `built`, `partial` or `missing`.
 
 One entry per cycle, newest first: date · branch · what shipped · theme ids
 answered · before/after signal.
+
+- **2026-10-25 · R-001 phase 2: position, transactions, accounts, account pages.** The dashboard's building blocks (`PageHeader`, `Section`, `StatStrip`, `StatTile`) moved to a shared `page-section.tsx`, and four more pages now use them: hairline stat strips, serif section titles over rules, mono numerals, and quiet type pills on transactions. Found and fixed along the way: the position page crashed for anyone with two trades on the same day (duplicate avg-cost step timestamps), and past 12 trades the marker quantity labels smeared into an unreadable band, so they're now plain arrows. · R-001 · expected signal: look scores hold or rise; no `error-/positions` themes.
 
 - **2026-10-25 · Population (first `/evolve-agents` audit).** Evidence: 3 sim days, 30 questions, 20 experience ratings. Ratings were not too agreeable (answers 2.6→3.0/5, only one would-recommend), and voices were in character. Three realism problems turned up. (1) **Monotone:** 7 of 10 personas asked nearly the same question three days running (Minerva asked about "this quarter's $6,000" every day, despite her goal of under 5 minutes a quarter). The mind only saw its past moods, never its past questions. Now it sees its last 3 questions with its own rating notes, and is told to follow up, move on or ask nothing. `typicalQuestions` were widened for 9 personas (v4). Minerva and Luna got "glance and leave" biases. (2) **Incoherent trade:** Gilderoy's NFLX sell was rejected because the mind wrote "Webull (taxable)". The next day he "rotated the NFLX cash" into AAPL without ever having sold. Account names now match case-insensitively with the suffix stripped. (3) **Irrational for who she is:** Arya's crypto dip rule fired so often that she sits at 23% crypto against her own 15% cap. Her crypto dips are now 12% with a 21-day cooldown, plus a "stops adding rather than trims at a loss" bias. **New persona: Barristan Selmy (70, retired, v1).** He sells $3,500 a month from a taxable account and leaves his IRA alone. Gap: Raise Cash is the Tax Center's headline feature, and no persona ever needed to raise cash (every sim trade in the window was a buy). New policy rules `lump` (one-time deposit) and `withdraw` (cadenced sells from overweight sleeves) were added, with tests. Bootstrapped with 74 trades since 2024-01-02.
 

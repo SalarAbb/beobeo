@@ -692,10 +692,11 @@ async function computePositionUncached(
     const snap = positionFromLots(lotsAt);
     if (snap.avgCostPerUnit) {
       const date = toIsoDate(txns[i]!.tradedAt);
-      costBasisSteps.push({
-        date,
-        avgCost: toPresentUnits(snap.avgCostPerUnit.toNumber(), date),
-      });
+      const step = { date, avgCost: toPresentUnits(snap.avgCostPerUnit.toNumber(), date) };
+      // Several trades on one day collapse to the end-of-day average; the
+      // chart rejects duplicate timestamps (crashed the page for day traders).
+      if (costBasisSteps.at(-1)?.date === date) costBasisSteps[costBasisSteps.length - 1] = step;
+      else costBasisSteps.push(step);
     }
   }
 

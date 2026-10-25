@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader, Section } from "@/components/page-section";
 import {
   Select,
   SelectContent,
@@ -49,53 +49,47 @@ export default function AccountsPage() {
   const portfolioName = new Map((portfolios.data ?? []).map((p) => [p.id, p.name]));
 
   return (
-    <div className="mx-auto grid max-w-3xl gap-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Accounts</h1>
-        <p className="text-sm text-muted-foreground">
-          Flag which accounts are taxable brokerages vs. tax-advantaged (IRA,
-          401k) — the Tax Center only sells from taxable accounts, and checks
-          every account here for wash-sale conflicts.
-        </p>
-      </div>
+    <div className="mx-auto grid w-full max-w-3xl grid-cols-1 gap-12">
+      <PageHeader
+        title="Accounts"
+        subtitle={
+          "Flag which accounts are taxable brokerages vs. tax-advantaged (IRA, 401k) — " +
+          "the Tax Center only sells from taxable accounts, and checks every account " +
+          "here for wash-sale conflicts."
+        }
+      />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Your accounts</CardTitle>
-        </CardHeader>
-        <CardContent className="px-0">
+      <Section title="Your accounts">
           {accounts.isLoading ? (
-            <div className="px-6">
-              <Skeleton className="h-40 w-full" />
-            </div>
+            <Skeleton className="h-40 w-full" />
           ) : accounts.data && accounts.data.length > 0 ? (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead className="pl-6">Name</TableHead>
-                  <TableHead>Institution</TableHead>
-                  <TableHead>Portfolio</TableHead>
-                  <TableHead className="pr-6 text-right">Type</TableHead>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="pl-1">Name</TableHead>
+                  <TableHead className="hidden sm:table-cell">Institution</TableHead>
+                  <TableHead className="hidden sm:table-cell">Portfolio</TableHead>
+                  <TableHead className="pr-1 text-right">Type</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {accounts.data.map((a) => (
                   <TableRow key={a.id}>
-                    <TableCell className="pl-6 font-medium">{a.name}</TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="pl-1 font-medium">{a.name}</TableCell>
+                    <TableCell className="hidden text-muted-foreground sm:table-cell">
                       {a.institution ?? "—"}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="hidden text-muted-foreground sm:table-cell">
                       {a.portfolioId ? (portfolioName.get(a.portfolioId) ?? "—") : "—"}
                     </TableCell>
-                    <TableCell className="pr-6 text-right">
+                    <TableCell className="pr-1 text-right">
                       <Select
                         value={a.accountType}
                         onValueChange={(accountType) =>
                           update.mutate({ id: a.id, accountType: accountType as AccountType })
                         }
                       >
-                        <SelectTrigger size="sm" className="ml-auto w-48">
+                        <SelectTrigger size="sm" className="ml-auto w-40 sm:w-48">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent align="end">
@@ -112,12 +106,11 @@ export default function AccountsPage() {
               </TableBody>
             </Table>
           ) : (
-            <p className="px-6 py-8 text-center text-sm text-muted-foreground">
+            <p className="py-8 text-center text-sm text-muted-foreground">
               No accounts yet — add one from the transaction form.
             </p>
           )}
-        </CardContent>
-      </Card>
+      </Section>
     </div>
   );
 }

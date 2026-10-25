@@ -4,14 +4,7 @@ import { redirect } from "next/navigation";
 import { db, schema } from "@beobeo/db";
 import { auth } from "@/lib/auth";
 import { SignOutButton } from "@/components/sign-out-button";
-import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { PageHeader, Section, StatStrip, StatTile } from "@/components/page-section";
 
 const PROVIDER_LABEL: Record<string, string> = {
   credential: "Email & password",
@@ -40,11 +33,10 @@ export default async function AccountPage() {
   ]);
 
   return (
-    <div className="mx-auto grid max-w-2xl gap-4">
-      <h1 className="text-2xl font-semibold tracking-tight">Account</h1>
+    <div className="mx-auto grid w-full max-w-2xl grid-cols-1 gap-12">
+      <PageHeader title="Account" />
 
-      <Card>
-        <CardContent className="flex items-center gap-4 py-5">
+      <div className="-mt-4 flex flex-wrap items-center gap-4 rounded-xl border bg-card px-5 py-5">
           {user.image ? (
             // eslint-disable-next-line @next/next/no-img-element -- avatar from OAuth provider
             <img
@@ -59,7 +51,7 @@ export default async function AccountPage() {
             </span>
           )}
           <div className="min-w-0">
-            <p className="truncate text-lg font-semibold">{user.name}</p>
+            <p className="truncate font-display text-xl font-bold">{user.name}</p>
             <p className="truncate text-sm text-muted-foreground">{user.email}</p>
             <p className="text-xs text-muted-foreground">
               Member since{" "}
@@ -72,49 +64,38 @@ export default async function AccountPage() {
           <div className="ml-auto">
             <SignOutButton variant="outline" />
           </div>
-        </CardContent>
-      </Card>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Sign-in methods</CardTitle>
-          <CardDescription>
-            Ways you can sign in to this account. Signing in with Google or
-            Apple using the same email links automatically.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
+      <Section title="Sign-in methods">
+        <p className="-mt-2 text-sm text-muted-foreground">
+          Ways you can sign in to this account. Signing in with Google or Apple
+          using the same email links automatically.
+        </p>
+        <div className="flex flex-wrap gap-2">
           {providers.length === 0 ? (
             <p className="text-sm text-muted-foreground">None found</p>
           ) : (
             providers.map((p) => (
-              <Badge key={p.providerId} variant="secondary">
+              <span
+                key={p.providerId}
+                className="rounded-full bg-accent px-2.5 py-1 text-xs font-medium text-primary"
+              >
                 {PROVIDER_LABEL[p.providerId] ?? p.providerId}
-              </Badge>
+              </span>
             ))
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </Section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Your data</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <p className="text-2xl font-semibold tabular-nums">
-              {portfolioCount?.n ?? 0}
-            </p>
-            <p className="text-muted-foreground">
-              {(portfolioCount?.n ?? 0) === 1 ? "Portfolio" : "Portfolios"}
-            </p>
-          </div>
-          <div>
-            <p className="text-2xl font-semibold tabular-nums">{txnCount?.n ?? 0}</p>
-            <p className="text-muted-foreground">Transactions</p>
-          </div>
-        </CardContent>
-      </Card>
+      <Section title="Your data">
+        <StatStrip cols="grid-cols-2">
+          <StatTile
+            label={(portfolioCount?.n ?? 0) === 1 ? "Portfolio" : "Portfolios"}
+            value={String(portfolioCount?.n ?? 0)}
+          />
+          <StatTile label="Transactions" value={(txnCount?.n ?? 0).toLocaleString("en-US")} />
+        </StatStrip>
+      </Section>
 
       <p className="text-xs text-muted-foreground">
         Your transactions live in your own database and are never shared.

@@ -8,7 +8,7 @@ import { AssetLogo } from "@/components/asset-logo";
 import { usePortfolio } from "@/components/portfolio-context";
 import { AddTransactionDialog } from "@/components/transactions/add-transaction-dialog";
 import { CsvImportDialog } from "@/components/transactions/csv-import-dialog";
-import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/page-section";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -21,14 +21,16 @@ import {
 } from "@/components/ui/table";
 import { useTRPC } from "@/lib/trpc";
 
-const TYPE_BADGE: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  buy: "default",
-  sell: "destructive",
-  dividend: "secondary",
-  split: "outline",
-  transfer_in: "secondary",
-  transfer_out: "secondary",
-  fee: "outline",
+/** Quiet type pills: the indigo accent marks buys, sells stay neutral (a sell
+ *  isn't bad news), and income gets the soft good tint. */
+const TYPE_PILL: Record<string, string> = {
+  buy: "bg-accent text-primary",
+  sell: "bg-secondary text-foreground",
+  dividend: "bg-good-soft text-gain",
+  split: "border text-muted-foreground",
+  transfer_in: "bg-secondary text-muted-foreground",
+  transfer_out: "bg-secondary text-muted-foreground",
+  fee: "border text-muted-foreground",
 };
 
 const fmtMoney = (v: string | null) =>
@@ -101,49 +103,47 @@ export default function TransactionsPage() {
     queryClient.invalidateQueries({ queryKey: trpc.transactions.list.queryKey() });
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl">Transactions</h1>
-          <p className="text-sm text-muted-foreground">
-            The source of truth — everything else is derived from these.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <CsvImportDialog onImported={refresh} />
-          <AddTransactionDialog onCreated={refresh} />
-        </div>
-      </div>
+    <div className="mx-auto grid w-full max-w-5xl grid-cols-1 gap-8">
+      <PageHeader
+        title="Transactions"
+        subtitle="The source of truth — everything else is derived from these."
+        actions={
+          <>
+            <CsvImportDialog onImported={refresh} />
+            <AddTransactionDialog onCreated={refresh} />
+          </>
+        }
+      />
 
-      <div className="mt-6 rounded-lg border">
+      <div className="min-w-0 border-t">
         {list.isLoading ? (
-          <div className="space-y-2 p-4">
+          <div className="space-y-2 py-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <Skeleton key={i} className="h-10 w-full" />
             ))}
           </div>
         ) : (list.data?.length ?? 0) === 0 ? (
-          <div className="p-10 text-center text-sm text-muted-foreground">
+          <div className="py-12 text-center text-sm text-muted-foreground">
             No transactions yet. Add one manually or import a broker CSV.
           </div>
         ) : (
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="pl-1">Date</TableHead>
                 <TableHead>Asset</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead className="text-right">Quantity</TableHead>
                 <TableHead className="text-right">Price</TableHead>
-                <TableHead className="text-right">Fees</TableHead>
-                <TableHead>Account</TableHead>
+                <TableHead className="hidden text-right sm:table-cell">Fees</TableHead>
+                <TableHead className="hidden md:table-cell">Account</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
             <TableBody>
               {list.data!.filter(({ txn }) => !pendingDelete.has(txn.id)).map(({ txn, asset, account }) => (
                 <TableRow key={txn.id}>
-                  <TableCell className="whitespace-nowrap">
+                  <TableCell className="whitespace-nowrap pl-1 font-mono text-[13px] tabular-nums">
                     {txn.tradedAt.toISOString().slice(0, 10)}
                   </TableCell>
                   <TableCell>
@@ -153,21 +153,25 @@ export default function TransactionsPage() {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={TYPE_BADGE[txn.type] ?? "outline"}>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${TYPE_PILL[txn.type] ?? TYPE_PILL.fee}`}
+                    >
                       {txn.type.replace("_", " ")}
-                    </Badge>
+                    </span>
                   </TableCell>
-                  <TableCell className="text-right font-mono">
+                  <TableCell className="text-right font-mono text-[13px] tabular-nums">
                     {txn.type === "split" ? `${fmtQty(txn.quantity)}:1` : fmtQty(txn.quantity)}
                   </TableCell>
-                  <TableCell className="text-right font-mono">
+                  <TableCell className="text-right font-mono text-[13px] tabular-nums">
                     {fmtMoney(txn.pricePerUnit)}
                   </TableCell>
-                  <TableCell className="text-right font-mono">
+                  <TableCell className="hidden text-right font-mono text-[13px] tabular-nums sm:table-cell">
                     {Number(txn.fees) > 0 ? fmtMoney(txn.fees) : "—"}
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{account.name}</TableCell>
-                  <TableCell>
+                  <TableCell className="hidden text-muted-foreground md:table-cell">
+                    {account.name}
+                  </TableCell>
+                  <TableCell className="pr-1">
                     <Button
                       variant="ghost"
                       size="icon"

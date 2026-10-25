@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Ruler } from "lucide-react";
 import Link from "next/link";
 import { AssetLogo } from "@/components/asset-logo";
 import { usePortfolio } from "@/components/portfolio-context";
+import { Section, StatStrip, StatTile } from "@/components/page-section";
 import { AllocationDonut } from "@/components/charts/allocation-donut";
 import { ValueChart } from "@/components/charts/value-chart";
 import { Card, CardContent } from "@/components/ui/card";
@@ -264,56 +265,6 @@ function concentration(holdings: HoldingWeight[]): {
   };
 }
 
-/** One cell of the hairline-ruled summary strip; the hero number is the one
- *  place the display serif carries data. */
-function StatTile({
-  label,
-  value,
-  sub,
-  tone,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  tone?: string;
-}) {
-  return (
-    <div className="min-w-0 bg-card px-5 py-4">
-      <p className="eyebrow">{label}</p>
-      <p
-        className={`mt-2 truncate font-display text-2xl font-bold tabular-nums sm:text-[28px] ${tone ?? ""}`}
-      >
-        {value}
-      </p>
-      {sub && (
-        <p className={`mt-0.5 font-mono text-xs ${tone ?? "text-muted-foreground"}`}>{sub}</p>
-      )}
-    </div>
-  );
-}
-
-/** A quiet chapter: serif title over a hairline rule, content on the page
- *  background — no card, no shadow (the evolution page's section style). */
-function Section({
-  title,
-  aside,
-  children,
-}: {
-  title: ReactNode;
-  aside?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <section className="grid gap-5">
-      <div className="flex items-baseline justify-between gap-3 border-b pb-2.5">
-        <h2 className="font-display text-lg font-bold">{title}</h2>
-        {aside}
-      </div>
-      {children}
-    </section>
-  );
-}
-
 export default function DashboardPage() {
   const trpc = useTRPC();
   const { portfolioId, activeName } = usePortfolio();
@@ -389,7 +340,7 @@ export default function DashboardPage() {
         </p>
       )}
 
-      <div className="-mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border lg:grid-cols-4">
+      <StatStrip className="-mt-6">
         <StatTile label="Portfolio value" value={fmtUsd(totals.value)} />
         {windowed ? (
           <StatTile
@@ -415,7 +366,7 @@ export default function DashboardPage() {
           label={windowed ? `Dividends · ${windowLabel}` : "Dividends"}
           value={fmtUsd(totals.dividends)}
         />
-      </div>
+      </StatStrip>
 
       <Section title="Portfolio over time">
         {timeseries.isLoading ? (
