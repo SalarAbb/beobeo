@@ -119,12 +119,15 @@ const requests = repoFile("REQUESTS.md")
     const m = /^(R-\d+)\s*·\s*(.+)$/.exec(head!.trim());
     if (!m) return null;
     const field = (k: string) => new RegExp(`^- \\*\\*${k}:\\*\\*\\s*(.*)$`, "m").exec(rest.join("\n"))?.[1]?.trim() ?? "";
-    const done: string[] = [];
+    const done: { text: string; ok: boolean }[] = [];
     let inDone = false;
     for (const line of rest) {
       if (/^- \*\*Done means:\*\*/.test(line)) { inDone = true; continue; }
       if (/^- \*\*/.test(line)) inDone = false;
-      else if (inDone && /^\s+- /.test(line)) done.push(line.replace(/^\s+- /, "").trim());
+      else if (inDone && /^\s+- /.test(line)) {
+        const text = line.replace(/^\s+- /, "").trim();
+        done.push({ text: text.replace(/^✓\s*/, ""), ok: text.startsWith("✓") });
+      }
     }
     return { id: m[1]!, title: m[2]!, asked: field("Asked"), status: field("Status"), shippedOn: field("Shipped on"), words: field("In your words"), notes: field("Notes"), done };
   })

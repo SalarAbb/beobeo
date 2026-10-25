@@ -48,8 +48,9 @@ the earlier one wins.
 10. **Honest, not salesy.** State the rule assumptions ("under current US rules…").
     Recommendations are framed as analysis of the user's own options with a short,
     persistent note. Needs legal review before any public launch.
-11. **Evolve slowly and reversibly.** 1–3 changes per cycle, each on its own
-    branch, each verified, each logged. Never a rewrite.
+11. **Evolve fast, but reversibly.** As many verified improvements per day as the
+    time budget allows (no daily quota, and today's work is never deferred to
+    tomorrow), each its own commit, each verified, each logged. Never a rewrite.
 12. **Users are the signal.** An ask that appears across personas beats one loud
     persona; an ask that recurs across days beats a single day. A shipped fix is
     only "done" when the personas who asked stop asking.
@@ -87,6 +88,11 @@ the earlier one wins.
   those whose report says `Checks: PASSED`, then branches today's work from there.
   A failed branch stays unmerged for a human, and nothing builds on it. When the
   user says "merge", merge right away.
+- **Rounds, not a quota** — the build phase is a loop of fresh `/evolve` sessions,
+  one improvement each (odd rounds: your top request; even rounds: the top persona
+  theme), until `EVOLVE_HOURS` (default 3) runs out, `EVOLVE_MAX_ROUNDS` (12) is hit,
+  or a round finds nothing worthwhile left. Then `evolve.sh` runs the full checks
+  and, if they pass, merges the branch into `salarabb/phase_1` the same day.
 - **Safety valve** — `/evolve` itself never pushes, merges, or touches `.env`
   (`evolve.sh` does the merging). With 3 branches that couldn't be merged, or two
   failed check runs, it only *proposes*.

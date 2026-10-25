@@ -6,6 +6,7 @@
 > "Done means" line is true. Newest requests go at the bottom, with the next number.
 >
 > Status: `open` → `in progress` → `shipped` (or `declined`, with the reason in Notes).
+> A "Done means" line that has become true is prefixed with `✓ `; the page counts them.
 > The live evolution page renders this file, so keep the format.
 
 ## R-001 · Give the app the evolution page's look
@@ -14,8 +15,8 @@
 - **Shipped on:** —
 - **In your words:** "Keep similar aesthetics for the website btw, in terms of font/coloring." "Use similar aesthetics of this html file (font/colors/visualization) in the actual website's UI."
 - **Done means:**
-  - Shippori Mincho for headings and hero numbers (sparingly), Hanken Grotesk for body text, JetBrains Mono for data and numerals, loaded with `next/font`
-  - Light and dark tokens from `packages/sim/report/style.css` (cool indigo-biased neutrals, one ai-iro indigo accent, semantic good/warn/bad) live in `apps/web/src/app/globals.css`
+  - ✓ Shippori Mincho for headings and hero numbers (sparingly), Hanken Grotesk for body text, JetBrains Mono for data and numerals, loaded with `next/font`
+  - ✓ Light and dark tokens from `packages/sim/report/style.css` (cool indigo-biased neutrals, one ai-iro indigo accent, semantic good/warn/bad) live in `apps/web/src/app/globals.css`
   - Hairline rules and quiet surfaces replace stacked shadows and cards; generous spacing
   - Charts keep the validated `viz.ts` palette; chips, pills and tooltips match the page's style
   - Every page screenshotted in light, dark and at phone width, and the personas' look scores don't drop

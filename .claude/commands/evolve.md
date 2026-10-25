@@ -1,83 +1,90 @@
 ---
-description: One self-evolution cycle — read the persona digest, ship 1–3 improvements on an evolve/ branch, verify, report.
-argument-hint: "[digest-path] [implement|propose] [start-ref]"
+description: One round of the daily self-evolution cycle — ship the next most valuable improvement on today's evolve/ branch, verify, log, report.
+argument-hint: "[digest-path] [implement|propose] [start-ref] [round=N] [deadline=HH:MM]"
 ---
 
-You are running Beobeo's daily self-evolution cycle (see `PLAN.md` → "The loop").
+You are running ONE ROUND of Beobeo's daily self-evolution cycle (see `PLAN.md` → "The loop").
 Arguments: `$ARGUMENTS` — digest path (default: today's `~/beobeo-sim/digests/<today>.md`),
-mode (`implement` default, or `propose`), and the ref the personas just used.
+mode (`implement` default, or `propose`), the ref the personas used, the round number and the
+deadline for the whole cycle.
 
-If invoked interactively with no digest for today, first run `pnpm sim:day` (the app must
-be running — ask the user to `pnpm dev` if it isn't) then `pnpm sim:digest`.
+**The goal is the most real improvement per day.** `scripts/evolve.sh` calls you again and again,
+each time in a fresh session, until the time budget runs out or you declare the queue empty. So:
+do ONE item per round, do it fully and well, and leave the branch green. Don't defer work to
+tomorrow because "the cycle already did enough"; there's no daily quota. The only reasons to stop
+are the deadline, nothing worthwhile left, or everything left needing the user.
+
+If invoked interactively with no digest for today, first run `pnpm sim:day` (the app must be
+running — ask the user to `pnpm dev` if it isn't) then `pnpm sim:digest`.
 
 ## 1. Read, in this order
-1. `REQUESTS.md` — the user's own asks; they outrank everything below.
-2. `PLAN.md` — **Principles are binding.** Every change must be defensible against them; when
-   an ask conflicts with a principle, the principle wins and the theme gets `wontfix` with a note.
-3. The digest. Look at screenshots it cites (Read the PNGs) for any UI theme you act on.
-4. `CLAUDE.md` — conventions, gotchas, rules (money is Decimal, multi-tenancy, viz tokens, cache invalidation…).
+1. Today's report so far, `~/beobeo-sim/reports/<today>.md` (if it exists), and
+   `git log --oneline <start-ref>..HEAD`: what earlier rounds already shipped today. Don't redo it.
+2. `REQUESTS.md` — the user's own asks.
+3. `PLAN.md` — **Principles are binding.** When an ask conflicts with a principle, the principle
+   wins and the theme gets `wontfix` with a note.
+4. The digest. Look at screenshots it cites (Read the PNGs) for any UI theme you act on.
+5. `CLAUDE.md` — conventions, gotchas, rules (money is Decimal, multi-tenancy, viz tokens, cache invalidation…).
 
-## 2. Choose 1–3 items
-- **`REQUESTS.md` comes first.** Every cycle advances the top request whose status is `open`
-  or `in progress` (one per cycle; a big one can span cycles, so set it to `in progress` and
-  note what remains). Mark it `shipped` with the date only when every "Done means" line is
-  true; otherwise leave it `in progress`. Never edit "In your words".
-- Then fill the remaining slots from the top of the ranked themes and the PLAN.md backlog. Prefer **broad, cheap,
-  high-confidence** wins. Aim for a balance across UI / UX / feature over a week (check the
-  PLAN.md evolution log for what recent cycles did).
-- Latency 🔴 rows over budget and any `would not keep using` are high priority.
+## 2. Pick the ONE next item
+- **Odd rounds: the user's top request** whose status is `open` or `in progress`. Take the next
+  unfinished chunk (a big request spans rounds and days: set it `in progress` and tick its "Done
+  means" lines as they become true, see below). If every open request is blocked on the user,
+  treat the round as even.
+- **Even rounds: the top persona theme** (or PLAN.md backlog item) not yet handled today.
+  Latency 🔴 rows over budget and any `would not keep using` come first. Persona pain must not
+  starve behind a long request.
 - A shipped theme that's ❌ raised again means the fix didn't land — understand why before redoing it.
+- An item can be big (e.g. "chat answers fast, verdict first"); size is not a reason to skip it.
+  Split it into a shippable first slice if the whole won't fit before the deadline.
 - Skip anything needing a product decision only the user can make (new paid data source, legal
-  framing of advice, deleting a feature) — list it under "Needs you" in the report instead.
+  framing of advice, deleting a feature): list it under "Needs you" and pick the next item.
 - Engine/tax-math changes require hand-computed golden tests in `packages/core/test/` first.
+- **If nothing worthwhile is left** (or all that's left needs the user), don't invent busywork:
+  `touch ~/beobeo-sim/reports/.<today>.queue-empty`, write your round section saying so, and stop.
 
 ## 3. Implement (mode `implement` only)
-- `git checkout -b evolve/<today>` from the current HEAD (it's already the start ref). If that branch
-  exists, use `evolve/<today>-2`.
-- Small, focused diffs that read like the surrounding code. No rewrites, no new dependencies unless
-  unavoidable (say why in the report).
-- Verify: `pnpm typecheck && pnpm lint && pnpm test && pnpm build` — all must pass. For any UI change,
-  screenshot it as a relevant persona: `pnpm --filter @beobeo/sim shoot --persona <id> --routes /a,/b`
-  (the dev server at `$SIM_APP_URL` hot-reloads your edits) and Read the images — check light, dark,
-  and mobile. Fix what looks wrong.
-- Update `CLAUDE.md` for anything technical that changed (non-negotiable — see its header) and
-  append to `PLAN.md` → Evolution log (newest first): date · branch · what shipped · theme keys ·
-  expected signal. Re-rank/trim the PLAN.md backlog if the digest changed priorities.
-- Commit (one or a few commits, clear messages). **Never push, merge, reset, or touch `.env`.** You don't merge, but your branch WILL be merged into the main line automatically tomorrow morning if your report says `Checks: PASSED`, with no human review. The loop is meant to run unattended for weeks, so only ship what you'd be comfortable landing unreviewed; anything risky or needing a human decision goes under "Needs you" instead of into the code.
+- Round 1: `git checkout -b evolve/<today>` from the current HEAD (if it exists from an earlier run
+  today, just `git checkout evolve/<today>`). Later rounds are already on it.
+- Focused diffs that read like the surrounding code. No rewrites, no new dependencies unless
+  unavoidable (say why).
+- Verify before committing: `pnpm typecheck && pnpm lint && pnpm test`, plus `pnpm build` if you
+  touched `apps/web`. For any UI change, screenshot it as a relevant persona:
+  `pnpm --filter @beobeo/sim shoot --persona <id> --routes /a,/b` (the dev server at `$SIM_APP_URL`
+  hot-reloads your edits) and Read the images — light, dark and mobile. Fix what looks wrong.
+- **If you can't get it green**, don't commit broken work: `git stash push -u -m "abandoned: <item>"`
+  (recoverable), note it under "Considered, not done", and move on.
+- Update `CLAUDE.md` for anything technical that changed (non-negotiable — see its header).
+  Append one entry to `PLAN.md` → Evolution log for this item (newest first):
+  `- **<today> · <short title>.** what changed · request or theme keys · expected signal`.
+  Re-rank/trim the PLAN.md backlog if priorities changed; keep the **Capability map** accurate.
+- `REQUESTS.md`: when a "Done means" line becomes true, prefix it with `✓ ` (keep the text).
+  Mark the request `shipped` with the date only when every line is ticked. Never edit "In your words".
+- Commit (one item = one or a few commits, clear messages). **Never push, merge, reset, or touch
+  `.env`.** The script merges the branch into the main line at the end of the cycle if the final
+  full checks pass, with no human review — the loop runs unattended for weeks, so only ship what
+  you'd be comfortable landing unreviewed.
 - Mark what you shipped: `pnpm sim:theme ship <key...> --branch evolve/<today>`; mark rejected asks
   `pnpm sim:theme wontfix <key> --note "<principle #n: why>"`.
 
-In mode `propose`: don't create a branch or edit code; write the report with the concrete plan
-for each item instead (files, approach, risks).
+In mode `propose`: don't create a branch or edit code; write the concrete plan for the item
+(files, approach, risks), then touch the queue-empty marker (proposals don't need more rounds).
 
 ## 4. Report → `~/beobeo-sim/reports/<today>.md`
+Round 1 creates the file with this header; every round appends its own section below it.
 ```
 # Evolve report — <date>
-Branch: evolve/<date> (stacked on <start-ref>)   Mode: implement|propose
-Checks: PASSED | FAILED (<which>)
+Branch: evolve/<date> (from <start-ref>)   Mode: implement|propose
+Checks: PENDING
 
-## Shipped
-- <item> — request R-00n or themes: <keys> — why (persona quotes) — what changed (files) — screenshots
-## Considered, not done
-- <item> — reason (principle / needs user / too big → backlog)
-## Needs you
-- decisions only the user can make
-## Persona realism notes
-- anything that looked unrealistic in persona behavior (feeds /evolve-agents)
+## Round <n> · <item title>
+- **Shipped:** request R-00n or themes <keys> — why (persona quotes) — what changed (files) — screenshots
+- **Considered, not done:** … (reason)
+- **Needs you:** decisions only the user can make
+- **Persona realism notes:** anything that looked unrealistic in persona behavior
 ```
-The first line after the title block must be `Checks: PASSED` or `Checks: FAILED` exactly — the
-cycle script's safety valve greps for it.
+Leave the `Checks:` line alone after round 1: the cycle script runs the final full checks
+(typecheck, lint, test, build) after the last round and writes `Checks: PASSED|FAILED` itself.
 
-## 5. Republish the live evolution page
-Run `pnpm sim:report` after your PLAN.md edits, so the capability map, backlog and log are
-current. It builds `packages/sim/.out/site/` in three layers: `index.html` (start here: how the
-loop works, rarely changes), `progress.html` (everything so far: requests, change log, trends,
-plan) and `days/<date>.html` (one per day, only that day's delta and what shipped that night,
-which comes from your PLAN.md log entry dated today plus this report). Publish it with the
-Artifact tool: `file_path` = `packages/sim/.out/site/index.html`, `root` = `packages/sim/.out/site`,
-`files` = `progress.html` and every `days/*.html` path, and `url` = the contents of
-`~/beobeo-sim/evolution-url.txt`, so the same link updates. If the Artifact tool isn't available
-in this run, say so under "Needs you" so the person can republish from an interactive session. Read the artifact first if the
-tool asks. Keep the PLAN.md **Capability map** table accurate: flip a
-row's status when a cycle changes it. The page renders that table directly.
-Finish by printing the report path and the page link.
+Don't publish the evolution page from here; the script rebuilds it after the cycle, and it's
+republished from interactive sessions. Finish by printing one line: what this round shipped.

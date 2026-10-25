@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 # One self-evolution cycle (PLAN.md → "The loop"). Run by launchd at 08:00,
-# or by hand: `pnpm evolve` / `scripts/evolve.sh [--sim-only]`.
+# or by hand: `pnpm evolve` / `scripts/evolve.sh [--sim-only | --evolve-only]`.
+#
+# The build phase is a LOOP OF ROUNDS: fresh `claude -p /evolve` sessions, one
+# improvement each, until $EVOLVE_HOURS run out, $EVOLVE_MAX_ROUNDS is hit, or a
+# round declares the queue empty. Then the script runs the full checks itself and,
+# if they pass, merges today's branch into $BASE the same day.
 #
 # Works in a SEPARATE git worktree ($EVOLVE_WORKTREE) with its own dev
 # server on $SIM_PORT, so your :3000 dev server keeps running. Never pushes.
 #
 # Autonomous by design (the user's call): each cycle first MERGES the previous
 # cycles' evolve/* branches into $BASE, if their report says `Checks: PASSED`,
-# then builds today's change on a fresh branch from $BASE. A branch whose checks
+# then builds today's changes on a fresh branch from $BASE. A branch whose checks
 # failed stays unmerged for a human, and later cycles don't build on it.
 set -uo pipefail
 
@@ -20,6 +25,9 @@ BASE="${EVOLVE_BASE:-salarabb/phase_1}"
 SIM_PORT="${SIM_PORT:-3100}"
 DATE="$(date +%F)"
 SIM_ONLY=0; [[ "${1:-}" == "--sim-only" ]] && SIM_ONLY=1
+EVOLVE_ONLY=0; [[ "${1:-}" == "--evolve-only" ]] && EVOLVE_ONLY=1   # reuse today's digest: just build more
+HOURS="${EVOLVE_HOURS:-3}"
+MAX_ROUNDS="${EVOLVE_MAX_ROUNDS:-12}"
 
 mkdir -p "$SIM_HOME/logs" "$SIM_HOME/reports" "$SIM_HOME/digests"
 LOG="$SIM_HOME/logs/evolve-$DATE.log"
@@ -43,9 +51,9 @@ cleanup() {
     local report="$SIM_HOME/reports/$DATE.md" checks="no report written" headline=""
     if [[ -f "$report" ]]; then
       checks="$(grep -m1 '^Checks:' "$report" || echo 'Checks: ?')"
-      headline="$(grep -m1 -v '^#\|^$\|^Checks:' "$report" | cut -c1-120)"
+      headline="$(grep -c '^## Round' "$report") round(s): $(grep '^## Round' "$report" | sed 's/^## Round [0-9]* · //' | paste -sd ';' - | cut -c1-160)"
     fi
-    notify "Beobeo evolve $DATE · $MODE" "$checks. ${headline}"
+    notify "Beobeo evolve $DATE · ${MERGED[*]:+merged}" "$checks. ${headline}"
   elif [[ "${LOCKED:-0}" == 1 ]]; then
     notify "Beobeo evolve $DATE stopped early" "Exit $code. See $LOG"
   fi
@@ -92,7 +100,12 @@ for br in $(git -C "$REPO" for-each-ref --sort=refname --format='%(refname:short
 done
 UNMERGED="$(git -C "$REPO" for-each-ref --format='%(refname:short)' --no-merged "$BASE" 'refs/heads/evolve/*' | wc -l | tr -d ' ')"
 # Today's branch if this is a re-run, else the freshly merged $BASE.
-START="$BASE"; git -C "$REPO" rev-parse -q --verify "refs/heads/evolve/$DATE" >/dev/null && START="evolve/$DATE"
+START="$BASE"
+if git -C "$REPO" rev-parse -q --verify "refs/heads/evolve/$DATE" >/dev/null; then
+  # Already merged earlier today? Fast-forward it to $BASE so new rounds build on the latest main line.
+  git -C "$REPO" merge-base --is-ancestor "evolve/$DATE" "$BASE" && git -C "$REPO" branch -f "evolve/$DATE" "$BASE"
+  START="evolve/$DATE"
+fi
 git -C "$WT" checkout --detach "$START" || exit 1
 echo "Simulating against $START ($(git -C "$WT" rev-parse --short HEAD)); merged this morning: ${MERGED[*]:-none}; still unmerged: $UNMERGED"
 if [[ ! -d "$WT/packages/sim" ]]; then
@@ -110,10 +123,13 @@ curl -sf -o /dev/null "http://localhost:$SIM_PORT/signin" || { echo "Dev server 
 
 # ---------------------------------------------------------------- 3. simulate + digest
 export SIM_APP_URL="http://localhost:$SIM_PORT"
-(cd "$WT" && pnpm --silent sim:day) || echo "sim:day exited non-zero (see above) — continuing to digest"
+if [[ $EVOLVE_ONLY == 1 && -f "$SIM_HOME/digests/$DATE.md" ]]; then
+  echo "--evolve-only: reusing today's digest."
+else
+  (cd "$WT" && pnpm --silent sim:day) || echo "sim:day exited non-zero (see above) — continuing to digest"
+fi
 DIGEST="$(cd "$WT" && pnpm --silent sim:digest | tail -1)"
 echo "Digest: $DIGEST"
-(cd "$WT" && pnpm --silent sim:report) || echo "sim:report failed"
 # The dev server stays up through step 5 so /evolve can screenshot its own changes (HMR).
 
 [[ $SIM_ONLY == 1 ]] && { echo "--sim-only: stopping before /evolve."; notify "Beobeo sim $DATE" "Sim day done. Digest: $(basename "$DIGEST")"; LOCKED=0; exit 0; }
@@ -126,7 +142,8 @@ if (( FAILS >= 2 )); then MODE="propose"; echo "Safety valve: last two cycles fa
 
 # ---------------------------------------------------------------- 5. Claude improves the product
 ALLOWED=(Read Edit Write Glob Grep
-  "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" "Bash(git checkout -b evolve/*)" "Bash(git add:*)"
+  "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" "Bash(git checkout -b evolve/*)" "Bash(git checkout evolve/*)" "Bash(git add:*)"
+  "Bash(git stash push:*)" "Bash(git stash list:*)" "Bash(touch:*)"
   "Bash(git commit:*)" "Bash(git rev-parse:*)" "Bash(git branch:*)" "Bash(git show:*)"
   "Bash(pnpm typecheck:*)" "Bash(pnpm lint:*)" "Bash(pnpm test:*)" "Bash(pnpm build:*)" "Bash(pnpm install:*)"
   "Bash(pnpm --filter:*)" "Bash(pnpm exec:*)" "Bash(pnpm sim:theme:*)" "Bash(pnpm sim:insights:*)" "Bash(pnpm sim:bootstrap:*)"
@@ -139,9 +156,44 @@ run_claude() {
     || echo "claude exited non-zero for: $1"
 }
 cd "$WT"
-run_claude "/evolve $DIGEST $MODE $START"
+REPORT="$SIM_HOME/reports/$DATE.md"
+EMPTY="$SIM_HOME/reports/.$DATE.queue-empty"
+rm -f "$EMPTY"
+DEADLINE=$(( $(date +%s) + HOURS * 3600 ))
+round=0; stalls=0
+while (( round < MAX_ROUNDS )) && (( $(date +%s) < DEADLINE )); do
+  round=$((round + 1))
+  before="$(git -C "$WT" rev-parse HEAD)"
+  echo "--- round $round ($(date +%T), deadline $(date -r "$DEADLINE" +%H:%M)) ---"
+  run_claude "/evolve $DIGEST $MODE $START round=$round deadline=$(date -r "$DEADLINE" +%H:%M)"
+  [[ -f "$EMPTY" || $MODE == propose ]] && { echo "Queue empty after round $round."; break; }
+  # Two rounds in a row that commit nothing means it's stuck, not done.
+  if [[ "$(git -C "$WT" rev-parse HEAD)" == "$before" ]]; then
+    stalls=$((stalls + 1)); (( stalls >= 2 )) && { echo "Two rounds without a commit — stopping."; break; }
+  else stalls=0; fi
+done
+ROUNDS=$round
 # Sundays: audit and evolve the persona population itself.
 [[ "$(date +%u)" == "7" ]] && run_claude "/evolve-agents"
 
+# ---------------------------------------------------------------- 6. final checks, then merge the same day
+if [[ $MODE == implement ]] && git -C "$REPO" rev-parse -q --verify "refs/heads/evolve/$DATE" >/dev/null; then
+  echo "Final checks on evolve/$DATE"
+  git -C "$WT" checkout -q "evolve/$DATE" 2>/dev/null || true
+  if (cd "$WT" && pnpm typecheck && pnpm lint && pnpm test && pnpm build) > "$SIM_HOME/logs/checks-$DATE.log" 2>&1; then
+    CHECKS="Checks: PASSED"
+  else
+    CHECKS="Checks: FAILED (see logs/checks-$DATE.log)"
+  fi
+  echo "$CHECKS"
+  if [[ -f "$REPORT" ]] && grep -q '^Checks:' "$REPORT"; then
+    sed -i '' "s|^Checks:.*|$CHECKS|" "$REPORT"
+  else
+    { echo "# Evolve report — $DATE"; echo "$CHECKS"; echo; [[ -f "$REPORT" ]] && cat "$REPORT"; } > "$REPORT.tmp" && mv "$REPORT.tmp" "$REPORT"
+  fi
+  [[ "$CHECKS" == "Checks: PASSED" ]] && merge_into_base "evolve/$DATE"
+fi
+(cd "$WT" && git checkout -q --detach "$BASE" && pnpm --silent sim:report) || echo "sim:report failed"
+
 FINISHED=1
-echo "=== evolve done $(date +%T) — report: $SIM_HOME/reports/$DATE.md ==="
+echo "=== evolve done $(date +%T) — $ROUNDS round(s), merged: ${MERGED[*]:-none} — report: $REPORT ==="

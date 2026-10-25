@@ -156,10 +156,10 @@ $("chips").innerHTML = [
 const statusCls = { open: "none", "in progress": "warn", shipped: "good", declined: "bad" };
 $("reqs").innerHTML = D.requests.map((r) => `<li><details class="${r.status === "shipped" ? "shipped" : ""}"><summary>
   <span class="rid">${esc(r.id)}</span>
-  <b>${esc(r.title)}<small>Asked ${esc(fmtDate(r.asked))}${r.status === "shipped" && r.shippedOn && r.shippedOn !== "—" ? ` · shipped ${esc(fmtDate(r.shippedOn))}` : ""} · ${r.done.length} things must be true</small></b>
+  <b>${esc(r.title)}<small>Asked ${esc(fmtDate(r.asked))}${r.status === "shipped" && r.shippedOn && r.shippedOn !== "—" ? ` · shipped ${esc(fmtDate(r.shippedOn))}` : ""} · ${r.status === "shipped" ? `all ${r.done.length} done` : `${r.done.filter((d) => d.ok).length} of ${r.done.length} done`}</small></b>
   <span class="pill ${statusCls[r.status] ?? "none"}">${esc(r.status)}</span></summary>
   <div class="rbody"><p class="words">${esc(r.words.replace(/^"|"$/g, "").replace(/" "/g, " … "))}</p>
-  <ul class="done">${r.done.map((d) => `<li>${md(d)}</li>`).join("")}</ul>${r.notes ? `<p class="muted" style="font-size:13.5px">${md(r.notes)}</p>` : ""}</div></details></li>`).join("") || `<li class="empty">No requests yet. Add one to REQUESTS.md.</li>`;
+  <ul class="done">${r.done.map((d) => `<li class="${d.ok || r.status === "shipped" ? "ok" : ""}">${md(d.text)}</li>`).join("")}</ul>${r.notes ? `<p class="muted" style="font-size:13.5px">${md(r.notes)}</p>` : ""}</div></details></li>`).join("") || `<li class="empty">No requests yet. Add one to REQUESTS.md.</li>`;
 
 /* ---------- change log */
 const hasDay = new Set(D.history.map((h) => h.date));
