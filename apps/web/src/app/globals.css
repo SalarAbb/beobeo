@@ -151,11 +151,12 @@
 
 @layer components {
   /* Type roles (R-001) — every figure in the app takes exactly one of these; never pick a face ad hoc.
-     .figure  a standalone number read on its own: stat tiles, metric cells, a page's headline stat → display serif
+     .figure  a standalone number read on its own: stat tiles, metric cells, a page's headline stat → body sans,
+              semibold — the same face as the text around it (user's call: serif numbers didn't match the page)
      .data    a number inside a table, list, legend, tooltip, sub-line or delta → mono, tabular
      Words (labels, names, prose) are always the body sans. Charts draw axes/labels in the mono face (chartFont()). */
   .figure {
-    @apply font-display font-bold tabular-nums tracking-[0.01em];
+    @apply font-sans font-semibold tabular-nums tracking-tight;
   }
   .data {
     @apply font-mono tabular-nums;

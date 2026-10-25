@@ -182,7 +182,8 @@ Pure TS, zero framework/DB deps. Exhaustive Vitest fixtures in `packages/core/te
 ## Type system (don't freelance fonts) — R-001, user-enforced
 
 Three faces from the evolution page (`next/font` in `app/layout.tsx`), each with ONE job. The user called out mixed fonts on one screen ("all over the place"), so this is a hard rule:
-- **Display serif (Shippori Mincho)**: page titles (`h1`, always `text-3xl`), section titles (`PageSection` h2, `CardTitle`, which is serif by default) and **standalone headline figures**, via the `.figure` class (stat tiles, metric cells, a page's headline stat).
+- **Display serif (Shippori Mincho)**: page titles (`h1`, always `text-3xl`) and section titles (`PageSection` h2, `CardTitle`, which is serif by default). **Never numbers**: the user rejected serif headline figures twice ("doesn't match the font of the other text").
+- **Headline figures** (stat tiles, metric cells, a page's headline stat) use `.figure` = the body sans, semibold, tabular — the same face as the labels around them.
 - **Mono (JetBrains Mono)**: **every number inside a table, list, legend, tooltip, sub-line or delta**, via the `.data` class. Charts too: lightweight-charts gets `fontFamily: chartFont()` (from `lib/viz.ts`, since canvas can't resolve CSS vars), and Recharts containers get `className="data"` (SVG text inherits).
 - **Sans (Hanken Grotesk)**: all words — labels, names, prose, buttons. When a line mixes words and a number, only the number gets `.data` (`waiting saves <span className="data">~$20</span>`), and a sans subtitle inside a serif title needs `font-sans`.
 - Never use bare `font-mono`/`tabular-nums`/`font-display` for numbers; use `.figure`/`.data` (defined in `globals.css`, `@layer components`). `font-mono` stays only for code (chat code spans, CSV column names).
