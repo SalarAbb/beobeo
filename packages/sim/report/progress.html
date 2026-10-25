@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Beobeo · Progress</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/*__CSS__*/
+:root { padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="sitenav" id="nav" aria-label="Evolution site"></nav>
+
+  <header class="top">
+    <p class="eyebrow">Everything so far</p>
+    <p class="asof" id="asof"></p>
+    <h1>Progress</h1>
+    <p class="lede" id="lede"></p>
+    <div class="chips" id="chips"></div>
+  </header>
+
+  <section aria-label="Scoreboard">
+    <div class="score" id="score"></div>
+  </section>
+
+  <section aria-labelledby="h-req">
+    <div class="sec-head">
+      <p class="eyebrow">From you</p>
+      <h2 id="h-req">Your requests</h2>
+      <p>What you asked for directly, in your own words. A request is shipped only when every line of its checklist is true. Source: <code>REQUESTS.md</code>.</p>
+    </div>
+    <ol class="reqs" id="reqs"></ol>
+  </section>
+
+  <section aria-labelledby="h-log">
+    <div class="sec-head">
+      <p class="eyebrow">Every change, newest first</p>
+      <h2 id="h-log">Change log</h2>
+      <p>One entry per cycle: what changed in the app or in the population, and the signal it should move. Each date opens that day's report.</p>
+    </div>
+    <ol class="log" id="log"></ol>
+  </section>
+
+  <section aria-labelledby="h-exp">
+    <div class="sec-head">
+      <p class="eyebrow">The number that matters most</p>
+      <h2 id="h-exp">How it feels, over time</h2>
+      <p>Every persona rates every day from 1 to 5. The grid is every persona, every day; hover a cell to read why.</p>
+    </div>
+    <div class="exp">
+      <div>
+        <div class="exp-head" id="exp-head"></div>
+        <div class="dims" id="dims"></div>
+      </div>
+      <div class="heat-wrap"><div class="heat" id="heat"></div></div>
+    </div>
+    <div class="trend" id="exp-trend"></div>
+  </section>
+
+  <section aria-labelledby="h-themes">
+    <div class="sec-head">
+      <p class="eyebrow">What the personas want, ranked</p>
+      <h2 id="h-themes">Open themes</h2>
+      <p>The last seven days, scored by breadth, persistence and pain (the formula is on the start page). Hover a row for what they said.</p>
+    </div>
+    <div class="legend" id="theme-legend"></div>
+    <div class="themes" id="themes"></div>
+    <div class="cols2">
+      <div><h3>Fixed, and did it hold?</h3><ul class="checks" id="shipped"></ul></div>
+      <div><h3>Set aside as simulator problems</h3><ul class="checks" id="artifacts"></ul></div>
+      <div><h3>What they like (keep it)</h3><ul class="checks" id="praise"></ul></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-speed">
+    <div class="sec-head">
+      <p class="eyebrow">Principle 5: speed is a feature</p>
+      <h2 id="h-speed">How fast it feels</h2>
+      <p>The last seven days. Hollow dot: typical (p50). Solid dot: slow tail (p95). Black tick: the budget. The arrow compares the slow tail with day one.</p>
+    </div>
+    <div class="axis" aria-hidden="true"><span></span><div class="ticks" id="ticks"></div><span></span></div>
+    <div class="speed" id="speed"></div>
+  </section>
+
+  <section aria-labelledby="h-trend">
+    <div class="sec-head">
+      <p class="eyebrow">Day by day</p>
+      <h2 id="h-trend">Activity and cost</h2>
+    </div>
+    <div class="trend" id="trend"></div>
+  </section>
+
+  <section aria-labelledby="h-plan">
+    <div class="sec-head">
+      <p class="eyebrow">The plan</p>
+      <h2 id="h-plan">What exists, what's missing, what's next</h2>
+    </div>
+    <div class="sub-h"><h3>Capabilities</h3><span class="cap-key" id="cap-key"></span></div>
+    <div class="cap-sum" id="cap-sum" role="img"></div>
+    <div class="caps" id="caps"></div>
+    <div class="sub-h"><h3>Backlog, in rank order</h3><span class="muted" style="font-size:13px">Re-ranked by every cycle</span></div>
+    <ol class="backlog" id="backlog"></ol>
+    <div class="sub-h"><h3>Known gaps in the simulator</h3></div>
+    <ul class="gaps" id="gaps"></ul>
+  </section>
+
+  <section aria-labelledby="h-days">
+    <div class="sec-head">
+      <p class="eyebrow">Every day, kept</p>
+      <h2 id="h-days">Daily reports</h2>
+    </div>
+    <ol class="days" id="days"></ol>
+  </section>
+
+  <footer id="foot"></footer>
+</div>
+<div id="tip" hidden></div>
+
+<script>
+const D = /*__DATA__*/null;
+/*__COMMON_JS__*/
+
+$("nav").innerHTML = siteNav("progress");
+$("asof").innerHTML = `As of <b>${esc(fmtDate(D.latest, { weekday: "long", month: "long", day: "numeric", year: "numeric" }))}</b>`;
+const shippedReqs = D.requests.filter((r) => r.status === "shipped").length;
+$("lede").textContent = `${D.dayCount} simulated ${D.dayCount === 1 ? "day" : "days"}, ${D.log.filter((e) => e.date).length} logged ${D.log.length === 1 ? "change" : "changes"}, ${shippedReqs} of ${D.requests.length} of your requests shipped.`;
+$("chips").innerHTML = [
+  `<span class="chip"><span class="dot ${D.loopArmed ? "good" : "warn"}"></span>Daily 08:00 run <b>${D.loopArmed ? "armed" : "not armed"}</b></span>`,
+  `<span class="chip"><span class="dot ${D.unmerged.length ? "warn" : ""}"></span><b class="num">${D.unmerged.length}</b> ${D.unmerged.length === 1 ? "branch waits" : "branches wait"} for you${D.unmerged.length ? `: <span class="mono">${D.unmerged.map(esc).join(", ")}</span>` : ""}</span>`,
+  `<span class="chip">Spend today <b class="num">$${D.spentToday.toFixed(2)}</b> of $${D.budget} <span class="meter"><i style="width:${Math.min(100, (D.spentToday / D.budget) * 100)}%"></i></span></span>`,
+  `<span class="chip">All-time spend <b class="num">$${D.spentTotal.toFixed(2)}</b></span>`,
+].join("");
+
+/* ---------- scoreboard: first day → now */
+(function () {
+  const E = D.experience.days, e0 = E[0], e1 = E.at(-1);
+  const a = D.daily.filter((d) => d.answers != null), a0 = a[0], a1 = a.at(-1);
+  const held = D.shippedThemes.filter((t) => t.daysSince > 0 && t.raisedSince === 0).length;
+  const judged = D.shippedThemes.filter((t) => t.daysSince > 0).length;
+  const cell = (label, v, dlt, sub) => `<div><span class="eyebrow">${label}</span><span class="v num">${v}${dlt}</span><span class="s">${sub}</span></div>`;
+  $("score").innerHTML = [
+    cell("Experience", e1 ? e1.overall.toFixed(1) : "—", e0 && e1 && E.length > 1 ? delta(e1.overall, e0.overall) : "", e1 ? `out of 5 · ${E.length > 1 ? `from ${e0.overall.toFixed(1)} on ${fmtDate(e0.date)}` : "first rated day"}` : "no ratings yet"),
+    cell("Answers", a1 ? a1.answers.toFixed(1) : "—", a0 && a1 && a.length > 1 ? delta(a1.answers, a0.answers) : "", a1 ? `out of 5 · ${a.length > 1 ? `from ${a0.answers.toFixed(1)} on ${fmtDate(a0.date)}` : "first day"}` : "none yet"),
+    cell("Themes fixed", String(D.shippedThemes.length), "", D.shippedThemes.length ? (judged ? `${held} of ${judged} held so far` : "personas judge them next cycle") : "none yet"),
+    cell("Your requests", `${shippedReqs}/${D.requests.length}`, "", `shipped · ${D.requests.filter((r) => r.status === "in progress").length} in progress`),
+  ].join("");
+})();
+
+/* ---------- your requests */
+const statusCls = { open: "none", "in progress": "warn", shipped: "good", declined: "bad" };
+$("reqs").innerHTML = D.requests.map((r) => `<li><details class="${r.status === "shipped" ? "shipped" : ""}"><summary>
+  <span class="rid">${esc(r.id)}</span>
+  <b>${esc(r.title)}<small>Asked ${esc(fmtDate(r.asked))}${r.status === "shipped" && r.shippedOn && r.shippedOn !== "—" ? ` · shipped ${esc(fmtDate(r.shippedOn))}` : ""} · ${r.done.length} things must be true</small></b>
+  <span class="pill ${statusCls[r.status] ?? "none"}">${esc(r.status)}</span></summary>
+  <div class="rbody"><p class="words">${esc(r.words.replace(/^"|"$/g, "").replace(/" "/g, " … "))}</p>
+  <ul class="done">${r.done.map((d) => `<li>${md(d)}</li>`).join("")}</ul>${r.notes ? `<p class="muted" style="font-size:13.5px">${md(r.notes)}</p>` : ""}</div></details></li>`).join("") || `<li class="empty">No requests yet. Add one to REQUESTS.md.</li>`;
+
+/* ---------- change log */
+const hasDay = new Set(D.history.map((h) => h.date));
+$("log").innerHTML = D.log.map((e) => `<li><span class="rail"><i></i><s></s></span><div class="tx">${e.date ? `<p><a href="${hasDay.has(e.date) ? `days/${e.date}.html` : "#"}"><b>${esc(fmtDate(e.date, { month: "short", day: "numeric", year: "numeric" }))}</b></a> · <strong>${md(e.title)}</strong></p>` : ""}<p>${md(e.body)}</p></div></li>`).join("") || `<li class="muted">No cycles yet.</li>`;
+
+/* ---------- experience */
+(function () {
+  const E = D.experience, last = E.days.at(-1), prev = E.days.at(-2);
+  $("exp-head").innerHTML = last
+    ? `<span class="big num">${last.overall.toFixed(1)}</span>${prev ? delta(last.overall, prev.overall) : ""}<span class="of">out of 5 · ${last.n} personas · ${Math.round(last.recommend * 100)}% would recommend it · ${esc(fmtDate(last.date))}</span>`
+    : `<span class="of">No experience ratings yet.</span>`;
+  renderDims($("dims"), last);
+  const dates = [...new Set(E.grid.map((g) => g.date))].slice(-21);
+  const cell = new Map(E.grid.map((g) => [`${g.persona}|${g.date}`, g]));
+  const heat = $("heat");
+  heat.style.setProperty("--cols", Math.max(1, dates.length));
+  heat.innerHTML = dates.length
+    ? D.personas.map((p) => `<div class="hrow"><span class="hname">${esc(p.name)}</span>${dates.map((d) => {
+        const g = cell.get(`${p.id}|${d}`);
+        return g ? `<span class="cell" tabindex="0" data-g="${esc(p.id)}|${d}" style="background:${heatBg(g.overall)};color:${heatInk(g.overall)}">${g.overall}</span>` : `<span class="cell none"></span>`;
+      }).join("")}</div>`).join("") + `<div class="hrow hdates"><span></span>${dates.map((d) => `<span>${esc(fmtDate(d, { day: "numeric" }))}</span>`).join("")}</div>`
+    : "";
+  heat.querySelectorAll(".cell[data-g]").forEach((el) => {
+    const g = cell.get(el.dataset.g);
+    hover(el, () => `<b>${esc(byId[g.persona]?.name ?? g.persona)} · ${g.overall}/5</b><div class="w">${esc(fmtDate(g.date, { weekday: "long", month: "long", day: "numeric" }))}</div><div class="q">“${esc(g.why)}”</div>`);
+  });
+  if (E.days.length >= 2) {
+    const spark = (title, v) => {
+      const px = (i) => (i / (v.length - 1)) * 100, py = (y) => 44 - ((y - 1) / 4) * 40;
+      return `<div class="spark"><span class="eyebrow">${title}</span><b class="num" style="font-size:20px">${v.at(-1).toFixed(1)}/5 ${delta(v.at(-1), v[0])}</b>
+        <svg viewBox="0 0 100 48" preserveAspectRatio="none"><line x1="0" x2="100" y1="${py(3)}" y2="${py(3)}" stroke="var(--rule)" vector-effect="non-scaling-stroke"/>
+        <polyline points="${v.map((y, i) => `${px(i)},${py(y)}`).join(" ")}" fill="none" stroke="var(--s1)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg></div>`;
+    };
+    $("exp-trend").innerHTML = ["overall", "ease", "speed", "trust", "usefulness", "look"].map((k) => spark(k === "overall" ? "Overall" : DIM_LABELS[k], E.days.map((d) => d[k]))).join("");
+  } else $("exp-trend").innerHTML = `<p class="muted" style="font-size:13.5px">Trend lines appear after the second rated day.</p>`;
+})();
+
+/* ---------- themes */
+const parts = [
+  { k: "breadth", label: "Breadth", v: "--s1" },
+  { k: "persistence", label: "Persistence", v: "--s2" },
+  { k: "pain", label: "Pain", v: "--s3" },
+  { k: "regression", label: "Still open", v: "--s4" },
+];
+$("theme-legend").innerHTML = parts.map((p) => `<span><i class="sw" style="background:var(${p.v})"></i>${p.label}</span>`).join("");
+const maxScore = Math.max(1, ...D.themes.map((t) => t.score));
+const areaLabel = { ui: "look", ux: "ease of use", feature: "feature", perf: "speed", correctness: "correctness" };
+$("themes").innerHTML = D.themes.length
+  ? D.themes.map((t, i) => `<div class="trow" tabindex="0" data-t="${i}">
+      <div class="lab"><b>${esc(t.title)}</b><small>${t.personas} ${t.personas === 1 ? "persona" : "personas"} · ${t.days} ${t.days === 1 ? "day" : "days"} · ${areaLabel[t.area] ?? t.area}${t.status !== "open" ? ` · ${t.status}` : ""}</small></div>
+      <div class="bar" aria-hidden="true">${parts.map((p) => t.parts[p.k] > 0 ? `<i style="width:${(t.parts[p.k] / maxScore) * 100}%;background:var(${p.v})"></i>` : "").join("")}</div>
+      <div class="sc num">${t.score.toFixed(1)}</div></div>`).join("")
+  : `<p class="empty">No open themes in the last seven days.</p>`;
+document.querySelectorAll(".trow").forEach((row) => {
+  const t = D.themes[+row.dataset.t];
+  hover(row, () => `<b>${esc(t.title)}</b>
+    ${parts.map((p) => `<div class="row"><span><i class="sw" style="background:var(${p.v});width:9px;height:9px"></i> ${p.label}</span><span class="mono">${t.parts[p.k].toFixed(1)}</span></div>`).join("")}
+    <div class="w">Raised by ${t.who.map(first).join(", ")} · severity ${t.avgSeverity.toFixed(1)}/5</div>
+    ${t.quotes.map((q) => `<div class="q">“${esc(q.quote)}” <span class="w">— ${esc(first(q.persona))}</span></div>`).join("")}`);
+});
+$("shipped").innerHTML = D.shippedThemes.map((t) => `<li>${t.daysSince === 0 ? `<span class="pill none">judged next</span>` : t.raisedSince === 0 ? `<span class="pill good">held</span>` : `<span class="pill bad">came back</span>`}<span>${esc(t.title)}</span>
+  <small>Fixed ${esc(fmtDate(t.shipped_on))}${t.shipped_branch ? ` on <span class="mono">${esc(t.shipped_branch)}</span>` : ""}${t.daysSince ? ` · ${t.daysSince} ${t.daysSince === 1 ? "day" : "days"} since${t.raisedSince ? `, raised ${t.raisedSince}×` : ", not raised"}` : ""}</small></li>`).join("") || `<li class="muted">Nothing fixed yet.</li>`;
+$("artifacts").innerHTML = D.artifacts.map((a) => `<li><span class="pill none">artifact</span><span>${esc(a.title)}</span><small>${md((a.notes ?? "").replace(/^SIM ARTIFACT:\s*/, ""))}</small></li>`).join("") || `<li class="muted">None.</li>`;
+$("praise").innerHTML = D.praise.map((p) => `<li><span class="pill good">kept</span><span>${esc(p.title)}</span><small>praised ${p.n}×</small></li>`).join("") || `<li class="muted">No praise yet.</li>`;
+
+/* ---------- speed */
+renderSpeed(D.latency, $("ticks"), $("speed"), "in the last 7 days", { key: "firstP95", label: "day one" });
+
+/* ---------- activity & cost */
+if (D.daily.length >= 2) {
+  const spark = (title, vals, fmt) => {
+    const v = vals.map((x) => x ?? 0), max = Math.max(...v, 1e-9), min = Math.min(...v, 0);
+    const px = (i) => (i / (v.length - 1)) * 100, py = (y) => 44 - ((y - min) / (max - min || 1)) * 40;
+    return `<div class="spark"><span class="eyebrow">${title}</span><b class="num" style="font-size:20px">${fmt(v.at(-1))}</b>
+      <svg viewBox="0 0 100 48" preserveAspectRatio="none"><polyline points="${v.map((y, i) => `${px(i)},${py(y)}`).join(" ")}" fill="none" stroke="var(--s1)" stroke-width="2" vector-effect="non-scaling-stroke"/>
+      <circle cx="${px(v.length - 1)}" cy="${py(v.at(-1))}" r="3" fill="var(--s1)" vector-effect="non-scaling-stroke"/></svg>
+      <span class="muted" style="font-size:12px">${fmtDate(D.daily[0].date)} – ${fmtDate(D.daily.at(-1).date)}</span></div>`;
+  };
+  $("trend").innerHTML = spark("Trades per day", D.daily.map((d) => d.trades), (x) => x) + spark("Notes per day", D.daily.map((d) => d.feedback), (x) => x) + spark("Persona spend per day", D.daily.map((d) => d.spend), (x) => `$${x.toFixed(2)}`);
+} else $("trend").innerHTML = `<p class="muted" style="font-size:13.5px">Trend lines appear after the second simulated day.</p>`;
+
+/* ---------- plan */
+const caps = D.plan.capabilities;
+const count = (s) => caps.filter((x) => x.status === s).length;
+const capCls = { built: "good", partial: "warn", missing: "none" };
+const capColor = { built: "var(--good)", partial: "var(--warn)", missing: "var(--rule)" };
+$("cap-sum").innerHTML = ["built", "partial", "missing"].map((s) => `<i style="flex:${count(s)};background:${capColor[s]}"></i>`).join("");
+$("cap-sum").setAttribute("aria-label", `${count("built")} built, ${count("partial")} partial, ${count("missing")} missing`);
+$("cap-key").innerHTML = ["built", "partial", "missing"].map((s) => `<span><span class="pill ${capCls[s]}">${s}</span> <b class="num">${count(s)}</b></span>`).join("");
+$("caps").innerHTML = ["Product", "Simulator", "Loop"].map((area) => `<div><h3>${area}</h3><ul>${caps.filter((x) => x.area === area).map((x) => `<li><span class="pill ${capCls[x.status]}">${x.status}</span><span>${md(x.cap)}</span><small>${md(x.note)}</small></li>`).join("")}</ul></div>`).join("");
+$("backlog").innerHTML = D.plan.backlog.map((b, i) => `<li><details><summary><span class="k">${String(i + 1).padStart(2, "0")}</span><b>${md(b.title)}</b><span class="plus" aria-hidden="true">+</span></summary><p class="body">${md(b.body)}</p></details></li>`).join("");
+$("gaps").innerHTML = D.plan.gaps.map((g) => `<li>${md(g)}</li>`).join("");
+
+/* ---------- daily reports */
+$("days").innerHTML = D.history.length ? D.history.map((d) => `<li>
+  <span class="when">${esc(fmtDate(d.date, { month: "short", day: "numeric" }))}<small>${esc(fmtDate(d.date, { weekday: "long", year: "numeric" }))}</small></span>
+  <span class="stats">${d.experience == null ? "" : `<span>day ${d.experience.toFixed(1)}/5</span>`}<span>${d.newThemes} new ${d.newThemes === 1 ? "theme" : "themes"}</span><span>${d.trades} trades</span>${d.answers == null ? "" : `<span>answers ${d.answers.toFixed(1)}/5</span>`}${d.shipped ? `<span class="pill good">shipped</span>` : ""}</span>
+  <span class="links"><a href="days/${d.date}.html">Report →</a></span></li>`).join("") : `<li class="empty">The first daily report appears after the first simulated day.</li>`;
+
+$("foot").innerHTML = `<span>Generated ${new Date(D.generatedAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })} from the journal, PLAN.md and REQUESTS.md (${esc(D.planRef)})</span><span class="mono">${esc(D.git.branch)}@${esc(D.git.sha)}</span>`;
+</script>
+</body>
+</html>

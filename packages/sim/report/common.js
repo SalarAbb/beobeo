@@ -28,7 +28,14 @@ const LO = Math.log10(80), HI = Math.log10(60000);
 const x = (v) => ((Math.log10(Math.max(80, Math.min(60000, v))) - LO) / (HI - LO)) * 100;
 const TICKS = [100, 300, 1000, 3000, 10000, 30000];
 const targetLabel = (t) => t.replace(/^trpc:/, "").replace(/^page:/, "page ").replace(/^auth:/, "").replace(/^chat:first-token$/, "chat · first word");
-function renderSpeed(latency, ticksEl, speedEl, windowNote) {
+/** cmp (optional): { key, label } — a field on each row holding an earlier p95 to compare against. */
+function renderSpeed(latency, ticksEl, speedEl, windowNote, cmp) {
+  const vs = (l) => {
+    if (!cmp || l[cmp.key] == null) return "";
+    const d = l.p95 - l[cmp.key];
+    if (Math.abs(d) < Math.max(20, l[cmp.key] * 0.05)) return `<span class="delta flat">≈</span>`;
+    return `<span class="delta ${d < 0 ? "up" : "down"}" title="slow tail vs. ${esc(cmp.label)}">${d < 0 ? "▼" : "▲"} ${ms(Math.abs(d))}</span>`;
+  };
   ticksEl.innerHTML = TICKS.map((t) => `<span style="left:${x(t)}%">${ms(t)}</span>`).join("");
   speedEl.innerHTML = latency.map((l, i) => {
     const over = l.budget !== null && l.p95 > l.budget;
@@ -38,7 +45,7 @@ function renderSpeed(latency, ticksEl, speedEl, windowNote) {
         <i class="span" style="left:${x(l.p50)}%;width:${Math.max(0, x(l.p95) - x(l.p50))}%"></i>
         ${l.budget !== null ? `<i class="budget" style="left:${x(l.budget)}%"></i>` : ""}
         <i class="p p50" style="left:${x(l.p50)}%"></i><i class="p p95 ${over ? "over" : "ok"}" style="left:${x(l.p95)}%"></i></div>
-      <span class="val">${ms(l.p50)} · ${ms(l.p95)} ${l.budget === null ? "" : over ? `<span class="pill bad">over</span>` : `<span class="pill good">ok</span>`}</span></div>`;
+      <span class="val">${ms(l.p50)} · ${ms(l.p95)} ${vs(l)} ${l.budget === null ? "" : over ? `<span class="pill bad">over</span>` : `<span class="pill good">ok</span>`}</span></div>`;
   }).join("") || `<p class="muted">No timings yet.</p>`;
   speedEl.querySelectorAll(".srow").forEach((row) => {
     const l = latency[+row.dataset.l];
@@ -46,6 +53,7 @@ function renderSpeed(latency, ticksEl, speedEl, windowNote) {
       <div class="row"><span>typical (p50)</span><span class="mono">${ms(l.p50)}</span></div>
       <div class="row"><span>slow tail (p95)</span><span class="mono">${ms(l.p95)}</span></div>
       <div class="row"><span>budget</span><span class="mono">${l.budget === null ? "none set" : ms(l.budget)}</span></div>
+      ${cmp && l[cmp.key] != null ? `<div class="row"><span>slow tail, ${esc(cmp.label)}</span><span class="mono">${ms(l[cmp.key])}</span></div>` : ""}
       <div class="w">${l.n} measurements ${windowNote}</div>`);
   });
 }
@@ -91,4 +99,20 @@ function renderDims(el, row) {
     const v = row?.[k];
     return `<div class="dim"><span>${label}</span><span class="lane" aria-hidden="true">${v == null ? "" : `<i style="width:${((v - 1) / 4) * 100}%"></i>`}<s style="left:50%"></s></span><span class="v">${v == null ? "—" : v.toFixed(1)}</span></div>`;
   }).join("");
+}
+
+/* ---------- site navigation: the same three doors on every page */
+function siteNav(active, base = "") {
+  const latest = D.latest ? `days/${D.latest}.html` : null;
+  const link = (key, href, label) => (href ? `<a class="${active === key ? "on" : ""}" href="${base}${href}"${active === key ? ' aria-current="page"' : ""}>${label}</a>` : "");
+  return `<span class="brand">Beobeo Evolution</span><span class="links">${link("start", "index.html", "Start here")}${link("progress", "progress.html", "Progress")}${link("day", latest, active === "day" ? "Daily" : `Latest day${D.latest ? ` · ${esc(fmtDate(D.latest))}` : ""}`)}</span>`;
+}
+
+/* ---------- change vs. a previous value: arrow + signed number, colored only by direction of "better" */
+function delta(now, was, { digits = 1, unit = "", better = "up" } = {}) {
+  if (now == null || was == null) return "";
+  const d = now - was;
+  if (Math.abs(d) < Math.pow(10, -digits) / 2) return `<span class="delta flat">±0${unit}</span>`;
+  const good = better === "up" ? d > 0 : d < 0;
+  return `<span class="delta ${good ? "up" : "down"}">${d > 0 ? "▲" : "▼"} ${Math.abs(d).toFixed(digits)}${unit}</span>`;
 }

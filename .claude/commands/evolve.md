@@ -43,7 +43,7 @@ be running — ask the user to `pnpm dev` if it isn't) then `pnpm sim:digest`.
 - Update `CLAUDE.md` for anything technical that changed (non-negotiable — see its header) and
   append to `PLAN.md` → Evolution log (newest first): date · branch · what shipped · theme keys ·
   expected signal. Re-rank/trim the PLAN.md backlog if the digest changed priorities.
-- Commit (one or a few commits, clear messages). **Never push, merge, reset, or touch `.env`.**
+- Commit (one or a few commits, clear messages). **Never push, merge, reset, or touch `.env`.** You don't merge, but your branch WILL be merged into the main line automatically tomorrow morning if your report says `Checks: PASSED`, with no human review. The loop is meant to run unattended for weeks, so only ship what you'd be comfortable landing unreviewed; anything risky or needing a human decision goes under "Needs you" instead of into the code.
 - Mark what you shipped: `pnpm sim:theme ship <key...> --branch evolve/<today>`; mark rejected asks
   `pnpm sim:theme wontfix <key> --note "<principle #n: why>"`.
 
@@ -70,11 +70,14 @@ cycle script's safety valve greps for it.
 
 ## 5. Republish the live evolution page
 Run `pnpm sim:report` after your PLAN.md edits, so the capability map, backlog and log are
-current. It builds `packages/sim/.out/site/`: `index.html` plus `days/<date>.html` and
-`snapshots/<date>.html` for every day. Publish it with the Artifact tool: `file_path` =
-`packages/sim/.out/site/index.html`, `root` = `packages/sim/.out/site`, `files` = every
-`days/*.html` and `snapshots/*.html` path, and `url` = the contents of
-`~/beobeo-sim/evolution-url.txt`, so the same link updates. Read the artifact first if the
+current. It builds `packages/sim/.out/site/` in three layers: `index.html` (start here: how the
+loop works, rarely changes), `progress.html` (everything so far: requests, change log, trends,
+plan) and `days/<date>.html` (one per day, only that day's delta and what shipped that night,
+which comes from your PLAN.md log entry dated today plus this report). Publish it with the
+Artifact tool: `file_path` = `packages/sim/.out/site/index.html`, `root` = `packages/sim/.out/site`,
+`files` = `progress.html` and every `days/*.html` path, and `url` = the contents of
+`~/beobeo-sim/evolution-url.txt`, so the same link updates. If the Artifact tool isn't available
+in this run, say so under "Needs you" so the person can republish from an interactive session. Read the artifact first if the
 tool asks. Keep the PLAN.md **Capability map** table accurate: flip a
 row's status when a cycle changes it. The page renders that table directly.
 Finish by printing the report path and the page link.

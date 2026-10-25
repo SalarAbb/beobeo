@@ -1,0 +1,178 @@
+<title>Beobeo Evolution</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/*__CSS__*/
+</style>
+
+<div class="wrap">
+  <nav class="sitenav" id="nav" aria-label="Evolution site"></nav>
+
+  <header class="top">
+    <p class="eyebrow">Start here</p>
+    <h1>Evolution</h1>
+    <p class="lede">Simulated investors use the real Beobeo app every morning, against real market prices. What they struggle with becomes the next change. The morning after, they tell us whether it helped. This page explains how that works; the other two show what's happening.</p>
+  </header>
+
+  <section aria-labelledby="h-doors">
+    <div class="sec-head">
+      <p class="eyebrow">Three pages, three questions</p>
+      <h2 id="h-doors">Where to look</h2>
+    </div>
+    <div class="doors" id="doors"></div>
+  </section>
+
+  <section aria-labelledby="h-why">
+    <div class="sec-head">
+      <p class="eyebrow">The goal</p>
+      <h2 id="h-why">What Beobeo is becoming</h2>
+    </div>
+    <p class="northstar" id="northstar"></p>
+  </section>
+
+  <section aria-labelledby="h-loop">
+    <div class="sec-head">
+      <p class="eyebrow">How one cycle works</p>
+      <h2 id="h-loop">The loop</h2>
+      <p>Six stations, once a day at 08:00 or whenever you ask. The circle stays open at the last station on purpose: nothing reaches the app you use until you merge it.</p>
+    </div>
+    <div class="loop">
+      <svg id="enso" viewBox="0 0 600 470" role="img" aria-label="Diagram of the daily evolution cycle"></svg>
+      <ol class="steps" id="steps"></ol>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-people">
+    <div class="sec-head">
+      <p class="eyebrow">The population</p>
+      <h2 id="h-people">Who uses Beobeo</h2>
+      <p>Each persona has fixed habits (weekly buys, dip rules, harvesting) and a mind that decides everything else in its own voice. Curiosity is the chance they wander the app at random on a given day. What they said each day lives in the daily reports.</p>
+    </div>
+    <div class="people" id="people"></div>
+  </section>
+
+  <section aria-labelledby="h-rank">
+    <div class="sec-head">
+      <p class="eyebrow">Choosing the next change</p>
+      <h2 id="h-rank">How we decide what to fix</h2>
+      <p>Every cycle works on your own top open request first (they live in <code>REQUESTS.md</code>, in your words, each with a checklist of what "done" means). After that, persona feedback decides. Every complaint, wish and compliment is tagged with a theme, and themes are scored:</p>
+    </div>
+    <div class="legend" id="theme-legend"></div>
+    <p class="ink2" style="max-width:70ch;font-size:14.5px">Breadth weighs most, so one loud persona can't outrank a quiet majority. Praise never scores: it's a list of things not to break. When a complaint turns out to be caused by the simulator itself (a persona misreading its own notes, say), it's set aside and never becomes product work.</p>
+  </section>
+
+  <section aria-labelledby="h-read">
+    <div class="sec-head">
+      <p class="eyebrow">Glossary</p>
+      <h2 id="h-read">How to read the reports</h2>
+    </div>
+    <dl class="gloss" id="gloss"></dl>
+  </section>
+
+  <section aria-labelledby="h-principles">
+    <div class="sec-head">
+      <p class="eyebrow">The rules every change is judged against</p>
+      <h2 id="h-principles">Principles</h2>
+      <p>When two conflict, the earlier one wins.</p>
+    </div>
+    <ol class="principles" id="principles"></ol>
+  </section>
+
+  <footer id="foot"></footer>
+</div>
+<div id="tip" hidden></div>
+
+<script>
+const D = /*__DATA__*/null;
+/*__COMMON_JS__*/
+
+$("nav").innerHTML = siteNav("start");
+
+/* ---------- doors */
+const latest = D.days[0];
+$("doors").innerHTML = [
+  { href: "progress.html", eye: "Everything so far", h: "Progress", p: `Your requests and how far along they are, every change the loop has made, and how the personas' experience has moved across ${D.dayCount} ${D.dayCount === 1 ? "day" : "days"}. Also the plan: what exists, what's missing, what's next.`, go: "Open progress" },
+  latest && { href: `days/${latest.date}.html`, eye: `Latest day · ${fmtDate(latest.date, { weekday: "short", month: "short", day: "numeric" })}`, h: "The daily report", p: latest.headline.length ? `What changed since the day before, and what shipped that night: ${latest.headline.map(md).join("; ")}.` : "What changed since the day before: new complaints, fixes that held or didn't, and what each persona did and said.", go: "Open the latest day" },
+  { href: "#h-loop", eye: "This page", h: "How it works", p: "The loop, the personas, how a theme earns a fix, and what the numbers in the reports mean. Read once; it only changes when the system does.", go: "Read on" },
+].filter(Boolean).map((d) => `<a class="door" href="${d.href}"><span class="eyebrow">${esc(d.eye)}</span><h3>${esc(d.h)}</h3><p>${d.p}</p><span class="go">${esc(d.go)} →</span></a>`).join("");
+
+$("northstar").innerHTML = md(D.plan.northStar.replace(/:$/, "."));
+
+/* ---------- the ensō */
+const stations = [
+  { t: "Market", n: "real prices", d: "Real closes plus today's live quotes from Tiingo and Coinbase. Personas never see tomorrow's price." },
+  { t: "Personas act", n: "trade · ask · wander", d: "Each persona runs its habits, decides what else to do, asks the assistant one question and rates the answer. Some wander the app at random; a few walk through the screens and critique them. Every fifth day a fresh copy signs up from scratch." },
+  { t: "Journal", n: "on this Mac", d: "Every trade, answer, complaint, rating and timing is written to <code>~/beobeo-sim/journal.db</code>." },
+  { t: "Digest", n: "themes, ranked", d: "Notes cluster into themes and get ranked. Problems caused by the simulator itself are set aside." },
+  { t: "Evolve", n: "1–3 changes", d: "Claude takes your top open request, then the best-ranked themes, builds 1–3 improvements on an <code>evolve/</code> branch, runs every check and looks at screenshots of the result." },
+  { t: "You merge", n: "nothing ships alone", d: "Nothing reaches the main line until you merge it. The next morning the personas meet the change, and the daily report says whether it held." },
+];
+(function drawEnso() {
+  const svg = $("enso"), cx = 300, cy = 235, r = 158, N = stations.length;
+  const ang = (i) => -Math.PI / 2 + (i * 2 * Math.PI) / N;
+  const pt = (a, rr = r) => [cx + rr * Math.cos(a), cy + rr * Math.sin(a)];
+  const arc = (a0, a1) => { const [x0, y0] = pt(a0), [x1, y1] = pt(a1); return `M${x0.toFixed(1)},${y0.toFixed(1)} A${r},${r} 0 0 1 ${x1.toFixed(1)},${y1.toFixed(1)}`; };
+  const pad = 0.11;
+  let h = "";
+  for (let i = 0; i < N; i++) h += `<path class="ring${i === N - 1 ? " wait" : ""}" d="${arc(ang(i) + pad, ang(i + 1) - pad)}"/>`;
+  const [wx, wy] = pt((ang(N - 1) + ang(N)) / 2, r - 24);
+  h += `<text class="wait-label" x="${wx}" y="${wy}" text-anchor="middle">overnight</text>`;
+  h += `<text class="center-day" x="${cx}" y="${cy + 8}" text-anchor="middle">08:00</text>`;
+  h += `<text class="center-sub" x="${cx}" y="${cy + 34}" text-anchor="middle">every morning</text>`;
+  stations.forEach((s, i) => {
+    const a = ang(i), [x, y] = pt(a), [lx, ly] = pt(a, r + 26);
+    const anchor = Math.abs(Math.cos(a)) < 0.2 ? "middle" : Math.cos(a) > 0 ? "start" : "end";
+    const dy = Math.sin(a) < -0.5 ? -18 : Math.sin(a) > 0.5 ? 10 : -4;
+    h += `<g class="station${i === N - 1 ? " merge" : ""}" data-i="${i}" tabindex="0"><circle cx="${x}" cy="${y}" r="7"/>
+      <text class="l" x="${lx}" y="${ly + dy}" text-anchor="${anchor}">${esc(s.t)}</text>
+      <text class="n" x="${lx}" y="${ly + dy + 17}" text-anchor="${anchor}">${esc(s.n)}</text></g>`;
+  });
+  svg.innerHTML = h;
+  $("steps").innerHTML = stations.map((s, i) => `<li data-i="${i}"><span class="t">${esc(s.t)}</span><span class="d">${s.d}</span></li>`).join("");
+  const set = (i) => document.querySelectorAll("[data-i]").forEach((el) => el.classList.toggle("on", el.dataset.i === String(i)));
+  document.querySelectorAll("[data-i]").forEach((el) => {
+    el.addEventListener("mouseenter", () => set(el.dataset.i));
+    el.addEventListener("focus", () => set(el.dataset.i));
+    el.addEventListener("mouseleave", () => set(-1));
+  });
+})();
+
+/* ---------- people: who they are, not how they felt today */
+const acct = { taxable: "taxable", traditional_ira: "IRA", roth_ira: "Roth", "401k": "401(k)", other_tax_advantaged: "HSA/other" };
+$("people").innerHTML = D.personas.map((p) => `<article class="card">
+  <div class="hd"><h3>${esc(p.name)}</h3><span class="realm">${esc(p.realm)}</span></div>
+  <p class="sub">${p.age} · ${p.risk} risk · investing since ${fmtDate(p.joinedOn, { month: "short", year: "numeric" })}${p.firstDay ? ` · in the loop since ${fmtDate(p.firstDay)}` : " · joins next cycle"}</p>
+  <p class="strat">${esc(p.strategy.split(/(?<=\.)\s/)[0])}</p>
+  <div class="facts">
+    <div><small>Tech</small><span class="pips" aria-label="${p.tech} of 5">${[1, 2, 3, 4, 5].map((k) => `<i class="${k <= p.tech ? "f" : ""}"></i>`).join("")}</span></div>
+    <div><small>Patience</small><span>${ms(p.patienceMs)}</span></div>
+    <div><small>Curiosity</small><span>${p.explore == null ? "—" : `${Math.round(p.explore * 100)}%`}</span></div>
+  </div>
+  <div class="ft">${p.symbols.slice(0, 5).map((s) => `<span class="mono">${esc(s)}</span>`).join(" · ")}${p.symbols.length > 5 ? ` +${p.symbols.length - 5}` : ""}
+    <span style="flex:1"></span>${[...new Set(p.accounts)].map((a) => `<span class="pill none">${esc(acct[a] ?? a)}</span>`).join(" ")}</div>
+</article>`).join("");
+
+/* ---------- theme score legend */
+$("theme-legend").innerHTML = [
+  ["--s1", "Breadth", "3 × personas who raised it"],
+  ["--s2", "Persistence", "2 × log₂(1 + days it came up)"],
+  ["--s3", "Pain", "average severity, +3 if anyone called it a blocker"],
+  ["--s4", "Still open", "+1 while it's still being raised"],
+].map(([v, l, f]) => `<span><i class="sw" style="background:var(${v})"></i>${l} <span class="formula">${f}</span></span>`).join("");
+
+/* ---------- glossary */
+$("gloss").innerHTML = [
+  ["day n/5", "How a persona rated their whole day with the app, from 1 to 5, based only on what happened to them: what they clicked, how long they waited, what the assistant said. Five sub-scores: ease, speed, trust, usefulness, look."],
+  ["chat n/5", "How a persona rated one assistant answer to a question about their own money."],
+  ["Habit vs. judgment", "Habit trades follow a persona's fixed rules (Samwell's weekly VOO). Judgment trades are decisions their mind made that day, always with its reason."],
+  ["New · again · quiet", "A theme is new the first day anyone raises it, again when it comes back, and quiet when it was raised the day before but not today. A fix that held goes quiet and stays quiet."],
+  ["Typical and slow (p50 · p95)", "Every request is timed. Typical is the median; slow is the time 95% of requests beat. The budget is the time we promised ourselves (principle 5)."],
+  ["Wandering", "Personas explore at random with their curiosity chance, never touching anything that saves, deletes or spends. Same persona, same day, same path, so a bug they hit can be replayed exactly."],
+  ["Set aside", "A theme the simulator caused, not the app. It's kept for the record and never becomes product work."],
+  ["Your requests (R-001…)", "What you asked for directly, kept apart from persona feedback and always worked on first. Shipped only when every line of its checklist is true."],
+].map(([t, d]) => `<div><dt>${esc(t)}</dt><dd>${esc(d)}</dd></div>`).join("");
+
+$("principles").innerHTML = D.plan.principles.map((p) => `<li><b>${md(p.title)}</b><small>${md(p.body)}</small></li>`).join("");
+$("foot").innerHTML = `<span>Updated ${esc(fmtDate(D.latest, { month: "long", day: "numeric", year: "numeric" }))} · built from the persona files and PLAN.md</span><span class="mono">${esc(D.git.branch)}@${esc(D.git.sha)}</span>`;
+</script>

@@ -1,12 +1,21 @@
 /**
- * Build the live evolution page: one self-contained HTML file rendered from
- * the journal, the persona files and PLAN.md. /evolve regenerates and
- * republishes it at the end of every cycle; run it by hand any time.
+ * Build the evolution site from the journal, the persona files, PLAN.md and REQUESTS.md.
+ * Three layers, each saying something the others don't:
  *
- * Run: pnpm sim:report
- * Writes the site to packages/sim/.out/site/ (publishable: index.html + days/<date>.html +
- * snapshots/<date>.html) and mirrors it to ~/beobeo-sim/site/. Snapshots are permanent: each
- * run freezes today's index there, so the page's whole history survives.
+ *   index.html          Start here: what the loop is, how it works, who the personas are,
+ *                       how to read the reports. Changes only when the system itself does.
+ *   days/<date>.html    One page per simulated day, only that day's news: the delta vs. the
+ *                       day before, what shipped that night, new themes, whether yesterday's
+ *                       fix held, and what the personas did and said.
+ *   progress.html       Everything so far: your requests, the change log, trends over every
+ *                       day, open/shipped themes and the plan.
+ *
+ * /evolve regenerates and republishes it at the end of every cycle; run it by hand any time.
+ *
+ * Run: pnpm sim:report [--ref <git-ref>]
+ * PLAN.md and REQUESTS.md are read from the working tree, unless an unmerged evolve/* branch
+ * is newer than HEAD: then from that branch, so the site shows the plan as the loop left it.
+ * Writes packages/sim/.out/site/ (publishable) and mirrors it to ~/beobeo-sim/site/.
  */
 import { execSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -21,10 +30,15 @@ import { addDays, todayIso } from "../src/world";
 const repo = new URL("../../../", import.meta.url).pathname;
 const j = new Journal();
 const git = gitInfo();
+const args = process.argv.slice(2);
+const opt = (n: string) => {
+  const i = args.indexOf(`--${n}`);
+  return i >= 0 ? args[i + 1] : undefined;
+};
 
 /** Which story each persona walked out of. */
 const REALM: Record<string, "Westeros" | "Hogwarts"> = {
-  samwell: "Westeros", arya: "Westeros", petyr: "Westeros", olenna: "Westeros",
+  samwell: "Westeros", arya: "Westeros", petyr: "Westeros", olenna: "Westeros", barristan: "Westeros",
   augusta: "Hogwarts", fred: "Hogwarts", minerva: "Hogwarts", gilderoy: "Hogwarts", luna: "Hogwarts", hermione: "Hogwarts",
 };
 
@@ -35,106 +49,22 @@ const sh = (c: string) => {
     return null;
   }
 };
-
-// ---------------------------------------------------------------- latest cycle
-const lastDay = j.get<{ sim_date: string }>("SELECT sim_date FROM runs WHERE kind = 'day' ORDER BY id DESC LIMIT 1")?.sim_date ?? todayIso();
-const dayRuns = j.all<{ id: number; app_branch: string; app_sha: string }>("SELECT id, app_branch, app_sha FROM runs WHERE kind = 'day' AND sim_date = ?", lastDay);
-const inRuns = dayRuns.length ? `run_id IN (${dayRuns.map((r) => r.id).join(",")})` : "0";
 const one = <T>(sql: string, ...p: (string | number)[]) => j.get<T>(sql, ...p)!;
+const runIdsOn = (date: string) => j.all<{ id: number; app_branch: string; app_sha: string }>("SELECT id, app_branch, app_sha FROM runs WHERE kind = 'day' AND sim_date = ? ORDER BY id", date);
+const within = (ids: { id: number }[], col = "run_id") => (ids.length ? `${col} IN (${ids.map((r) => r.id).join(",")})` : "0");
+
+// ---------------------------------------------------------------- where PLAN.md / REQUESTS.md come from
+const unmerged = (sh(`git for-each-ref --sort=-refname --format='%(refname:short)' --no-merged salarabb/phase_1 'refs/heads/evolve/*'`) ?? "").split("\n").filter(Boolean);
+const planRef = opt("ref") ?? (unmerged[0] && sh(`git merge-base --is-ancestor ${unmerged[0]} HEAD && echo yes`) !== "yes" ? unmerged[0] : null);
+const repoFile = (f: string) => (planRef ? sh(`git show ${planRef}:${f}`) ?? "" : existsSync(`${repo}${f}`) ? readFileSync(`${repo}${f}`, "utf8") : "");
+
+// ---------------------------------------------------------------- days
+const dayDates = j.all<{ d: string }>("SELECT DISTINCT sim_date d FROM runs WHERE kind = 'day' ORDER BY sim_date").map((r) => r.d);
+const lastDay = dayDates.at(-1) ?? todayIso();
 const since = addDays(lastDay, -6);
 
-const cycle = {
-  date: lastDay,
-  dayNumber: one<{ n: number }>("SELECT COUNT(DISTINCT sim_date) n FROM runs WHERE kind = 'day'").n,
-  appRef: dayRuns.at(-1) ? `${dayRuns.at(-1)!.app_branch}@${dayRuns.at(-1)!.app_sha}` : `${git.branch}@${git.sha}`,
-  trades: one<{ n: number }>(`SELECT COUNT(*) n FROM actions WHERE kind = 'trade' AND ok = 1 AND ${inRuns}`).n,
-  mindTrades: one<{ n: number }>(`SELECT COUNT(*) n FROM actions WHERE kind = 'trade' AND ok = 1 AND json_extract(detail,'$.reason') = 'mind' AND ${inRuns}`).n,
-  questions: one<{ n: number }>(`SELECT COUNT(*) n FROM questions WHERE ${inRuns}`).n,
-  avgRating: one<{ r: number | null }>(`SELECT AVG(rating) r FROM questions WHERE rating IS NOT NULL AND ${inRuns}`).r,
-  reviews: one<{ n: number }>(`SELECT COUNT(*) n FROM actions WHERE kind = 'review' AND ${inRuns}`).n,
-  signups: one<{ n: number }>(`SELECT COUNT(*) n FROM actions WHERE kind = 'signup' AND ${inRuns}`).n,
-  feedback: one<{ n: number }>(`SELECT COUNT(*) n FROM feedback WHERE ${inRuns}`).n,
-  timings: one<{ n: number }>(`SELECT COUNT(*) n FROM latency WHERE ${inRuns}`).n,
-  spend: one<{ usd: number | null }>(`SELECT SUM(usd) usd FROM costs WHERE ${inRuns}`).usd ?? 0,
-  themesOpen: one<{ n: number }>("SELECT COUNT(*) n FROM themes WHERE status = 'open'").n,
-  themesShipped: one<{ n: number }>("SELECT COUNT(*) n FROM themes WHERE status IN ('shipped','resolved')").n,
-  themesArtifact: one<{ n: number }>("SELECT COUNT(*) n FROM themes WHERE status = 'wontfix'").n,
-};
-
-const days = j.all<{ date: string; feedback: number; rating: number | null; spend: number | null }>(
-  `SELECT r.sim_date date,
-          (SELECT COUNT(*) FROM feedback f WHERE f.run_id IN (SELECT id FROM runs WHERE sim_date = r.sim_date AND kind='day')) feedback,
-          (SELECT AVG(rating) FROM questions q WHERE q.run_id IN (SELECT id FROM runs WHERE sim_date = r.sim_date AND kind='day')) rating,
-          (SELECT SUM(usd) FROM costs c WHERE c.run_id IN (SELECT id FROM runs WHERE sim_date = r.sim_date AND kind='day')) spend
-     FROM runs r WHERE r.kind = 'day' GROUP BY r.sim_date ORDER BY r.sim_date`,
-);
-
-// ---------------------------------------------------------------- themes
-const stats = j.all<ThemeStats>(
-  `SELECT t.key, t.title, t.area, t.kind, t.status,
-          COUNT(DISTINCT f.persona_id) personas, COUNT(DISTINCT date(f.created_at)) days,
-          SUM(date(f.created_at) >= ?) recent, AVG(f.severity) avgSeverity, MAX(f.severity) maxSeverity
-     FROM themes t JOIN feedback f ON f.theme_key = t.key GROUP BY t.key HAVING SUM(date(f.created_at) >= ?) > 0`,
-  since,
-  since,
-);
-const themes = rankThemes(stats)
-  .slice(0, 12)
-  .map((t) => ({
-    ...t,
-    parts: scoreParts(t),
-    who: j.all<{ p: string }>("SELECT DISTINCT persona_id p FROM feedback WHERE theme_key = ?", t.key).map((r) => r.p),
-    quotes: j.all<{ persona: string; quote: string; page: string | null }>(
-      "SELECT persona_id persona, quote, page FROM feedback WHERE theme_key = ? ORDER BY severity DESC, id DESC LIMIT 2",
-      t.key,
-    ),
-  }));
-const artifacts = j.all<{ key: string; title: string; notes: string | null }>("SELECT key, title, notes FROM themes WHERE status = 'wontfix' ORDER BY last_seen DESC");
-const praise = j.all<{ title: string; n: number }>("SELECT title, COUNT(*) n FROM feedback WHERE kind = 'praise' GROUP BY theme_key ORDER BY n DESC LIMIT 4");
-
-// ---------------------------------------------------------------- personas
-const personas = loadPersonas().map((p) => {
-  const lastThought = j.get<{ detail: string }>("SELECT detail FROM actions WHERE persona_id = ? AND kind = 'thought' ORDER BY id DESC LIMIT 1", p.id);
-  const lastReview = j.get<{ detail: string }>("SELECT detail FROM actions WHERE persona_id = ? AND kind = 'review' ORDER BY id DESC LIMIT 1", p.id);
-  const boot = j.get<{ detail: string }>("SELECT detail FROM actions WHERE persona_id = ? AND kind = 'bootstrap' AND ok = 1 ORDER BY id DESC LIMIT 1", p.id);
-  const bootTrades = boot ? (JSON.parse(boot.detail) as { trades: number }).trades : 0;
-  const bootId = j.get<{ id: number }>("SELECT id FROM actions WHERE persona_id = ? AND kind = 'bootstrap' AND ok = 1 ORDER BY id DESC LIMIT 1", p.id)?.id ?? 0;
-  return {
-    id: p.id,
-    name: p.name,
-    age: p.age,
-    realm: REALM[p.id] ?? "Elsewhere",
-    life: p.life,
-    strategy: p.strategy,
-    tech: p.techSavviness,
-    patienceMs: p.patienceMs,
-    risk: p.riskTolerance,
-    accounts: p.accounts.map((a) => a.type),
-    symbols: p.universe.map((u) => u.symbol),
-    joinedOn: p.joinedOn,
-    version: p.version,
-    trades: bootTrades + one<{ n: number }>("SELECT COUNT(*) n FROM actions WHERE persona_id = ? AND kind = 'trade' AND ok = 1 AND id > ?", p.id, bootId).n,
-    notes: one<{ n: number }>("SELECT COUNT(*) n FROM feedback WHERE persona_id = ?", p.id).n,
-    mood: lastThought ? (JSON.parse(lastThought.detail) as { mood: string }).mood : null,
-    rating: j.get<{ r: number }>("SELECT rating r FROM questions WHERE persona_id = ? AND rating IS NOT NULL ORDER BY id DESC LIMIT 1", p.id)?.r ?? null,
-    experience: j.get<{ overall: number; why: string }>("SELECT overall, why FROM experience WHERE persona_id = ? ORDER BY sim_date DESC, id DESC LIMIT 1", p.id) ?? null,
-    keep: lastReview ? (JSON.parse(lastReview.detail) as { wouldKeepUsing: boolean }).wouldKeepUsing : null,
-  };
-});
-
-// ---------------------------------------------------------------- latency & answers
-const lat = j.all<{ target: string; ms: number }>("SELECT target, ms FROM latency WHERE date(created_at) >= ? AND target != 'chat:total'", since);
-const byTarget = new Map<string, number[]>();
-for (const l of lat) byTarget.set(l.target, [...(byTarget.get(l.target) ?? []), l.ms]);
-const latency = [...byTarget]
-  .map(([target, xs]) => ({ target, n: xs.length, p50: percentile(xs, 50)!, p95: percentile(xs, 95)!, budget: budgetFor(target) ?? null }))
-  .sort((a, b) => b.p95 / (b.budget ?? 1e9) - a.p95 / (a.budget ?? 1e9));
-const answers = j.all<{ persona: string; rating: number; question: string; note: string; firstTokenMs: number | null }>(
-  `SELECT persona_id persona, rating, question, rating_note note, first_token_ms firstTokenMs FROM questions WHERE rating IS NOT NULL AND ${inRuns} ORDER BY rating, persona_id`,
-);
-
 // ---------------------------------------------------------------- PLAN.md
-const plan = readFileSync(`${repo}PLAN.md`, "utf8");
+const plan = repoFile("PLAN.md");
 const section = (title: string) => {
   const m = plan.split(/^## /m).find((s) => s.startsWith(title));
   return m ? m.slice(title.length).trim() : "";
@@ -159,8 +89,7 @@ const bullets = (md: string) =>
     .split(/\n(?=- )/)
     .filter((b) => b.startsWith("- "))
     .map((b) => b.slice(2).replace(/\s+/g, " ").trim());
-const backlogMd = section("Backlog");
-const [backlogMain, gapsMd = ""] = backlogMd.split("**Loop / simulator gaps**");
+const [backlogMain, gapsMd = ""] = section("Backlog").split("**Loop / simulator gaps**");
 const capabilities = section("Capability map")
   .split("\n")
   .filter((l) => /^\|\s*(Product|Simulator|Loop)\s*\|/.test(l))
@@ -168,10 +97,21 @@ const capabilities = section("Capability map")
     const [area, cap, status, note] = l.split("|").slice(1, -1).map((c) => c.trim());
     return { area: area!, cap: cap!, status: status as "built" | "partial" | "missing", note: note ?? "" };
   });
+/** Evolution log entries "**2026-10-25 · Title.** body". */
+const log = bullets(section("Evolution log")).map((b) => {
+  const m = /^\*\*(\d{4}-\d{2}-\d{2})\s*·\s*(.+?)\*\*\s*(.*)$/.exec(b);
+  return m ? { date: m[1]!, title: m[2]!.replace(/\.$/, ""), body: m[3]! } : { date: null, title: "", body: b };
+});
+const planData = {
+  northStar: section("North star").split("\n\n")[0]!.replace(/\s+/g, " "),
+  principles: numbered(section("Principles")),
+  backlog: numbered(backlogMain ?? ""),
+  gaps: bullets(gapsMd),
+  capabilities,
+};
 
 // ---------------------------------------------------------------- REQUESTS.md (the user's own asks)
-const requestsMd = existsSync(`${repo}REQUESTS.md`) ? readFileSync(`${repo}REQUESTS.md`, "utf8") : "";
-const requests = requestsMd
+const requests = repoFile("REQUESTS.md")
   .split(/^## /m)
   .slice(1)
   .map((block) => {
@@ -190,71 +130,79 @@ const requests = requestsMd
   })
   .filter((r): r is NonNullable<typeof r> => r !== null);
 
-// ---------------------------------------------------------------- experience over time
+// ---------------------------------------------------------------- personas (who they are: stable facts only)
+const personaFiles = loadPersonas();
+const firstSeen = (id: string) => j.get<{ d: string }>("SELECT MIN(sim_date) d FROM actions WHERE persona_id = ? AND kind != 'bootstrap'", id)?.d ?? null;
+const personas = personaFiles.map((p) => ({
+  id: p.id,
+  name: p.name,
+  age: p.age,
+  realm: REALM[p.id] ?? "Elsewhere",
+  life: p.life,
+  strategy: p.strategy,
+  tech: p.techSavviness,
+  patienceMs: p.patienceMs,
+  risk: p.riskTolerance,
+  accounts: p.accounts.map((a) => a.type),
+  symbols: p.universe.map((u) => u.symbol),
+  joinedOn: p.joinedOn,
+  version: p.version,
+  explore: p.explore?.chance ?? null,
+  firstDay: firstSeen(p.id),
+}));
+const personaRefs = personas.map((p) => ({ id: p.id, name: p.name }));
+
+// ---------------------------------------------------------------- per-day building blocks
 const DIMS = ["overall", "ease", "speed", "trust", "usefulness", "look"] as const;
-const expDays = j.all<Record<(typeof DIMS)[number], number> & { date: string; n: number; recommend: number }>(
-  `SELECT sim_date date, COUNT(*) n, AVG(overall) overall, AVG(ease) ease, AVG(speed) speed, AVG(trust) trust,
-          AVG(usefulness) usefulness, AVG(look) look, AVG(recommend) recommend
-     FROM experience GROUP BY sim_date ORDER BY sim_date`,
-);
-const expGrid = j.all<{ persona: string; date: string; overall: number; why: string }>(
-  // the latest rating per persona per day
-  `SELECT persona_id persona, sim_date date, overall, why FROM experience e
-    WHERE id = (SELECT MAX(id) FROM experience x WHERE x.persona_id = e.persona_id AND x.sim_date = e.sim_date)
-    ORDER BY sim_date`,
-);
-const experience = { days: expDays, grid: expGrid };
-
-const data = {
-  generatedAt: new Date().toISOString(),
-  git,
-  loopArmed: sh(`launchctl print gui/${process.getuid?.() ?? 501}/dev.beobeo.evolve`) !== null,
-  unmerged: (sh(`git for-each-ref --format='%(refname:short)' --no-merged salarabb/phase_1 'refs/heads/evolve/*'`) ?? "").split("\n").filter(Boolean),
-  budget: DAILY_BUDGET_USD,
-  spentToday: j.spentToday(),
-  cycle,
-  days,
-  themes,
-  artifacts,
-  praise,
-  personas,
-  latency,
-  answers,
-  requests,
-  experience,
-  plan: {
-    northStar: section("North star").split("\n\n")[0]!.replace(/\s+/g, " "),
-    principles: numbered(section("Principles")),
-    backlog: numbered(backlogMain ?? ""),
-    gaps: bullets(gapsMd),
-    capabilities,
-    log: bullets(section("Evolution log")),
-  },
+type Dim = (typeof DIMS)[number];
+const expAvg = (ids: { id: number }[]) => {
+  const r = j.get<Record<Dim, number | null> & { n: number; recommend: number | null }>(
+    `SELECT COUNT(*) n, AVG(overall) overall, AVG(ease) ease, AVG(speed) speed, AVG(trust) trust, AVG(usefulness) usefulness, AVG(look) look, AVG(recommend) recommend
+       FROM experience WHERE ${within(ids)}`,
+  );
+  return r && r.n ? r : null;
 };
-
-// ---------------------------------------------------------------- daily history
-const dayDates = j.all<{ d: string }>("SELECT DISTINCT sim_date d FROM runs WHERE kind = 'day' ORDER BY sim_date").map((r) => r.d);
-const siteHome = simDir("site");
-const snapshotDir = simDir("site", "snapshots");
-const hasSnapshot = (d: string) => d === lastDay || existsSync(join(snapshotDir, `${d}.html`));
+const answerAvg = (ids: { id: number }[]) => one<{ r: number | null }>(`SELECT AVG(rating) r FROM questions WHERE rating IS NOT NULL AND ${within(ids)}`).r;
+const latencyOf = (ids: { id: number }[]) => {
+  const rows = j.all<{ target: string; ms: number }>(`SELECT target, ms FROM latency WHERE ${within(ids)} AND target != 'chat:total'`);
+  const m = new Map<string, number[]>();
+  for (const l of rows) m.set(l.target, [...(m.get(l.target) ?? []), l.ms]);
+  return new Map([...m].map(([t, xs]) => [t, { n: xs.length, p50: percentile(xs, 50)!, p95: percentile(xs, 95)! }]));
+};
+const themeKeysOn = (ids: { id: number }[]) =>
+  new Set(
+    j.all<{ k: string }>(
+      `SELECT DISTINCT f.theme_key k FROM feedback f JOIN themes t ON t.key = f.theme_key WHERE ${within(ids, "f.run_id")} AND t.status != 'wontfix' AND f.kind != 'praise'`,
+    ).map((r) => r.k),
+  );
 const reportMd = (d: string) => {
   const f = join(simDir("reports"), `${d}.md`);
   return existsSync(f) ? readFileSync(f, "utf8") : null;
 };
 
 function dayData(date: string, idx: number) {
-  const ids = j.all<{ id: number; app_branch: string; app_sha: string }>("SELECT id, app_branch, app_sha FROM runs WHERE kind = 'day' AND sim_date = ? ORDER BY id", date);
-  const within = ids.length ? `run_id IN (${ids.map((r) => r.id).join(",")})` : "0";
+  const ids = runIdsOn(date);
+  const w = within(ids);
+  const prev = dayDates[idx - 1] ?? null;
+  const prevIds = prev ? runIdsOn(prev) : [];
+
   const trades = j
-    .all<{ persona: string; detail: string }>(`SELECT persona_id persona, detail FROM actions WHERE kind = 'trade' AND ok = 1 AND ${within} ORDER BY id`)
+    .all<{ persona: string; detail: string }>(`SELECT persona_id persona, detail FROM actions WHERE kind = 'trade' AND ok = 1 AND ${w} ORDER BY id`)
     .map((r) => ({ persona: r.persona, ...(JSON.parse(r.detail) as { type: string; symbol: string; account: string; usd: number; reason: string; why?: string }) }));
-  const voices = loadPersonas()
+
+  const exp = j.all<{ persona: string; overall: number; why: string; recommend: number; explored: number }>(
+    `SELECT persona_id persona, overall, why, recommend, explored FROM experience WHERE ${w} ORDER BY id`,
+  );
+  const prevExp = new Map(j.all<{ persona: string; overall: number }>(`SELECT persona_id persona, overall FROM experience WHERE ${within(prevIds)}`).map((e) => [e.persona, e.overall]));
+
+  const voices = personaFiles
     .map((p) => {
-      const th = j.get<{ detail: string }>(`SELECT detail FROM actions WHERE persona_id = ? AND kind = 'thought' AND ${within} ORDER BY id DESC LIMIT 1`, p.id);
-      const rv = j.get<{ detail: string }>(`SELECT detail FROM actions WHERE persona_id = ? AND kind = 'review' AND ${within} ORDER BY id DESC LIMIT 1`, p.id);
-      const q = j.get<{ question: string; rating: number | null }>(`SELECT question, rating FROM questions WHERE persona_id = ? AND ${within} ORDER BY id DESC LIMIT 1`, p.id);
+      const th = j.get<{ detail: string }>(`SELECT detail FROM actions WHERE persona_id = ? AND kind = 'thought' AND ${w} ORDER BY id DESC LIMIT 1`, p.id);
+      const rv = j.get<{ detail: string }>(`SELECT detail FROM actions WHERE persona_id = ? AND kind = 'review' AND ${w} ORDER BY id DESC LIMIT 1`, p.id);
+      const q = j.get<{ question: string; rating: number | null }>(`SELECT question, rating FROM questions WHERE persona_id = ? AND ${w} ORDER BY id DESC LIMIT 1`, p.id);
       const thought = th ? (JSON.parse(th.detail) as { mood: string; question: string | null }) : null;
       const review = rv ? (JSON.parse(rv.detail) as { firstImpression: string; wouldKeepUsing: boolean }) : null;
+      const e = exp.findLast((x) => x.persona === p.id);
       return {
         persona: p.id,
         mood: thought?.mood ?? null,
@@ -262,81 +210,184 @@ function dayData(date: string, idx: number) {
         rating: q?.rating ?? null,
         impression: review?.firstImpression ?? null,
         keep: review ? review.wouldKeepUsing : null,
+        day: e?.overall ?? null,
+        dayWas: prevExp.get(p.id) ?? null,
+        why: e?.why ?? null,
       };
     })
-    .filter((v) => v.mood || v.question || v.impression);
+    .filter((v) => v.mood || v.question || v.impression || v.why);
+
+  // Themes: new today, raised again, gone quiet since yesterday.
+  const today = themeKeysOn(ids);
+  const before = themeKeysOn(prevIds);
   const themesToday = j
     .all<{ key: string; title: string; personas: number; severity: number; first_seen: string }>(
       `SELECT f.theme_key key, t.title, COUNT(DISTINCT f.persona_id) personas, AVG(f.severity) severity, t.first_seen
          FROM feedback f JOIN themes t ON t.key = f.theme_key
-        WHERE ${within.replace("run_id", "f.run_id")} AND t.status != 'wontfix' AND f.kind != 'praise'
+        WHERE ${within(ids, "f.run_id")} AND t.status != 'wontfix' AND f.kind != 'praise'
         GROUP BY f.theme_key ORDER BY personas DESC, severity DESC`,
     )
     .map((t) => ({
       ...t,
       isNew: t.first_seen === date,
-      quotes: j.all<{ persona: string; quote: string }>(`SELECT persona_id persona, quote FROM feedback WHERE theme_key = ? AND ${within} ORDER BY severity DESC LIMIT 2`, t.key),
+      quotes: j.all<{ persona: string; quote: string }>(`SELECT persona_id persona, quote FROM feedback WHERE theme_key = ? AND ${w} ORDER BY severity DESC LIMIT 2`, t.key),
     }));
-  const exp = j.all<{ persona: string; overall: number; ease: number; speed: number; trust: number; usefulness: number; look: number; why: string; recommend: number; explored: number }>(
-    `SELECT persona_id persona, overall, ease, speed, trust, usefulness, look, why, recommend, explored FROM experience WHERE ${within} ORDER BY id`,
-  );
-  const exploreRows = j.all<{ persona: string; detail: string }>(`SELECT persona_id persona, detail FROM actions WHERE kind = 'explore' AND ${within} ORDER BY id`);
+  const quiet = [...before]
+    .filter((k) => !today.has(k))
+    .map((k) => j.get<{ key: string; title: string; status: string; shipped_on: string | null }>("SELECT key, title, status, shipped_on FROM themes WHERE key = ?", k)!)
+    .filter(Boolean)
+    // "fixed" only if the fix shipped before this day's personas met the app
+    .map((t) => ({ key: t.key, title: t.title, fixed: t.shipped_on !== null && t.shipped_on < date }));
+  // Yesterday's fixes, judged by today's personas: did the theme come back?
+  const judged = prev
+    ? j
+        .all<{ key: string; title: string; shipped_on: string; shipped_branch: string | null }>(
+          "SELECT key, title, shipped_on, shipped_branch FROM themes WHERE shipped_on >= ? AND shipped_on < ? ORDER BY shipped_on",
+          prev,
+          date,
+        )
+        .map((t) => ({
+          ...t,
+          raised: today.has(t.key),
+          quote: today.has(t.key) ? (j.get<{ persona: string; quote: string }>(`SELECT persona_id persona, quote FROM feedback WHERE theme_key = ? AND ${w} ORDER BY severity DESC LIMIT 1`, t.key) ?? null) : null,
+        }))
+    : [];
+
+  const exploreRows = j.all<{ persona: string; detail: string }>(`SELECT persona_id persona, detail FROM actions WHERE kind = 'explore' AND ${w} ORDER BY id`);
   const exploration = new Map<string, { steps: { action: string; target: string; to: string; ms: number; error?: string }[] }>();
   for (const r of exploreRows) {
     const e = exploration.get(r.persona) ?? { steps: [] };
     e.steps.push(JSON.parse(r.detail));
     exploration.set(r.persona, e);
   }
-  const exploreErrors = j.all<{ persona: string; page: string; quote: string }>(
-    `SELECT persona_id persona, page, quote FROM feedback WHERE theme_key LIKE 'error-%' AND ${within}`,
+  const exploreErrors = j.all<{ persona: string; page: string; quote: string }>(`SELECT persona_id persona, page, quote FROM feedback WHERE theme_key LIKE 'error-%' AND ${w}`);
+
+  const lat = latencyOf(ids);
+  const latPrev = latencyOf(prevIds);
+  const answers = j.all<{ persona: string; rating: number; question: string; note: string; firstTokenMs: number | null }>(
+    `SELECT persona_id persona, rating, question, rating_note note, first_token_ms firstTokenMs FROM questions WHERE rating IS NOT NULL AND ${w} ORDER BY rating, persona_id`,
   );
-  const latRows = j.all<{ target: string; ms: number }>(`SELECT target, ms FROM latency WHERE ${within} AND target != 'chat:total'`);
-  const lt = new Map<string, number[]>();
-  for (const l of latRows) lt.set(l.target, [...(lt.get(l.target) ?? []), l.ms]);
-  const dayAnswers = j.all<{ persona: string; rating: number; question: string; note: string; firstTokenMs: number | null }>(
-    `SELECT persona_id persona, rating, question, rating_note note, first_token_ms firstTokenMs FROM questions WHERE rating IS NOT NULL AND ${within} ORDER BY rating, persona_id`,
-  );
+  const signups = j.all<{ ok: number; latency_ms: number | null; error: string | null }>(`SELECT ok, latency_ms, error FROM actions WHERE kind = 'signup' AND ${w}`);
+
   return {
     date,
     dayNumber: idx + 1,
-    prev: dayDates[idx - 1] ?? null,
+    prev,
     next: dayDates[idx + 1] ?? null,
+    latest: lastDay,
     generatedAt: new Date().toISOString(),
     appRef: ids.at(-1) ? `${ids.at(-1)!.app_branch}@${ids.at(-1)!.app_sha}` : "unknown",
-    snapshot: hasSnapshot(date),
-    personas: personas.map((p) => ({ id: p.id, name: p.name })),
-    personasActive: one<{ n: number }>(`SELECT COUNT(DISTINCT persona_id) n FROM actions WHERE ${within}`).n,
-    spend: one<{ usd: number | null }>(`SELECT SUM(usd) usd FROM costs WHERE ${within}`).usd ?? 0,
-    feedbackCount: one<{ n: number }>(`SELECT COUNT(*) n FROM feedback WHERE ${within}`).n,
-    avgRating: dayAnswers.length ? dayAnswers.reduce((s, a) => s + a.rating, 0) / dayAnswers.length : null,
+    personas: personaRefs,
+    personasActive: one<{ n: number }>(`SELECT COUNT(DISTINCT persona_id) n FROM actions WHERE ${w}`).n,
+    spend: one<{ usd: number | null }>(`SELECT SUM(usd) usd FROM costs WHERE ${w}`).usd ?? 0,
+    feedbackCount: one<{ n: number }>(`SELECT COUNT(*) n FROM feedback WHERE ${w}`).n,
+    delta: {
+      exp: expAvg(ids),
+      expWas: expAvg(prevIds),
+      answers: answerAvg(ids),
+      answersWas: prevIds.length ? answerAvg(prevIds) : null,
+      quiet,
+      judged,
+      // A budget breach that wasn't one the day before.
+      newlySlow: [...lat]
+        .filter(([t, l]) => {
+          const b = budgetFor(t);
+          const p = latPrev.get(t);
+          return b !== undefined && l.p95 > b && p !== undefined && p.p95 <= b;
+        })
+        .map(([t]) => t),
+    },
+    tonight: log.filter((e) => e.date === date),
+    evolveReport: reportMd(date),
     trades,
     voices,
     themes: themesToday,
-    latency: [...lt]
-      .map(([target, xs]) => ({ target, n: xs.length, p50: percentile(xs, 50)!, p95: percentile(xs, 95)!, budget: budgetFor(target) ?? null }))
+    latency: [...lat]
+      .map(([target, l]) => ({ target, ...l, budget: budgetFor(target) ?? null, prevP95: latPrev.get(target)?.p95 ?? null }))
       .sort((a, b) => b.p95 / (b.budget ?? 1e9) - a.p95 / (a.budget ?? 1e9)),
-    answers: dayAnswers,
-    evolveReport: reportMd(date),
-    experience: exp,
+    answers,
+    signups,
     exploration: [...exploration].map(([persona, e]) => ({ persona, ...e, errors: exploreErrors.filter((x) => x.persona === persona) })),
   };
 }
 
-const history = dayDates
-  .map((date, idx) => {
-    const d = dayData(date, idx);
-    return {
-      date,
-      trades: d.trades.length,
-      feedback: d.feedbackCount,
-      rating: d.avgRating,
-      spend: d.spend,
-      shipped: one<{ n: number }>("SELECT COUNT(*) n FROM themes WHERE shipped_on = ?", date).n > 0,
-      snapshot: d.snapshot,
-      page: d,
-    };
-  })
+const pages = dayDates.map((d, i) => dayData(d, i));
+const history = pages
+  .map((p) => ({
+    date: p.date,
+    trades: p.trades.length,
+    feedback: p.feedbackCount,
+    newThemes: p.themes.filter((t) => t.isNew).length,
+    experience: p.delta.exp?.overall ?? null,
+    answers: p.delta.answers,
+    spend: p.spend,
+    shipped: p.tonight.length > 0 || p.evolveReport !== null,
+    headline: p.tonight.map((e) => e.title),
+  }))
   .reverse();
+
+// ---------------------------------------------------------------- cumulative: themes
+const stats = j.all<ThemeStats>(
+  `SELECT t.key, t.title, t.area, t.kind, t.status,
+          COUNT(DISTINCT f.persona_id) personas, COUNT(DISTINCT date(f.created_at)) days,
+          SUM(date(f.created_at) >= ?) recent, AVG(f.severity) avgSeverity, MAX(f.severity) maxSeverity
+     FROM themes t JOIN feedback f ON f.theme_key = t.key GROUP BY t.key HAVING SUM(date(f.created_at) >= ?) > 0`,
+  since,
+  since,
+);
+const themes = rankThemes(stats)
+  .slice(0, 12)
+  .map((t) => ({
+    ...t,
+    parts: scoreParts(t),
+    who: j.all<{ p: string }>("SELECT DISTINCT persona_id p FROM feedback WHERE theme_key = ?", t.key).map((r) => r.p),
+    quotes: j.all<{ persona: string; quote: string }>("SELECT persona_id persona, quote FROM feedback WHERE theme_key = ? ORDER BY severity DESC, id DESC LIMIT 2", t.key),
+  }));
+const shippedThemes = j
+  .all<{ key: string; title: string; status: string; shipped_on: string; shipped_branch: string | null }>(
+    "SELECT key, title, status, shipped_on, shipped_branch FROM themes WHERE shipped_on IS NOT NULL ORDER BY shipped_on DESC, key",
+  )
+  .map((t) => ({ ...t, raisedSince: one<{ n: number }>("SELECT COUNT(*) n FROM feedback f JOIN runs r ON r.id = f.run_id WHERE f.theme_key = ? AND r.sim_date > ?", t.key, t.shipped_on).n, daysSince: dayDates.filter((d) => d > t.shipped_on).length }));
+const artifacts = j.all<{ key: string; title: string; notes: string | null }>("SELECT key, title, notes FROM themes WHERE status = 'wontfix' ORDER BY last_seen DESC");
+const praise = j.all<{ title: string; n: number }>("SELECT title, COUNT(*) n FROM feedback WHERE kind = 'praise' GROUP BY theme_key ORDER BY n DESC LIMIT 4");
+
+// ---------------------------------------------------------------- cumulative: experience, latency, answers
+const expDays = j.all<Record<Dim, number> & { date: string; n: number; recommend: number }>(
+  `SELECT sim_date date, COUNT(*) n, AVG(overall) overall, AVG(ease) ease, AVG(speed) speed, AVG(trust) trust,
+          AVG(usefulness) usefulness, AVG(look) look, AVG(recommend) recommend
+     FROM experience GROUP BY sim_date ORDER BY sim_date`,
+);
+const expGrid = j.all<{ persona: string; date: string; overall: number; why: string }>(
+  `SELECT persona_id persona, sim_date date, overall, why FROM experience e
+    WHERE id = (SELECT MAX(id) FROM experience x WHERE x.persona_id = e.persona_id AND x.sim_date = e.sim_date)
+    ORDER BY sim_date`,
+);
+const firstIds = dayDates[0] ? runIdsOn(dayDates[0]) : [];
+const firstLat = latencyOf(firstIds);
+const lat7 = j.all<{ target: string; ms: number }>(
+  `SELECT l.target, l.ms FROM latency l JOIN runs r ON r.id = l.run_id WHERE r.kind = 'day' AND r.sim_date >= ? AND l.target != 'chat:total'`,
+  since,
+);
+const byTarget = new Map<string, number[]>();
+for (const l of lat7) byTarget.set(l.target, [...(byTarget.get(l.target) ?? []), l.ms]);
+const latency = [...byTarget]
+  .map(([target, xs]) => ({ target, n: xs.length, p50: percentile(xs, 50)!, p95: percentile(xs, 95)!, budget: budgetFor(target) ?? null, firstP95: firstLat.get(target)?.p95 ?? null }))
+  .sort((a, b) => b.p95 / (b.budget ?? 1e9) - a.p95 / (a.budget ?? 1e9));
+const daily = pages.map((p) => ({ date: p.date, feedback: p.feedbackCount, answers: p.delta.answers, spend: p.spend, trades: p.trades.length }));
+
+const site = {
+  generatedAt: new Date().toISOString(),
+  git,
+  planRef: planRef ?? `${git.branch} (working tree)`,
+  latest: lastDay,
+  dayCount: dayDates.length,
+  loopArmed: sh(`launchctl print gui/${process.getuid?.() ?? 501}/dev.beobeo.evolve`) !== null,
+  unmerged,
+  budget: DAILY_BUDGET_USD,
+  spentToday: j.spentToday(),
+  spentTotal: one<{ usd: number | null }>("SELECT SUM(usd) usd FROM costs").usd ?? 0,
+  personas,
+};
 
 // ---------------------------------------------------------------- render
 const asset = (f: string) => readFileSync(new URL(`../report/${f}`, import.meta.url), "utf8");
@@ -345,22 +396,36 @@ const common = asset("common.js");
 const json = (x: unknown) => JSON.stringify(x).replace(/</g, "\\u003c");
 const fill = (tpl: string, d: unknown) =>
   tpl.replace("/*__CSS__*/", () => css).replace("/*__COMMON_JS__*/", () => common).replace("/*__DATA__*/null", () => json(d));
+/** The index is an artifact body (the viewer adds the document shell); the offline mirror needs a real document. */
+const wrapDoc = (body: string) =>
+  `<!doctype html>\n<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><style>[hidden]{display:none!important}</style></head><body>\n${body}\n</body></html>`;
 
-/** The index is an artifact body (the viewer adds the document shell); snapshots and the local copy need a real document. */
-const wrapDoc = (body: string, base = "") =>
-  `<!doctype html>\n<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">${base ? `<base href="${base}">` : ""}<style>[hidden]{display:none!important}</style></head><body>\n${body}\n</body></html>`;
-
-const index = fill(asset("template.html"), { ...data, asOf: lastDay, history: history.map(({ page: _, ...h }) => h) });
-writeFileSync(join(snapshotDir, `${lastDay}.html`), wrapDoc(index, "../"));
+const index = fill(asset("start.html"), { ...site, plan: { northStar: planData.northStar, principles: planData.principles }, days: history.map((h) => ({ date: h.date, headline: h.headline })) });
+const progress = fill(asset("progress.html"), {
+  ...site,
+  requests,
+  log,
+  history,
+  daily,
+  experience: { days: expDays, grid: expGrid },
+  themes,
+  shippedThemes,
+  artifacts,
+  praise,
+  latency,
+  plan: planData,
+});
 
 const out = new URL("../.out/site/", import.meta.url).pathname;
 rmSync(out, { recursive: true, force: true });
 mkdirSync(join(out, "days"), { recursive: true });
 writeFileSync(join(out, "index.html"), index);
-for (const h of history) writeFileSync(join(out, "days", `${h.date}.html`), fill(asset("day.html"), h.page).replace("/*__TITLE__*/", `Beobeo · ${h.date}`));
-cpSync(snapshotDir, join(out, "snapshots"), { recursive: true });
+writeFileSync(join(out, "progress.html"), progress);
+for (const p of pages) writeFileSync(join(out, "days", `${p.date}.html`), fill(asset("day.html"), p).replace("/*__TITLE__*/", `Beobeo · ${p.date}`));
 
-// Mirror to ~/beobeo-sim/site so the history is browsable offline (index as a full document there).
+// Mirror to ~/beobeo-sim/site for offline browsing (index as a full document there).
+const siteHome = simDir("site");
 cpSync(join(out, "days"), join(siteHome, "days"), { recursive: true });
+writeFileSync(join(siteHome, "progress.html"), progress);
 writeFileSync(join(siteHome, "index.html"), wrapDoc(index));
-console.log(join(out, "index.html"));
+console.log(`${join(out, "index.html")}  (plan from ${site.planRef})`);

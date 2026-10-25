@@ -15,64 +15,65 @@
 </head>
 <body>
 <div class="wrap">
-  <nav class="nav" id="nav"></nav>
+  <nav class="sitenav" id="sitenav" aria-label="Evolution site"></nav>
 
   <header class="top">
-    <p class="eyebrow">Beobeo · daily report</p>
+    <nav class="nav" id="nav" aria-label="Days"></nav>
+    <p class="eyebrow" id="eyebrow"></p>
     <h1 id="title"></h1>
     <p class="lede" id="lede"></p>
-    <div class="chips" id="chips"></div>
   </header>
 
-  <section aria-labelledby="h-shipped">
+  <section aria-labelledby="h-since">
     <div class="sec-head">
-      <p class="eyebrow">What changed in the product</p>
-      <h2 id="h-shipped">What shipped</h2>
+      <p class="eyebrow">The delta</p>
+      <h2 id="h-since">Since the day before</h2>
     </div>
-    <div class="prose" id="shipped"></div>
+    <div class="since" id="since"></div>
+    <div class="cols2" id="since-detail"></div>
+  </section>
+
+  <section aria-labelledby="h-tonight">
+    <div class="sec-head">
+      <p class="eyebrow">After the personas went home</p>
+      <h2 id="h-tonight">What changed that night</h2>
+      <p>What the loop built after this day's simulation. The personas meet it the next morning.</p>
+    </div>
+    <ul class="tonight" id="tonight"></ul>
+    <div id="report"></div>
   </section>
 
   <section aria-labelledby="h-voices">
     <div class="sec-head">
       <p class="eyebrow">In their own words</p>
       <h2 id="h-voices">What they said</h2>
-      <p>How each persona felt about their money, what they asked the companion, how they rated the reply (chat), and how they rated the whole day (day).</p>
+      <p>How each persona felt, what they asked the assistant (chat), and how they rated the whole day (day), with the change from the day before.</p>
     </div>
-    <div class="exp"><div><div class="exp-head" id="exp-head"></div><div class="dims" id="dims"></div></div><div></div></div>
     <div class="voices" id="voices"></div>
+  </section>
+
+  <section aria-labelledby="h-themes">
+    <div class="sec-head">
+      <p class="eyebrow">Feedback</p>
+      <h2 id="h-themes">New complaints and wishes</h2>
+      <p>Themes raised for the first time this day. Ones that came back from earlier days are folded below. Hover a row for quotes.</p>
+    </div>
+    <div class="themes" id="themes"></div>
   </section>
 
   <section aria-labelledby="h-explore">
     <div class="sec-head">
       <p class="eyebrow">Curiosity</p>
       <h2 id="h-explore">Who wandered, and where</h2>
-      <p>Each persona has a daily chance of exploring the app at random, weighted toward what they care about. The path is replayable: the same persona on the same day takes the same steps.</p>
     </div>
     <div class="explore-list" id="explore"></div>
-  </section>
-
-  <section aria-labelledby="h-themes">
-    <div class="sec-head">
-      <p class="eyebrow">Feedback</p>
-      <h2 id="h-themes">Themes raised this day</h2>
-      <p>New themes appeared for the first time this day; the rest had come up before. Hover a row for quotes.</p>
-    </div>
-    <div class="themes" id="themes"></div>
-  </section>
-
-  <section aria-labelledby="h-trades">
-    <div class="sec-head">
-      <p class="eyebrow">Activity</p>
-      <h2 id="h-trades">Trades</h2>
-      <p>Habit trades follow each persona's fixed rules. Judgment trades are decisions their mind made that day, with its reason.</p>
-    </div>
-    <div class="tablewrap" id="trades"></div>
   </section>
 
   <section aria-labelledby="h-speed">
     <div class="sec-head">
       <p class="eyebrow">Principle 5: speed is a feature</p>
       <h2 id="h-speed">How fast it felt</h2>
+      <p>The arrow compares the slow tail (p95) with the day before.</p>
     </div>
     <div class="axis" aria-hidden="true"><span></span><div class="ticks" id="ticks"></div><span></span></div>
     <div class="speed" id="speed"></div>
@@ -80,7 +81,7 @@
 
   <section aria-labelledby="h-answers">
     <div class="sec-head">
-      <p class="eyebrow">The companion</p>
+      <p class="eyebrow">The assistant</p>
       <h2 id="h-answers">How good were the answers?</h2>
     </div>
     <div class="answers">
@@ -89,7 +90,15 @@
     </div>
   </section>
 
-  <nav class="nav" id="nav2"></nav>
+  <section aria-labelledby="h-trades">
+    <div class="sec-head">
+      <p class="eyebrow">Activity</p>
+      <h2 id="h-trades">Trades</h2>
+    </div>
+    <div id="trades"></div>
+  </section>
+
+  <nav class="nav" id="nav2" aria-label="Days"></nav>
   <footer id="foot"></footer>
 </div>
 <div id="tip" hidden></div>
@@ -99,70 +108,90 @@ const D = /*__DATA__*/null;
 /*__COMMON_JS__*/
 
 const long = (d) => fmtDate(d, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+$("sitenav").innerHTML = siteNav("day", "../");
 const navHtml = `<span>${D.prev ? `<a href="${D.prev}.html">← ${esc(fmtDate(D.prev))}</a>` : `<span class="muted">First day</span>`}</span>
-  <a class="mid" href="../index.html">Beobeo Evolution</a>
   <span>${D.next ? `<a href="${D.next}.html">${esc(fmtDate(D.next))} →</a>` : `<span class="muted">Latest</span>`}</span>`;
 $("nav").innerHTML = navHtml; $("nav2").innerHTML = navHtml;
+$("eyebrow").textContent = `Daily report · day ${D.dayNumber}`;
 $("title").textContent = fmtDate(D.date, { month: "long", day: "numeric" });
-$("lede").innerHTML = `${esc(fmtDate(D.date, { weekday: "long" }))}, ${D.date.slice(0, 4)}. Day ${D.dayNumber} of the loop. ${D.personasActive} personas used the app${D.snapshot ? `; <a href="../snapshots/${D.date}.html">see the evolution page as it looked this evening</a>` : ""}.`;
-$("chips").innerHTML = [
-  `<span class="chip mono">${esc(D.appRef)}</span>`,
-  `<span class="chip"><b class="num">${D.trades.length}</b> trades</span>`,
-  `<span class="chip"><b class="num">${D.feedbackCount}</b> notes</span>`,
-  `<span class="chip">Answers <b class="num">${D.avgRating === null ? "—" : D.avgRating.toFixed(1) + "/5"}</b></span>`,
-  `<span class="chip">Spend <b class="num">$${D.spend.toFixed(2)}</b></span>`,
+$("lede").innerHTML = `${esc(fmtDate(D.date, { weekday: "long" }))}, ${D.date.slice(0, 4)}. ${D.personasActive} personas used <span class="mono" style="font-size:.8em">${esc(D.appRef)}</span>: ${D.trades.length} ${D.trades.length === 1 ? "trade" : "trades"}, ${D.feedbackCount} notes, $${D.spend.toFixed(2)} of thinking.`;
+
+/* ---------- since the day before */
+const X = D.delta, e = X.exp, ew = X.expWas;
+const newThemes = D.themes.filter((t) => t.isNew), again = D.themes.filter((t) => !t.isNew);
+const cell = (label, v, dlt, sub) => `<div><span class="eyebrow">${label}</span><span class="v num">${v} ${dlt}</span><span class="s">${sub}</span></div>`;
+$("since").innerHTML = [
+  cell("How the day felt", e ? e.overall.toFixed(1) : "—", e && ew ? delta(e.overall, ew.overall) : "", e ? `out of 5 · ${Math.round(e.recommend * 100)}% would recommend` : "not rated yet this day"),
+  cell("Answers", X.answers == null ? "—" : X.answers.toFixed(1), delta(X.answers, X.answersWas), "out of 5"),
+  cell("New themes", String(newThemes.length), "", `${again.length} came back from earlier`),
+  cell("Went quiet", D.prev ? String(X.quiet.length) : "—", "", D.prev ? "raised the day before, not today" : "first day"),
+  cell("Newly slow", D.prev ? String(X.newlySlow.length) : "—", "", X.newlySlow.length ? X.newlySlow.map((t) => targetLabel(t)).join(", ") : "nothing broke its budget"),
 ].join("");
+const detail = [];
+if (e && ew) detail.push(`<div><h3>Experience by dimension</h3><ul class="checks">${["ease", "speed", "trust", "usefulness", "look"].map((k) => `<li><span class="mono" style="min-width:2.4em">${e[k].toFixed(1)}</span><span>${DIM_LABELS[k]} ${delta(e[k], ew[k])}</span></li>`).join("")}</ul></div>`);
+if (D.prev) detail.push(`<div><h3>The previous night's fixes, judged</h3><ul class="checks">${X.judged.length ? X.judged.map((t) => `<li>${t.raised ? `<span class="pill bad">came back</span>` : `<span class="pill good">quiet</span>`}<span>${esc(t.title)}</span><small>${t.quote ? `“${esc(t.quote.quote)}” — ${esc(first(t.quote.persona))}` : `Fixed ${esc(fmtDate(t.shipped_on))}${t.shipped_branch ? ` on ${esc(t.shipped_branch)}` : ""}; nobody raised it.`}${t.shipped_branch ? "" : ""}</small></li>`).join("") : `<li class="muted">Nothing shipped the night before.</li>`}</ul></div>`);
+const quietLi = (t) => `<li><span class="pill none">${t.fixed ? "fixed" : "quiet"}</span><span>${esc(t.title)}</span></li>`;
+const quietSorted = [...X.quiet].sort((a, b) => b.fixed - a.fixed);
+if (D.prev && X.quiet.length) detail.push(`<div><h3>Went quiet</h3><ul class="checks">${quietSorted.slice(0, 6).map(quietLi).join("")}</ul>${quietSorted.length > 6 ? `<details class="more"><summary>${quietSorted.length - 6} more</summary><ul class="checks">${quietSorted.slice(6).map(quietLi).join("")}</ul></details>` : ""}</div>`);
+$("since-detail").innerHTML = detail.join("") || `<p class="empty">This is the first day of the loop: everything below is the baseline later days are compared against.</p>`;
 
-$("shipped").innerHTML = D.evolveReport
-  ? mdBlock(D.evolveReport.replace(/^#\s.*\n/, ""))
-  : `<p class="empty">No evolve cycle ran on this day${D.dayNumber === 1 ? ". The loop was built today; the first cycle ships changes on the next run" : ""}. Nothing changed in the product.</p>`;
+/* ---------- what changed that night */
+$("tonight").innerHTML = D.tonight.length
+  ? D.tonight.map((t) => `<li><b>${md(t.title)}</b><p>${md(t.body)}</p></li>`).join("")
+  : `<li class="empty">${D.evolveReport ? "See the full report below." : "Nothing shipped that night; the app the personas meet next is unchanged."}</li>`;
+$("report").innerHTML = D.evolveReport
+  ? `<details class="more"><summary>Full evolve report: checks, what was considered and not done, what needs you</summary><div class="prose" style="padding:6px 10px 0">${mdBlock(D.evolveReport.replace(/^#\s.*\n/, ""))}</div></details>`
+  : "";
 
-const expBy = new Map(D.experience.map((e) => [e.persona, e]));
-const avgOf = (k) => (D.experience.length ? D.experience.reduce((s, e) => s + e[k], 0) / D.experience.length : null);
-const dayAvg = D.experience.length ? Object.fromEntries(["overall", "ease", "speed", "trust", "usefulness", "look"].map((k) => [k, avgOf(k)])) : null;
-$("exp-head").innerHTML = dayAvg
-  ? `<span class="big num">${dayAvg.overall.toFixed(1)}</span><span class="of">out of 5 · how the day felt, across ${D.experience.length} personas · ${Math.round(avgOf("recommend") * 100)}% would recommend it</span>`
-  : `<span class="of">No experience ratings this day (they started on Oct 24).</span>`;
-renderDims($("dims"), dayAvg);
+/* ---------- voices */
+$("voices").innerHTML = D.voices.map((v) => `<article class="voice">
+  <div class="who"><b>${esc(byId[v.persona]?.name ?? v.persona)}</b><span>${scorePill("day", v.day)}${v.day != null && v.dayWas != null ? ` ${delta(v.day, v.dayWas, { digits: 0 })}` : ""} ${scorePill("chat", v.rating)}${v.keep === false ? ` <span class="pill bad">would leave</span>` : ""}</span></div>
+  ${v.mood ? `<p class="quote">${esc(v.mood)}</p>` : ""}
+  ${v.question ? `<p class="ask">${esc(v.question)}</p>` : ""}
+  ${v.impression ? `<p class="ask seen">${esc(v.impression)}</p>` : ""}
+  ${v.why ? `<p class="ask day">${esc(v.why)}</p>` : ""}
+</article>`).join("") || `<p class="empty">No persona spoke this day.</p>`;
 
+/* ---------- themes: new first, recurring folded */
+const maxP = Math.max(1, ...D.themes.map((t) => t.personas));
+const themeRow = (t) => `<div class="trow" tabindex="0" data-k="${esc(t.key)}">
+  <div class="lab"><b>${esc(t.title)}</b><small>${t.personas} ${t.personas === 1 ? "persona" : "personas"} · severity ${t.severity.toFixed(1)}/5${t.isNew ? "" : ` · first raised ${esc(fmtDate(t.first_seen))}`}</small></div>
+  <div class="bar" aria-hidden="true"><i style="width:${(t.personas / maxP) * 100}%;background:var(--s1)"></i></div>
+  <div class="sc">${t.isNew ? `<span class="pill warn">new</span>` : `<span class="pill none">again</span>`}</div></div>`;
+$("themes").innerHTML =
+  (newThemes.length ? newThemes.map(themeRow).join("") : `<p class="empty">Nothing new this day.</p>`) +
+  (again.length ? `<details class="more"><summary>${again.length} ${again.length === 1 ? "theme" : "themes"} came back from earlier days</summary>${again.map(themeRow).join("")}</details>` : "");
+const themeBy = Object.fromEntries(D.themes.map((t) => [t.key, t]));
+document.querySelectorAll(".trow").forEach((row) => {
+  const t = themeBy[row.dataset.k];
+  hover(row, () => `<b>${esc(t.title)}</b>${t.quotes.map((q) => `<div class="q">“${esc(q.quote)}” <span class="w">— ${esc(first(q.persona))}</span></div>`).join("")}`);
+});
+
+/* ---------- exploration */
 $("explore").innerHTML = D.exploration.length ? D.exploration.map((x) => `<div class="ex"><span class="who">${esc(first(x.persona))}</span><div style="display:grid;gap:6px">
   <div class="path">${x.steps.map((st, i) => `${i ? "<i>→</i>" : ""}<span class="${st.error ? "err" : ""}" title="${esc(st.error ?? `${st.to} · ${ms(st.ms)}`)}">${st.error ? "couldn't click" : esc(st.action === "goto" ? st.to : st.action === "escape" ? "Esc" : st.action === "fill" ? `type ${st.target.split(" = ").at(-1)}` : st.target)}</span>`).join("")}</div>
   <span class="muted" style="font-size:12.5px">${x.steps.length} steps · ${new Set(x.steps.map((s) => s.to)).size} pages · ${x.errors.length ? `<span style="color:var(--bad)">${x.errors.length} error${x.errors.length > 1 ? "s" : ""}: ${esc(x.errors[0].quote)}</span>` : "no errors"}</span></div></div>`).join("")
   : `<p class="empty">Nobody wandered off the beaten path this day.</p>`;
+if (D.signups.length) $("explore").insertAdjacentHTML("beforeend", `<p class="ink2" style="font-size:14px">Fresh sign-up probe: ${D.signups.map((s) => s.ok ? `completed in ${ms(s.latency_ms ?? 0)}` : `<span style="color:var(--bad)">failed: ${esc(s.error)}</span>`).join("; ")}.</p>`);
 
-$("voices").innerHTML = D.voices.map((v) => `<article class="voice">
-  <div class="who"><b>${esc(byId[v.persona]?.name ?? v.persona)}</b><span>${scorePill("day", expBy.get(v.persona)?.overall)} ${scorePill("chat", v.rating)}${v.keep === false ? ` <span class="pill bad">would leave</span>` : v.keep ? ` <span class="pill good">would stay</span>` : ""}</span></div>
-  ${v.mood ? `<p class="quote">${esc(v.mood)}</p>` : ""}
-  ${v.question ? `<p class="ask">${esc(v.question)}</p>` : ""}
-  ${v.impression ? `<p class="ask seen">${esc(v.impression)}</p>` : ""}
-  ${expBy.get(v.persona) ? `<p class="ask day">${esc(expBy.get(v.persona).why)}</p>` : ""}
-</article>`).join("") || `<p class="empty">No persona spoke this day.</p>`;
+/* ---------- speed & answers */
+renderSpeed(D.latency, $("ticks"), $("speed"), "on this day", { key: "prevP95", label: "the day before" });
+renderStrip(D.answers, $("strip"));
+$("avg").innerHTML = X.answers !== null ? `<b class="num">${X.answers.toFixed(1)}</b> average across ${D.answers.length} answers ${delta(X.answers, X.answersWas)}` : "No rated answers this day.";
+$("worst").innerHTML = worstQuote(D.answers[0]);
 
-const maxP = Math.max(1, ...D.themes.map((t) => t.personas));
-const themeRow = (t, i) => `<div class="trow" tabindex="0" data-t="${i}">
-  <div class="lab"><b>${esc(t.title)}</b><small>${t.personas} ${t.personas === 1 ? "persona" : "personas"} · severity ${t.severity.toFixed(1)}/5</small></div>
-  <div class="bar" aria-hidden="true"><i style="width:${(t.personas / maxP) * 100}%;background:var(--s1)"></i></div>
-  <div class="sc">${t.isNew ? `<span class="pill warn">new</span>` : `<span class="pill none">again</span>`}</div></div>`;
-const SHOWN = 10;
-$("themes").innerHTML = D.themes.length
-  ? D.themes.slice(0, SHOWN).map(themeRow).join("") +
-    (D.themes.length > SHOWN ? `<details class="more"><summary>Show ${D.themes.length - SHOWN} more</summary>${D.themes.slice(SHOWN).map((t, i) => themeRow(t, i + SHOWN)).join("")}</details>` : "")
-  : `<p class="empty">No feedback this day.</p>`;
-document.querySelectorAll(".trow").forEach((row) => {
-  const t = D.themes[+row.dataset.t];
-  hover(row, () => `<b>${esc(t.title)}</b>${t.quotes.map((q) => `<div class="q">“${esc(q.quote)}” <span class="w">— ${esc(first(q.persona))}</span></div>`).join("")}`);
-});
-
-$("trades").innerHTML = D.trades.length ? `<table class="trades"><thead><tr><th>Who</th><th>Trade</th><th>Why</th><th style="text-align:right">Amount</th></tr></thead><tbody>${D.trades.map((t) => `<tr>
+/* ---------- trades: judgment calls up front, habits folded */
+const judgment = D.trades.filter((t) => t.reason === "mind"), habit = D.trades.filter((t) => t.reason !== "mind");
+const tradeTable = (rows) => `<div class="tablewrap"><table class="trades"><thead><tr><th>Who</th><th>Trade</th><th>Why</th><th style="text-align:right">Amount</th></tr></thead><tbody>${rows.map((t) => `<tr>
   <td>${esc(first(t.persona))}</td>
   <td><span class="mono">${esc(t.type)} ${esc(t.symbol)}</span> <span class="muted">· ${esc(t.account)}</span></td>
-  <td>${t.reason === "mind" ? `<span class="pill warn">judgment</span> ${esc(t.why ?? "")}` : `<span class="pill none">habit</span> <span class="muted">${esc(t.reason.replace("_", " "))}</span>`}</td>
-  <td class="r">$${Math.round(t.usd).toLocaleString()}</td></tr>`).join("")}</tbody></table>` : `<p class="empty">No trades this day.</p>`;
+  <td>${t.reason === "mind" ? esc(t.why ?? "") : `<span class="muted">${esc(t.reason.replace("_", " "))}</span>`}</td>
+  <td class="r">$${Math.round(t.usd).toLocaleString()}</td></tr>`).join("")}</tbody></table></div>`;
+$("trades").innerHTML = D.trades.length
+  ? (judgment.length ? `<p class="ink2" style="font-size:14px;margin-bottom:10px">${judgment.length} judgment ${judgment.length === 1 ? "call" : "calls"}, each with the persona's reason:</p>${tradeTable(judgment)}` : `<p class="ink2" style="font-size:14px">No judgment calls; every trade followed a habit.</p>`) +
+    (habit.length ? `<details class="more"><summary>${habit.length} habit ${habit.length === 1 ? "trade" : "trades"}</summary>${tradeTable(habit)}</details>` : "")
+  : `<p class="empty">No trades this day.</p>`;
 
-renderSpeed(D.latency, $("ticks"), $("speed"), "on this day");
-renderStrip(D.answers, $("strip"));
-$("avg").innerHTML = D.avgRating !== null ? `<b class="num">${D.avgRating.toFixed(1)}</b> average across ${D.answers.length} answers` : "No rated answers this day.";
-$("worst").innerHTML = worstQuote(D.answers[0]);
 $("foot").innerHTML = `<span>Report for ${esc(long(D.date))} · generated ${new Date(D.generatedAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}</span><span class="mono">${esc(D.appRef)}</span>`;
 </script>
 </body>

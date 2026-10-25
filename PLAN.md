@@ -65,7 +65,7 @@ the earlier one wins.
                         sign up fresh, time everything    themes                        ▼
                                                                           Claude Code /evolve
   tomorrow the personas meet the changed app  ◄── evolve/YYYY-MM-DD branch ◄── picks 1–3 items,
-  and say whether it helped (theme resolved?)      (user reviews & merges)     builds, verifies
+  and say whether it helped (theme resolved?)      (merged next morning)       builds, verifies
 ```
 
 - **Population** — `packages/sim/personas/*.json`, versioned. Starts at 10, grows
@@ -81,8 +81,15 @@ the earlier one wins.
   `reports/`, `logs/`. `pnpm sim:insights` for cross-day patterns.
 - **Budget** — hard stop at `SIM_DAILY_BUDGET_USD` (default $5); UI reviews are
   dropped first.
-- **Safety valve** — `/evolve` never pushes, merges, or touches `.env`. With 5
-  unmerged `evolve/*` branches or two failed check runs it only *proposes*.
+- **Autonomous merging** — the loop runs unattended for weeks (the user's call:
+  "if I'm gone a month, I expect dramatic improvements"). Each cycle starts by
+  merging the previous cycles' `evolve/*` branches into `salarabb/phase_1`, but only
+  those whose report says `Checks: PASSED`, then branches today's work from there.
+  A failed branch stays unmerged for a human, and nothing builds on it. When the
+  user says "merge", merge right away.
+- **Safety valve** — `/evolve` itself never pushes, merges, or touches `.env`
+  (`evolve.sh` does the merging). With 3 branches that couldn't be merged, or two
+  failed check runs, it only *proposes*.
 
 Live page: https://claude.ai/artifact/Sid1FrbP4DgVRcLwQbRopD (regenerated and republished every cycle; `pnpm sim:report`).
 
@@ -162,10 +169,11 @@ format: Status is `built`, `partial` or `missing`.
 | Loop | Theme lifecycle (ship, reopen, artifact) | built | |
 | Loop | /evolve ships on evolve/ branches | built | first cycle 2026-10-25 |
 | Loop | Weekly population audit (/evolve-agents) | built | first run 2026-10-25 |
-| Loop | Safety valve (propose-only) | built | 5 unmerged branches or 2 failed checks |
+| Loop | Autonomous merge of passing branches | built | each morning, before the new cycle |
+| Loop | Safety valve (propose-only) | built | 3 unmergeable branches or 2 failed checks |
 | Loop | Daily 08:00 schedule | partial | installer ready, not armed |
 | Loop | Live evolution page | built | regenerated every cycle |
-| Loop | Dated daily reports and page snapshots | built | ~/beobeo-sim/site, published with the page |
+| Loop | Three-layer site: start page, cumulative progress, daily deltas | built | ~/beobeo-sim/site, published as one artifact |
 | Loop | Your requests tracked apart from persona feedback | built | REQUESTS.md, worked first every cycle |
 
 ## Evolution log
