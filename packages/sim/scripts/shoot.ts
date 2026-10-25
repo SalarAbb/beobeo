@@ -6,9 +6,9 @@
  */
 import "../src/env";
 import { AppClient } from "../src/app/client";
-import { launchBrowser, newContext, walkthrough } from "../src/app/browser";
+import { deviceStorage, launchBrowser, newContext, walkthrough } from "../src/app/browser";
 import { simDir } from "../src/journal";
-import { simEmail, simPassword } from "../src/persona";
+import { loadPersonas, simEmail, simPassword } from "../src/persona";
 import { todayIso } from "../src/world";
 
 const args = process.argv.slice(2);
@@ -20,11 +20,15 @@ const persona = opt("persona") ?? "samwell";
 const routes = (opt("routes") ?? "/dashboard").split(",");
 const out = opt("out") ?? simDir("screenshots", todayIso(), "evolve");
 
+const p = loadPersonas().find((x) => x.id === persona);
+if (!p) throw new Error(`unknown persona ${persona}`);
 const client = new AppClient();
 await client.signIn(simEmail(persona), simPassword(persona));
 const browser = await launchBrowser();
 for (const [viewport, scheme] of [["desktop", "light"], ["desktop", "dark"], ["mobile", "light"]] as const) {
-  const ctx = await newContext(browser, { viewport, scheme, cookies: client.cookieList });
+  const ctx = await newContext(browser, {
+    viewport, scheme, cookies: client.cookieList, storage: deviceStorage(p, client.userId),
+  });
   for (const s of await walkthrough(ctx, routes, out, `${persona}-${viewport}-${scheme}`)) {
     console.log(`${s.file}  (${Math.round(s.ms)}ms${s.finalUrl.includes("/signin") ? ", NOT SIGNED IN" : ""})`);
   }

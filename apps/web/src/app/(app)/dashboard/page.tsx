@@ -7,7 +7,7 @@ import Link from "next/link";
 import { AssetLogo } from "@/components/asset-logo";
 import { usePortfolio } from "@/components/portfolio-context";
 import { Section, StatStrip, StatTile } from "@/components/page-section";
-import { AllocationDonut } from "@/components/charts/allocation-donut";
+import { AllocationSection } from "@/components/allocation-section";
 import { ValueChart } from "@/components/charts/value-chart";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -39,6 +39,17 @@ const WINDOWS: { value: PnlWindow; label: string }[] = [
   { value: "1y", label: "1Y" },
   { value: "all", label: "All" },
 ];
+
+/** The most recent day money went in (a rise in the invested line), as the
+ *  default "next deposit" for the target-mix split. */
+function lastDeposit(points: { invested: number }[] | undefined): number | null {
+  if (!points) return null;
+  for (let i = points.length - 1; i > 0; i--) {
+    const step = points[i]!.invested - points[i - 1]!.invested;
+    if (step >= 1) return step;
+  }
+  return null;
+}
 
 type SortKey = "symbol" | "quantity" | "price" | "marketValue" | "pl";
 type SortState = { key: SortKey; dir: "asc" | "desc" };
@@ -580,13 +591,12 @@ export default function DashboardPage() {
             </Table>
       </Section>
 
-      <Section title="Allocation">
-        <AllocationDonut
-          data={data.holdings
-            .filter((h) => h.marketValue !== null)
-            .map((h) => ({ symbol: h.symbol, value: h.marketValue! }))}
-        />
-      </Section>
+      <AllocationSection
+        holdings={data.holdings
+          .filter((h) => h.marketValue !== null)
+          .map((h) => ({ symbol: h.symbol, value: h.marketValue! }))}
+        lastDeposit={lastDeposit(timeseries.data)}
+      />
     </div>
   );
 }

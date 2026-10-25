@@ -67,7 +67,7 @@ export default async function AppLayout({
   };
 
   return (
-    <PortfolioProvider>
+    <PortfolioProvider userId={session.user.id}>
     <div className="flex min-h-screen flex-col md:flex-row">
       {/* Desktop: a fixed-width sidebar. Phone: a slim top bar (logo, switcher,
           avatar) over a scrolling nav row, so content gets the full width. */}

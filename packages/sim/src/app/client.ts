@@ -65,8 +65,13 @@ export class AppClient {
     return { data: await res.json(), ms };
   }
 
-  signIn(email: string, password: string) {
-    return this.authPost("sign-in/email", { email, password });
+  /** App user id from the last sign-in (keys per-user device storage). */
+  userId: string | null = null;
+
+  async signIn(email: string, password: string) {
+    const res = await this.authPost("sign-in/email", { email, password });
+    this.userId = (res.data as { user?: { id?: string } }).user?.id ?? null;
+    return res;
   }
 
   signUp(name: string, email: string, password: string) {

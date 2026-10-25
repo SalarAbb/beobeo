@@ -114,14 +114,19 @@ it against each digest; items cite the theme keys that motivated them.
    most often (this year's realized gains, lots turning long-term soon), and remember
    facts the user stated (age, targets) across threads. Themes:
    `slow-chat-first-token`, `chat-too-long-jargony`, `chat-no-direct-on-track-answer`.
-2. **Tolerate dust in imports.** A sell that exceeds buys by 0.000001 drops the whole
+2. **Target mix on the server.** Move device-saved target mixes into an
+   `allocation_targets` table keyed (user, portfolioKey) like `tax_profiles`
+   (needs one `pnpm db:push`, which only a human can run). Then put targets and
+   drift in the chat snapshot, so "how far have I drifted?" gets the same numbers as
+   the dashboard. Theme: `allocation-vs-target-drift`.
+3. **Tolerate dust in imports.** A sell that exceeds buys by 0.000001 drops the whole
    position from the dashboard total while the chart still counts it. Clamp dust and say
    so, instead of excluding the asset. Theme: `dashboard-value-mismatch-excluded-qqq`.
-3. **Dividend income view.** Income per month and year, yield on cost (Olenna). Needs
+4. **Dividend income view.** Income per month and year, yield on cost (Olenna). Needs
    simulated dividends first (see the gaps below). Theme: `income-view-monthly-dividends-yoc`.
-4. **Power layer.** ⌘K command palette (add transaction, jump to symbol, switch
+5. **Power layer.** ⌘K command palette (add transaction, jump to symbol, switch
    portfolio) and keyboard shortcuts (Hermione).
-5. **Latency instrumentation.** `Server-Timing` on tRPC and a dev overlay, so
+6. **Latency instrumentation.** `Server-Timing` on tRPC and a dev overlay, so
    personas and humans see the same numbers.
 
 **Loop / simulator gaps** (infrastructure, not product):
@@ -156,8 +161,9 @@ format: Status is `built`, `partial` or `missing`.
 | Product | "I have $n" picks one of your candidates | missing | R-004 |
 | Product | Tax setup during sign-up | missing | R-005 |
 | Product | Expert metrics discoverable, not front-facing | partial | Behind a closed "Performance details" disclosure on the dashboard (R-002); waiting for the personas to confirm |
+| Product | Allocation vs. target mix + where the next deposit goes | partial | dashboard drift table and deposit split (2026-10-25); targets saved on the device only, so chat can't see them (backlog #2) |
 | Product | Dividend income view | missing | backlog #4 (Olenna) |
-| Product | Keyboard layer (⌘K, shortcuts) | missing | backlog #5 |
+| Product | Keyboard layer (⌘K, shortcuts) | missing | backlog #5 (Hermione) |
 | Product | Phone layout | partial | top-bar shell and dashboard fit 400px; other pages not yet checked at phone width |
 | Product | Visual identity matching the evolution page | partial | tokens, fonts, dashboard, position, transactions, accounts, account done; tax center, compare, chat, auth next (R-001) |
 | Simulator | Personas with habits (policy) and judgment (LLM mind) | built | 11 personas, incl. one retiree drawing down monthly |
@@ -186,6 +192,7 @@ format: Status is `built`, `partial` or `missing`.
 One entry per cycle, newest first: date · branch · what shipped · theme ids
 answered · before/after signal.
 
+- **2026-10-25 · Allocation vs. your target mix, and where the next deposit goes.** The dashboard's Allocation section takes a target mix ("Set a target mix": one % per holding, must add up to 100). With one set, it opens with a verdict ("You're on target: every holding is within 2 points of your mix", or "Furthest off: VXUS is 4.2 points under its 30% target", or an untargeted holding named). Next to the donut, a now / target / off-by table with a bullet bar per row flags drift of 5 points or more. Below that, "Your next deposit of $[last deposit] goes into VTI $3,222 · VXUS $1,936 · BND $842": new tested core `allocationDrift`/`fillToTarget`, which fills the most underweight sleeve first and never needs a sell. First slice: targets are saved on the device (localStorage), because a new table needs a `db:push` the unattended loop isn't allowed to run. Sim personas with a `rebalance` rule start with their targets saved, so Minerva and Hermione see it. · `allocation-vs-target-drift` (minerva, *would not keep using*), part of `dashboard-no-next-step-guidance` · expected signal: minerva's dashboard notes turn to the drift table and the $6,000 split; hermione's "drift vs my 10% BTC target" is answered on the dashboard (chat still can't see targets).
 - **2026-10-25 · Compare in the evolution look, verdict first.** The compare page now opens with one plain sentence ("Your portfolio is behind SPY by $1,976.96"; with several benchmarks it lists who you're ahead of and behind, each with the dollar gap). The four bordered cards became one hairline strip (your value + invested, then one tile per benchmark whose sub-line is your edge), and the chart and the head-to-head table sit in serif sections over rules. Chips and the scope trigger are pills, the "Comparing:" label no longer orphans on phones, and the head-to-head rows use the dashboard's plain names (Yearly rate, Total growth, Swings, Reward for risk). The tiles dropped their per-benchmark XIRR, which the table's first row already shows. · R-001 · expected signal: compare look/ease scores hold or rise; no "which number do I read" notes on compare.
 - **2026-10-25 · Expert metrics one tap away, plain dashboard labels.** The dashboard's "Performance & risk" grid (yearly rate, growth of picks, timing effect, Sharpe, volatility, concentration) now sits behind a closed "Performance details" pill under the chart. Opening it starts with one sentence on why the yearly rate, the growth of your picks and the timing effect differ. Every label is plain, and the technical term (XIRR, TWR, Sharpe…) appears only in the hover card. The summary tiles say "Gain on holdings", "Gain from sales" and "Change · 1M" instead of "Unrealized/Realized P/L". On phones the tiles' hero numbers no longer truncate ("$120,247.…"). · R-002, `dashboard-jargon-performance-risk`, `dashboard-annual-return-contradicts-total-return` · expected signal: luna/augusta/fred stop raising dashboard jargon and "numbers disagree" notes; hermione still quotes TWR/XIRR.
 - **2026-10-25 · Tax Center in the evolution look, zero states quieted.** All five tabs converted (R-001): page header, sideways-scrolling tab pills, hairline stat strips, serif sections over rules, ledger-style All Lots, sectioned Tax Profile. Each tab now opens with a plain verdict sentence ("You owe no capital-gains tax right now: you haven't sold anything at a gain this year", new tested core `taxOwedSoFar`), and sections appear only when they hold something, so no more "-$0.00" (fixed app-wide in `fmtUsd`) or rows of $0.00 boxes. On-hold losses are grouped per symbol and name the triggering buy, its account and the date it's safe to sell (petyr's ask). Tabs deep-link with `?tab=`. · R-001, `tax-center-noisy-zero-states` · expected signal: luna/augusta/petyr stop raising tax-center zero-state and jargon notes; look score holds or rises.

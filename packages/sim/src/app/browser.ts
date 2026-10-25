@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import type { Persona } from "../persona";
 import { APP_URL } from "./client";
 
 /** Prefer the installed Google Chrome (no browser download); fall back to Playwright's Chromium. */
@@ -21,7 +22,13 @@ const VIEWPORTS: Record<Viewport, { width: number; height: number }> = {
 
 export async function newContext(
   browser: Browser,
-  opts: { viewport: Viewport; scheme: Scheme; cookies?: { name: string; value: string }[] },
+  opts: {
+    viewport: Viewport;
+    scheme: Scheme;
+    cookies?: { name: string; value: string }[];
+    /** localStorage the persona's own device would hold (see `deviceStorage`). */
+    storage?: Record<string, string>;
+  },
 ): Promise<BrowserContext> {
   const ctx = await browser.newContext({
     viewport: VIEWPORTS[opts.viewport],
@@ -31,7 +38,28 @@ export async function newContext(
   if (opts.cookies?.length) {
     await ctx.addCookies(opts.cookies.map((c) => ({ ...c, url: APP_URL })));
   }
+  if (opts.storage && Object.keys(opts.storage).length > 0) {
+    await ctx.addInitScript((entries: Record<string, string>) => {
+      for (const [k, v] of Object.entries(entries)) {
+        if (localStorage.getItem(k) === null) localStorage.setItem(k, v);
+      }
+    }, opts.storage);
+  }
   return ctx;
+}
+
+/**
+ * Settings a persona has saved on their device. A persona with a `rebalance`
+ * rule has a target mix, so the dashboard's Allocation section starts with it
+ * set (the app keeps target mixes in localStorage for now).
+ */
+export function deviceStorage(p: Persona, userId: string | null): Record<string, string> {
+  const rule = p.policy.find((r) => r.kind === "rebalance");
+  if (!userId || !rule || rule.kind !== "rebalance") return {};
+  const pcts = Object.fromEntries(
+    Object.entries(rule.targets).map(([sym, w]) => [sym, Math.round(w * 10000) / 100]),
+  );
+  return { [`beobeo.targets.${userId}.all`]: JSON.stringify(pcts) };
 }
 
 /** Navigate and wait until the page has settled; returns ms until settled. */

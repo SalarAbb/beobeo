@@ -43,6 +43,13 @@ export {
   type DcaReplayResult,
 } from "./dca";
 export {
+  allocationDrift,
+  fillToTarget,
+  type AllocationHolding,
+  type TargetMix,
+  type DriftRow,
+} from "./allocation";
+export {
   totalTax,
   explainNetting,
   type TaxRates,
