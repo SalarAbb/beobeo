@@ -24,13 +24,14 @@
 
 ## R-002 · Keep expert metrics discoverable, not front-facing
 - **Asked:** 2026-10-23
-- **Status:** open
+- **Status:** in progress
 - **Shipped on:** —
 - **In your words:** "Sharpe ratio is great but most users don't care about it so should be discoverable but not front facing." "We want to remove too much unnecessary info."
 - **Done means:**
-  - The dashboard's first screen shows value, gain or loss, the chart and holdings, and nothing a beginner has to decode
-  - Sharpe, volatility, TWR, XIRR and the behavior gap sit one deliberate tap away ("Performance details"), with exact values on hover for experts
+  - ✓ The dashboard's first screen shows value, gain or loss, the chart and holdings, and nothing a beginner has to decode
+  - ✓ Sharpe, volatility, TWR, XIRR and the behavior gap sit one deliberate tap away ("Performance details"), with exact values on hover for experts
   - Luna, Augusta and Olenna stop raising jargon themes; Hermione can still reach every number
+- **Notes:** 2026-10-25 (`evolve/2026-10-25`): the metrics grid is folded behind a closed "Performance details" pill under the chart, with plain labels (technical terms only in the hover card) and one sentence on why the three return numbers differ. Tiles say "Gain on holdings" / "Gain from sales" instead of "Unrealized/Realized P/L". The last line waits on the personas' next days.
 
 ## R-003 · Proactive tax moves ("free money" alerts)
 - **Asked:** 2026-10-23

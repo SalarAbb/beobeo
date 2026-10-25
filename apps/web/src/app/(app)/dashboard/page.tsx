@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Ruler } from "lucide-react";
+import { ChevronDown, Ruler } from "lucide-react";
 import Link from "next/link";
 import { AssetLogo } from "@/components/asset-logo";
 import { usePortfolio } from "@/components/portfolio-context";
@@ -265,11 +265,103 @@ function concentration(holdings: HoldingWeight[]): {
   };
 }
 
+interface MetricValues {
+  xirr: number | null;
+  twr: number | null;
+  behaviorGap: number | null;
+  sharpe: number | null;
+  volatility: number | null;
+}
+
+/** The expert numbers behind "Performance details" (R-002: one deliberate
+ *  tap away, plain labels, the technical term only in the hover card). */
+function MetricsGrid({
+  m,
+  holdings,
+}: {
+  m: MetricValues | undefined;
+  holdings: HoldingWeight[];
+}) {
+  const conc = concentration(holdings);
+  const gap = m?.behaviorGap ?? null;
+  return (
+    <TooltipProvider delayDuration={150}>
+      <div className="grid grid-cols-2 gap-x-8 gap-y-7 lg:grid-cols-4">
+        <MetricCell
+          label="Yearly rate"
+          term="XIRR"
+          value={fmtPct(m?.xirr)}
+          insight="what your money actually earns per year"
+          detail={METRIC_DETAILS.xirr}
+          tone={gainClass(m?.xirr)}
+        />
+        <MetricCell
+          label="Growth of your picks"
+          term="TWR"
+          value={fmtPct(m?.twr)}
+          insight={explainTwr(m?.twr)}
+          detail={METRIC_DETAILS.twr}
+          tone={gainClass(m?.twr)}
+        />
+        <MetricCell
+          label="Timing effect"
+          term="behavior gap"
+          value={fmtPct(gap)}
+          insight={
+            gap === null
+              ? "when you added money — helped or hurt?"
+              : Math.abs(gap) < 0.005
+                ? "your timing made no difference"
+                : gap > 0
+                  ? "your timing helped your returns"
+                  : "your timing cost you returns"
+          }
+          detail={METRIC_DETAILS.timing}
+          tone={gainClass(gap)}
+        />
+        <MetricCell
+          label="Reward for risk"
+          term="Sharpe"
+          value={m?.sharpe === null || m?.sharpe === undefined ? "—" : m.sharpe.toFixed(2)}
+          insight={explainSharpe(m?.sharpe)}
+          detail={METRIC_DETAILS.sharpe}
+        />
+        <MetricCell
+          label="Swings"
+          term="volatility"
+          value={fmtPctAbs(m?.volatility)}
+          insight={explainVolatility(m?.volatility)}
+          detail={METRIC_DETAILS.volatility}
+        />
+        <MetricCell
+          label="Largest position"
+          value={conc ? `${conc.topPct.toFixed(0)}% ${conc.topSymbol}` : "—"}
+          insight={explainTopPosition(conc ? conc.topPct : null)}
+          detail={METRIC_DETAILS.topPosition}
+        />
+        <MetricCell
+          label="Spread"
+          term="diversification"
+          value={conc ? `~${conc.effectiveN.toFixed(1)} bets` : "—"}
+          insight={
+            conc
+              ? `your ${holdings.length} holdings act like ~${conc.effectiveN.toFixed(1)} independent bets`
+              : "add holdings to see this"
+          }
+          detail={METRIC_DETAILS.diversification}
+        />
+      </div>
+    </TooltipProvider>
+  );
+}
+
 export default function DashboardPage() {
   const trpc = useTRPC();
   const { portfolioId, activeName } = usePortfolio();
   const [pnlWindow, setPnlWindow] = useState<PnlWindow>("all");
   const [sort, setSort] = useState<SortState>({ key: "marketValue", dir: "desc" });
+  // R-002: expert metrics sit one deliberate tap away, never on the first screen.
+  const [showDetails, setShowDetails] = useState(false);
   const scope = { portfolioId: portfolioId ?? undefined };
   const overview = useQuery({
     ...trpc.portfolio.overview.queryOptions({ ...scope, window: pnlWindow }),
@@ -344,21 +436,21 @@ export default function DashboardPage() {
         <StatTile label="Portfolio value" value={fmtUsd(totals.value)} />
         {windowed ? (
           <StatTile
-            label={`P/L · ${windowLabel}`}
+            label={`Change · ${windowLabel}`}
             value={fmtUsd(totals.periodGain)}
             sub={fmtPct(totals.periodGainPct)}
             tone={gainClass(totals.periodGain)}
           />
         ) : (
           <StatTile
-            label="Unrealized P/L"
+            label="Gain on holdings"
             value={fmtUsd(totals.unrealized)}
             sub={fmtPct(totals.unrealizedPct)}
             tone={gainClass(totals.unrealized)}
           />
         )}
         <StatTile
-          label={windowed ? `Realized P/L · ${windowLabel}` : "Realized P/L"}
+          label={windowed ? `Gain from sales · ${windowLabel}` : "Gain from sales"}
           value={fmtUsd(totals.realized)}
           tone={gainClass(totals.realized)}
         />
@@ -376,95 +468,37 @@ export default function DashboardPage() {
         )}
       </Section>
 
-      <Section
-        title="Performance & risk"
-        aside={windowed && <span className="eyebrow">{windowLabel}</span>}
-      >
-        <div>
-          {metrics.isLoading ? (
-            <Skeleton className="h-24 w-full" />
-          ) : (
-            (() => {
-              const m = metrics.data;
-              const conc = concentration(data.holdings);
-              const gap = m?.behaviorGap ?? null;
-              return (
-                <TooltipProvider delayDuration={150}>
-                  <div className="grid grid-cols-2 gap-x-8 gap-y-7 lg:grid-cols-4">
-                    <MetricCell
-                      label="Annual return"
-                      term="XIRR"
-                      value={fmtPct(m?.xirr)}
-                      insight="what your money actually earns per year"
-                      detail={METRIC_DETAILS.xirr}
-                      tone={gainClass(m?.xirr)}
-                    />
-                    <MetricCell
-                      label="Total return"
-                      term="TWR"
-                      value={fmtPct(m?.twr)}
-                      insight={explainTwr(m?.twr)}
-                      detail={METRIC_DETAILS.twr}
-                      tone={gainClass(m?.twr)}
-                    />
-                    <MetricCell
-                      label="Timing impact"
-                      term="behavior gap"
-                      value={fmtPct(gap)}
-                      insight={
-                        gap === null
-                          ? "when you added money — helped or hurt?"
-                          : Math.abs(gap) < 0.005
-                            ? "your timing made no difference"
-                            : gap > 0
-                              ? "your timing helped your returns"
-                              : "your timing cost you returns"
-                      }
-                      detail={METRIC_DETAILS.timing}
-                      tone={gainClass(gap)}
-                    />
-                    <MetricCell
-                      label="Risk-adjusted"
-                      term="Sharpe"
-                      value={
-                        m?.sharpe === null || m?.sharpe === undefined
-                          ? "—"
-                          : m.sharpe.toFixed(2)
-                      }
-                      insight={explainSharpe(m?.sharpe)}
-                      detail={METRIC_DETAILS.sharpe}
-                    />
-                    <MetricCell
-                      label="Volatility"
-                      value={fmtPctAbs(m?.volatility)}
-                      insight={explainVolatility(m?.volatility)}
-                      detail={METRIC_DETAILS.volatility}
-                    />
-                    <MetricCell
-                      label="Largest position"
-                      value={
-                        conc ? `${conc.topPct.toFixed(0)}% ${conc.topSymbol}` : "—"
-                      }
-                      insight={explainTopPosition(conc ? conc.topPct : null)}
-                      detail={METRIC_DETAILS.topPosition}
-                    />
-                    <MetricCell
-                      label="Diversification"
-                      value={conc ? `~${conc.effectiveN.toFixed(1)} bets` : "—"}
-                      insight={
-                        conc
-                          ? `your ${data.holdings.length} holdings act like ~${conc.effectiveN.toFixed(1)} independent bets`
-                          : "add holdings to see this"
-                      }
-                      detail={METRIC_DETAILS.diversification}
-                    />
-                  </div>
-                </TooltipProvider>
-              );
-            })()
-          )}
-        </div>
-      </Section>
+      <div className="-mt-6 grid gap-6">
+        <button
+          type="button"
+          onClick={() => setShowDetails((v) => !v)}
+          aria-expanded={showDetails}
+          aria-controls="performance-details"
+          className="inline-flex items-center gap-1.5 justify-self-start rounded-full -ml-3 px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-primary aria-expanded:bg-accent aria-expanded:text-primary"
+        >
+          Performance details
+          <ChevronDown
+            aria-hidden
+            className={`size-4 transition-transform ${showDetails ? "rotate-180" : ""}`}
+          />
+        </button>
+        {showDetails && (
+          <div id="performance-details" className="grid gap-6">
+            <p className="max-w-2xl text-sm text-muted-foreground">
+              Three ways to measure the same growth
+              {windowed && <> over {windowLabel}</>}: the yearly rate counts when
+              each dollar went in, the growth of your picks ignores that timing,
+              and the timing effect is the gap between the two. Hover any number
+              for what it means.
+            </p>
+            {metrics.isLoading ? (
+              <Skeleton className="h-24 w-full" />
+            ) : (
+              <MetricsGrid m={metrics.data} holdings={data.holdings} />
+            )}
+          </div>
+        )}
+      </div>
 
       <Section title="Holdings">
             <Table>
@@ -494,7 +528,7 @@ export default function DashboardPage() {
                   />
                   <SortableHead label="Value" sortKey="marketValue" sort={sort} onSort={toggleSort} />
                   <SortableHead
-                    label={windowed ? `P/L · ${windowLabel}` : "P/L"}
+                    label={windowed ? `Change · ${windowLabel}` : "Gain"}
                     sortKey="pl"
                     sort={sort}
                     onSort={toggleSort}

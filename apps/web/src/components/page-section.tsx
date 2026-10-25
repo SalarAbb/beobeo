@@ -83,10 +83,10 @@ export function StatTile({
   hero?: boolean;
 }) {
   return (
-    <div className="min-w-0 bg-card px-5 py-4">
+    <div className="min-w-0 bg-card px-4 py-4 sm:px-5">
       <p className="eyebrow">{label}</p>
       <p
-        className={`figure mt-2 truncate ${hero ? "text-2xl sm:text-[28px]" : "text-xl"} ${tone ?? ""}`}
+        className={`figure mt-2 truncate ${hero ? "text-[22px] sm:text-[28px]" : "text-xl"} ${tone ?? ""}`}
       >
         {value}
       </p>
