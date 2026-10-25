@@ -4,17 +4,11 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { signIn } from "@/lib/auth-client";
 import type { SocialProvider } from "@/lib/auth";
+import { AuthShell } from "./auth-shell";
 import { SocialButtons } from "./social-buttons";
 
 export function SignInForm({ providers }: { providers: SocialProvider[] }) {
@@ -40,54 +34,51 @@ export function SignInForm({ providers }: { providers: SocialProvider[] }) {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">Beobeo</CardTitle>
-          <CardDescription>Sign in to your portfolio</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          {oauthError && (
-            <p className="text-sm text-destructive">
-              Sign-in with your provider didn’t complete. Try again or use
-              email and password.
-            </p>
-          )}
-          <SocialButtons providers={providers} />
-          <form onSubmit={onSubmit} className="grid gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" disabled={loading}>
-              {loading ? "Signing in…" : "Sign in"}
-            </Button>
-            <p className="text-center text-sm text-muted-foreground">
-              No account?{" "}
-              <Link href="/signup" className="underline">
-                Sign up
-              </Link>
-            </p>
-          </form>
-        </CardContent>
-      </Card>
-    </main>
+    <AuthShell
+      title="Welcome back"
+      subtitle="Sign in to see your portfolio."
+      footer={
+        <>
+          No account?{" "}
+          <Link href="/signup" className="font-medium text-primary underline-offset-4 hover:underline">
+            Create one
+          </Link>
+        </>
+      }
+    >
+      {oauthError && (
+        <p className="text-sm text-destructive">
+          Sign-in with your provider didn’t complete. Try again or use
+          email and password.
+        </p>
+      )}
+      <SocialButtons providers={providers} />
+      <form onSubmit={onSubmit} className="grid gap-4">
+        <div className="grid gap-2">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="password">Password</Label>
+          <Input
+            id="password"
+            type="password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <Button type="submit" disabled={loading}>
+          {loading ? "Signing in…" : "Sign in"}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }

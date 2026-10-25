@@ -1,11 +1,18 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { MessageSquarePlus, Send, Wrench } from "lucide-react";
+import { History, MessageSquarePlus, Send } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ChatMarkdown } from "@/components/chat-markdown";
+import { PageHeader } from "@/components/page-section";
 import { usePortfolio } from "@/components/portfolio-context";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTRPC } from "@/lib/trpc";
@@ -151,112 +158,177 @@ export default function ChatPage() {
     setMessages([]);
   }
 
+  const turns = pairTurns(messages);
+
   return (
-    <div className="mx-auto flex h-[calc(100vh-3rem)] max-w-5xl gap-4">
-      <aside className="hidden w-56 shrink-0 flex-col gap-1 lg:flex">
-        <Button variant="outline" size="sm" className="mb-2 justify-start" onClick={newThread}>
-          <MessageSquarePlus className="mr-1.5 size-4" /> New chat
-        </Button>
-        {threads.isLoading && <Skeleton className="h-24 w-full" />}
-        {threads.data?.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => void selectThread(t.id)}
-            className={cn(
-              "truncate rounded-md px-2 py-1.5 text-left text-sm hover:bg-secondary",
-              threadId === t.id && "bg-secondary font-medium",
-            )}
-          >
-            {t.title ?? "Untitled"}
-          </button>
-        ))}
-      </aside>
-
-      <div className="flex min-w-0 flex-1 flex-col rounded-lg border">
-        <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4">
-          {messages.length === 0 && (
-            <div className="flex h-full flex-col items-center justify-center gap-4">
-              <p className="text-sm text-muted-foreground">
-                Ask anything about your portfolio — answers come straight from
-                your own data.
-              </p>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {SUGGESTIONS.map((s) => (
-                  <Button
-                    key={s}
-                    variant="outline"
-                    size="sm"
-                    className="justify-start font-normal"
-                    onClick={() => void send(s)}
-                  >
-                    {s}
+    // Full-height column: header, then the conversation scrolls between it and
+    // the composer. The phone height subtracts the top bar and nav row.
+    <div className="mx-auto flex h-[calc(100dvh-10.5rem)] max-w-5xl flex-col gap-6 md:h-[calc(100dvh-4rem)]">
+      <PageHeader
+        title="Chat"
+        subtitle="Answers come from your own data, short answer first."
+        actions={
+          <>
+            {/* Phones have no conversations column, so past chats live in a menu. */}
+            {threads.data && threads.data.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="rounded-full lg:hidden">
+                    <History aria-hidden className="size-4" /> Past chats
                   </Button>
-                ))}
-              </div>
-            </div>
-          )}
-          {messages.map((m, i) => (
-            <div
-              key={i}
-              className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}
-            >
-              <div
-                className={cn(
-                  "max-w-[80%] rounded-lg px-3 py-2 text-sm",
-                  m.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary",
-                )}
-              >
-                {m.toolCalls && m.toolCalls.length > 0 && (
-                  <p className="mb-1 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-                    <Wrench className="size-3" />
-                    {[...new Set(m.toolCalls)].map((t) => (
-                      <span key={t} className="rounded bg-background/60 px-1">
-                        {t.replaceAll("_", " ")}
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-72">
+                  {threads.data.map((t) => (
+                    <DropdownMenuItem
+                      key={t.id}
+                      onSelect={() => void selectThread(t.id)}
+                      className="flex items-baseline justify-between gap-3"
+                    >
+                      <span className="truncate">{t.title ?? "Untitled"}</span>
+                      <span className="data shrink-0 text-xs text-muted-foreground">
+                        {fmtThreadDate(t.updatedAt)}
                       </span>
-                    ))}
-                  </p>
-                )}
-                {m.role === "assistant" ? (
-                  m.text ? (
-                    <ChatMarkdown>{m.text}</ChatMarkdown>
-                  ) : (
-                    <p className="text-muted-foreground">
-                      {streaming && i === messages.length - 1 ? "Thinking…" : ""}
-                    </p>
-                  )
-                ) : (
-                  <p className="whitespace-pre-wrap">{m.text}</p>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            <Button variant="outline" size="sm" className="rounded-full" onClick={newThread}>
+              <MessageSquarePlus aria-hidden className="size-4" /> New chat
+            </Button>
+          </>
+        }
+      />
 
-        <form
-          className="flex gap-2 border-t p-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void send(input);
-          }}
-        >
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask about your portfolio…"
-            disabled={streaming}
-          />
-          <Button
-            type="submit"
-            size="icon"
-            aria-label="Send message"
-            disabled={streaming || !input.trim()}
+      <div className="flex min-h-0 flex-1 gap-8">
+        <aside className="hidden w-52 shrink-0 flex-col gap-1 overflow-y-auto lg:flex">
+          <p className="eyebrow mb-1 px-3">Conversations</p>
+          {threads.isLoading && <Skeleton className="h-24 w-full" />}
+          {threads.data?.length === 0 && (
+            <p className="px-3 text-sm text-muted-foreground">None yet.</p>
+          )}
+          {threads.data?.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => void selectThread(t.id)}
+              className={cn(
+                "grid rounded-lg px-3 py-1.5 text-left text-sm text-ink-2 hover:bg-secondary",
+                threadId === t.id && "bg-accent text-primary hover:bg-accent",
+              )}
+            >
+              <span className={cn("truncate", threadId === t.id && "font-medium")}>
+                {t.title ?? "Untitled"}
+              </span>
+              <span className="data text-[11px] text-muted-foreground">
+                {fmtThreadDate(t.updatedAt)}
+              </span>
+            </button>
+          ))}
+        </aside>
+
+        <div className="flex min-w-0 flex-1 flex-col lg:border-l lg:pl-8">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto pb-4">
+            {messages.length === 0 && (
+              <div className="flex h-full flex-col justify-center gap-5">
+                <p className="font-display text-xl font-bold">What would you like to know?</p>
+                <div className="flex flex-wrap gap-2">
+                  {SUGGESTIONS.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      className="rounded-full border px-3.5 py-1.5 text-left text-sm text-ink-2 hover:border-primary/40 hover:bg-accent hover:text-primary"
+                      onClick={() => void send(s)}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* A transcript, not bubbles: the question as a quiet indigo pill,
+                the answer as prose on the page, turns split by hairlines. */}
+            <div className="divide-y">
+              {turns.map((turn, i) => (
+                <div key={i} className="grid gap-3 py-5 first:pt-0">
+                  {turn.user && (
+                    <p className="w-fit max-w-[85%] justify-self-end rounded-2xl bg-accent px-3.5 py-2 text-sm whitespace-pre-wrap">
+                      {turn.user.text}
+                    </p>
+                  )}
+                  {turn.assistant && (
+                    <div className="grid gap-1.5">
+                      {turn.assistant.toolCalls && turn.assistant.toolCalls.length > 0 && (
+                        <p className="eyebrow">
+                          Looked at · {[...new Set(turn.assistant.toolCalls)].map(toolLabel).join(" · ")}
+                        </p>
+                      )}
+                      {turn.assistant.text ? (
+                        <ChatMarkdown>{turn.assistant.text}</ChatMarkdown>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          {streaming && i === turns.length - 1 ? "Thinking…" : ""}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <form
+            className="flex items-center gap-2 border-t pt-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void send(input);
+            }}
           >
-            <Send aria-hidden className="size-4" />
-          </Button>
-        </form>
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ask about your portfolio…"
+              disabled={streaming}
+              className="h-10 rounded-full px-4"
+            />
+            <Button
+              type="submit"
+              size="icon"
+              aria-label="Send message"
+              disabled={streaming || !input.trim()}
+              className="size-10 shrink-0 rounded-full"
+            >
+              <Send aria-hidden className="size-4" />
+            </Button>
+          </form>
+        </div>
       </div>
     </div>
   );
+}
+
+/** Group the flat message list into question → answer turns. */
+function pairTurns(messages: UiMessage[]) {
+  const turns: { user?: UiMessage; assistant?: UiMessage }[] = [];
+  for (const m of messages) {
+    const last = turns[turns.length - 1];
+    if (m.role === "user" || !last || last.assistant) turns.push({ [m.role]: m });
+    else last.assistant = m;
+  }
+  return turns;
+}
+
+/** "Oct 25, 2:14 PM": threads often share a title (the same question asked
+ *  again), so the date is what tells them apart. */
+function fmtThreadDate(d: Date) {
+  return new Date(d).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+/** "get_position_details" → "position details". */
+function toolLabel(name: string) {
+  return name.replace(/^(get|run)_/, "").replaceAll("_", " ");
 }

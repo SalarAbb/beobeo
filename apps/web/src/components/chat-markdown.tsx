@@ -1,7 +1,18 @@
 "use client";
 
+import { isValidElement, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+/** "$1,799.29", "−2.5%", "2026-06-03", "19.565 SOL"… : a cell that leads with a figure. */
+const NUMERIC = /^[\s~≈+\-−$€(]*\d/;
+
+function textOf(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(textOf).join("");
+  if (isValidElement<{ children?: ReactNode }>(node)) return textOf(node.props.children);
+  return "";
+}
 
 /** Assistant-message markdown: GFM tables, tight spacing, theme-aware. */
 export function ChatMarkdown({ children }: { children: string }) {
@@ -24,14 +35,18 @@ export function ChatMarkdown({ children }: { children: string }) {
               {...props}
             />
           ),
+          // Numbers in mono, words in sans (the type rule): only numeric cells get `.data`.
           td: (props) => (
-            <td className="border-b border-border/50 px-2 py-1 data" {...props} />
+            <td
+              className={`border-b border-border/50 px-2 py-1 ${NUMERIC.test(textOf(props.children)) ? "data" : ""}`}
+              {...props}
+            />
           ),
           ul: (props) => <ul className="list-disc pl-5" {...props} />,
           ol: (props) => <ol className="list-decimal pl-5" {...props} />,
           a: (props) => <a className="underline" target="_blank" rel="noreferrer" {...props} />,
           code: (props) => (
-            <code className="rounded bg-background/60 px-1 font-mono text-[0.85em]" {...props} />
+            <code className="rounded bg-secondary px-1 font-mono text-[0.85em]" {...props} />
           ),
         }}
       >
