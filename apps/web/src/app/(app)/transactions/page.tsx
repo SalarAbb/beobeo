@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -55,11 +56,45 @@ export default function TransactionsPage() {
     }),
   );
   const remove = useMutation(trpc.transactions.remove.mutationOptions());
+  // Rows hidden while their delete waits out the undo window.
+  const [pendingDelete, setPendingDelete] = useState<ReadonlySet<string>>(new Set());
 
-  async function onDelete(id: string, label: string) {
-    await remove.mutateAsync({ id });
-    await queryClient.invalidateQueries({ queryKey: trpc.transactions.list.queryKey() });
-    toast.success(`Deleted ${label}`);
+  const unhide = (id: string) =>
+    setPendingDelete((s) => {
+      const next = new Set(s);
+      next.delete(id);
+      return next;
+    });
+
+  /** Deletes are undoable: the row disappears at once, but the mutation only
+   *  runs when the toast closes without "Undo" being pressed. */
+  function onDelete(id: string, label: string) {
+    setPendingDelete((s) => new Set(s).add(id));
+    let settled = false;
+    const commit = async () => {
+      if (settled) return;
+      settled = true;
+      try {
+        await remove.mutateAsync({ id });
+        await queryClient.invalidateQueries({ queryKey: trpc.transactions.list.queryKey() });
+      } catch {
+        toast.error(`Couldn't delete ${label}`);
+      } finally {
+        unhide(id);
+      }
+    };
+    toast(`Deleted ${label}`, {
+      duration: 6000,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          settled = true;
+          unhide(id);
+        },
+      },
+      onAutoClose: () => void commit(),
+      onDismiss: () => void commit(),
+    });
   }
 
   const refresh = () =>
@@ -69,7 +104,7 @@ export default function TransactionsPage() {
     <div className="mx-auto max-w-5xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Transactions</h1>
+          <h1 className="text-3xl">Transactions</h1>
           <p className="text-sm text-muted-foreground">
             The source of truth — everything else is derived from these.
           </p>
@@ -106,7 +141,7 @@ export default function TransactionsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {list.data!.map(({ txn, asset, account }) => (
+              {list.data!.filter(({ txn }) => !pendingDelete.has(txn.id)).map(({ txn, asset, account }) => (
                 <TableRow key={txn.id}>
                   <TableCell className="whitespace-nowrap">
                     {txn.tradedAt.toISOString().slice(0, 10)}
@@ -137,11 +172,11 @@ export default function TransactionsPage() {
                       variant="ghost"
                       size="icon"
                       className="size-7 text-muted-foreground hover:text-destructive"
-                      onClick={() =>
-                        void onDelete(txn.id, `${asset.symbol} ${txn.type}`)
-                      }
+                      aria-label={`Delete ${asset.symbol} ${txn.type.replace("_", " ")} on ${txn.tradedAt.toISOString().slice(0, 10)}`}
+                      title="Delete (you can undo)"
+                      onClick={() => onDelete(txn.id, `${asset.symbol} ${txn.type}`)}
                     >
-                      <Trash2 className="size-3.5" />
+                      <Trash2 aria-hidden className="size-3.5" />
                     </Button>
                   </TableCell>
                 </TableRow>

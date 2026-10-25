@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Ruler } from "lucide-react";
 import Link from "next/link";
@@ -8,7 +8,7 @@ import { AssetLogo } from "@/components/asset-logo";
 import { usePortfolio } from "@/components/portfolio-context";
 import { AllocationDonut } from "@/components/charts/allocation-donut";
 import { ValueChart } from "@/components/charts/value-chart";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -91,8 +91,8 @@ function SortableHead({
       <button
         type="button"
         onClick={() => onSort(sortKey)}
-        className={`inline-flex items-center gap-1 hover:text-foreground ${
-          active ? "text-foreground" : ""
+        className={`inline-flex items-center gap-1 text-xs hover:text-foreground ${
+          active ? "text-foreground" : "text-muted-foreground"
         }`}
       >
         {label}
@@ -207,7 +207,7 @@ function MetricCell({
           <span className="self-start text-xs font-medium text-muted-foreground underline decoration-muted-foreground/40 decoration-dotted underline-offset-4">
             {label}
           </span>
-          <span className={`text-xl font-semibold tabular-nums ${tone ?? ""}`}>
+          <span className={`font-mono text-lg font-medium tabular-nums ${tone ?? ""}`}>
             {value}
           </span>
         </div>
@@ -264,6 +264,8 @@ function concentration(holdings: HoldingWeight[]): {
   };
 }
 
+/** One cell of the hairline-ruled summary strip; the hero number is the one
+ *  place the display serif carries data. */
 function StatTile({
   label,
   value,
@@ -276,13 +278,39 @@ function StatTile({
   tone?: string;
 }) {
   return (
-    <Card className="py-4">
-      <CardContent className="px-4">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className={`mt-1 text-2xl font-semibold ${tone ?? ""}`}>{value}</p>
-        {sub && <p className={`text-xs ${tone ?? "text-muted-foreground"}`}>{sub}</p>}
-      </CardContent>
-    </Card>
+    <div className="min-w-0 bg-card px-5 py-4">
+      <p className="eyebrow">{label}</p>
+      <p
+        className={`mt-2 truncate font-display text-2xl font-bold tabular-nums sm:text-[28px] ${tone ?? ""}`}
+      >
+        {value}
+      </p>
+      {sub && (
+        <p className={`mt-0.5 font-mono text-xs ${tone ?? "text-muted-foreground"}`}>{sub}</p>
+      )}
+    </div>
+  );
+}
+
+/** A quiet chapter: serif title over a hairline rule, content on the page
+ *  background — no card, no shadow (the evolution page's section style). */
+function Section({
+  title,
+  aside,
+  children,
+}: {
+  title: ReactNode;
+  aside?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="grid gap-5">
+      <div className="flex items-baseline justify-between gap-3 border-b pb-2.5">
+        <h2 className="font-display text-lg font-bold">{title}</h2>
+        {aside}
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -327,7 +355,7 @@ export default function DashboardPage() {
   if (!data || data.holdings.length === 0) {
     return (
       <div className="mx-auto max-w-5xl">
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+        <h1 className="text-3xl">Dashboard</h1>
         <Card className="mt-6">
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
             No holdings yet.{" "}
@@ -344,10 +372,10 @@ export default function DashboardPage() {
   const { totals } = data;
 
   return (
-    <div className="mx-auto grid max-w-5xl gap-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <span className="text-sm text-muted-foreground">· {activeName}</span>
+    <div className="mx-auto grid w-full max-w-5xl grid-cols-1 gap-12">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h1 className="text-3xl">Dashboard</h1>
+        <span className="text-sm text-muted-foreground">{activeName}</span>
         <div className="ml-auto">
           <SegmentedControl value={pnlWindow} onChange={setPnlWindow} options={WINDOWS} />
         </div>
@@ -361,7 +389,7 @@ export default function DashboardPage() {
         </p>
       )}
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="-mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border lg:grid-cols-4">
         <StatTile label="Portfolio value" value={fmtUsd(totals.value)} />
         {windowed ? (
           <StatTile
@@ -389,31 +417,19 @@ export default function DashboardPage() {
         />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Portfolio over time</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {timeseries.isLoading ? (
-            <Skeleton className="h-72 w-full" />
-          ) : (
-            <ValueChart data={timeseries.data ?? []} />
-          )}
-        </CardContent>
-      </Card>
+      <Section title="Portfolio over time">
+        {timeseries.isLoading ? (
+          <Skeleton className="h-72 w-full" />
+        ) : (
+          <ValueChart data={timeseries.data ?? []} />
+        )}
+      </Section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            Performance &amp; risk
-            {windowed && (
-              <span className="ml-2 text-sm font-normal text-muted-foreground">
-                · {windowLabel}
-              </span>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+      <Section
+        title="Performance & risk"
+        aside={windowed && <span className="eyebrow">{windowLabel}</span>}
+      >
+        <div>
           {metrics.isLoading ? (
             <Skeleton className="h-24 w-full" />
           ) : (
@@ -496,42 +512,49 @@ export default function DashboardPage() {
               );
             })()
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </Section>
 
-      <div className="grid gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Holdings</CardTitle>
-          </CardHeader>
-          <CardContent className="px-0">
+      <Section title="Holdings">
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="hover:bg-transparent">
                   <SortableHead
                     label="Asset"
                     sortKey="symbol"
                     sort={sort}
                     onSort={toggleSort}
                     align="left"
-                    className="pl-6"
+                    className="pl-1"
                   />
-                  <SortableHead label="Qty" sortKey="quantity" sort={sort} onSort={toggleSort} />
-                  <SortableHead label="Price" sortKey="price" sort={sort} onSort={toggleSort} />
+                  <SortableHead
+                    label="Qty"
+                    sortKey="quantity"
+                    sort={sort}
+                    onSort={toggleSort}
+                    className="hidden sm:table-cell"
+                  />
+                  <SortableHead
+                    label="Price"
+                    sortKey="price"
+                    sort={sort}
+                    onSort={toggleSort}
+                    className="hidden sm:table-cell"
+                  />
                   <SortableHead label="Value" sortKey="marketValue" sort={sort} onSort={toggleSort} />
                   <SortableHead
                     label={windowed ? `P/L · ${windowLabel}` : "P/L"}
                     sortKey="pl"
                     sort={sort}
                     onSort={toggleSort}
-                    className="pr-6"
+                    className="pr-1"
                   />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {sortHoldings(data.holdings, sort, windowed).map((h) => (
                   <TableRow key={h.assetId} className="group">
-                    <TableCell className="pl-6">
+                    <TableCell className="pl-1">
                       <Link
                         href={`/positions/${h.assetId}`}
                         className="flex items-center gap-2.5"
@@ -547,45 +570,38 @@ export default function DashboardPage() {
                         )}
                       </Link>
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="hidden text-right font-mono text-[13px] tabular-nums sm:table-cell">
                       {fmtQty(h.quantity)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="hidden text-right font-mono text-[13px] tabular-nums sm:table-cell">
                       {fmtUsd(h.price)}
                     </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">
+                    <TableCell className="text-right font-mono text-[13px] font-medium tabular-nums">
                       {fmtUsd(h.marketValue)}
                     </TableCell>
                     <TableCell
-                      className={`pr-6 text-right tabular-nums ${gainClass(
+                      className={`pr-1 text-right font-mono text-[13px] tabular-nums ${gainClass(
                         windowed ? h.periodGain : h.unrealizedGain,
                       )}`}
                     >
                       {fmtUsd(windowed ? h.periodGain : h.unrealizedGain)}
-                      <span className="ml-1 text-xs">
-                        ({fmtPct(windowed ? h.periodGainPct : h.unrealizedGainPct)})
+                      <span className="ml-1 block text-[11px] sm:inline">
+                        {fmtPct(windowed ? h.periodGainPct : h.unrealizedGainPct)}
                       </span>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
+      </Section>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Allocation</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <AllocationDonut
-              data={data.holdings
-                .filter((h) => h.marketValue !== null)
-                .map((h) => ({ symbol: h.symbol, value: h.marketValue! }))}
-            />
-          </CardContent>
-        </Card>
-      </div>
+      <Section title="Allocation">
+        <AllocationDonut
+          data={data.holdings
+            .filter((h) => h.marketValue !== null)
+            .map((h) => ({ symbol: h.symbol, value: h.marketValue! }))}
+        />
+      </Section>
     </div>
   );
 }

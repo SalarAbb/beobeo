@@ -10,7 +10,7 @@
 
 ## R-001 · Give the app the evolution page's look
 - **Asked:** 2026-10-23
-- **Status:** open
+- **Status:** in progress
 - **Shipped on:** —
 - **In your words:** "Keep similar aesthetics for the website btw, in terms of font/coloring." "Use similar aesthetics of this html file (font/colors/visualization) in the actual website's UI."
 - **Done means:**
@@ -19,7 +19,7 @@
   - Hairline rules and quiet surfaces replace stacked shadows and cards; generous spacing
   - Charts keep the validated `viz.ts` palette; chips, pills and tooltips match the page's style
   - Every page screenshotted in light, dark and at phone width, and the personas' look scores don't drop
-- **Notes:** Ship page by page (dashboard first). The evolution page itself is the reference.
+- **Notes:** Ship page by page (dashboard first). The evolution page itself is the reference. 2026-10-25 (`evolve/2026-10-25`): fonts and light/dark tokens are live app-wide, card shadows are gone, and pills and the nav use the indigo accent. The dashboard is fully restyled (hairline summary strip, serif section titles over rules, mono numerals) and was checked in light, dark and at phone width. Remaining: convert transactions, tax center, compare, chat, accounts, account, positions and auth pages the same way, then confirm look scores held.
 
 ## R-002 · Keep expert metrics discoverable, not front-facing
 - **Asked:** 2026-10-23

@@ -99,9 +99,9 @@ it against each digest; items cite the theme keys that motivated them.
    typically and 28 s at worst; answers bury the yes/no under tables. Stream sooner,
    lead with a one-line verdict, keep tables for those who ask. Themes:
    `slow-chat-first-token`, `chat-too-long-jargony`, `chat-no-direct-on-track-answer`.
-2. **Label every icon button; make destructive actions undoable.** The trash icon on
-   `/transactions` has no accessible name and deletes instantly with no confirmation or
-   undo. Found by the explorer's safety scan. Themes: `unlabeled-buttons-*`.
+2. **Quiet the Tax Center's zero states.** "-$0.00" savings, rows of $0.00 boxes, and
+   jargon ("loss lot", "wash-sale rule") for users who've never sold. Lead with the
+   lots, or say "you owe nothing right now". Themes: `tax-center-noisy-zero-states`.
 3. **Tolerate dust in imports.** A sell that exceeds buys by 0.000001 drops the whole
    position from the dashboard total while the chart still counts it. Clamp dust and say
    so, instead of excluding the asset. Theme: `dashboard-value-mismatch-excluded-qqq`.
@@ -144,8 +144,8 @@ format: Status is `built`, `partial` or `missing`.
 | Product | Expert metrics discoverable, not front-facing | partial | Sharpe and volatility still front-facing (R-002) |
 | Product | Dividend income view | missing | backlog #4 (Olenna) |
 | Product | Keyboard layer (⌘K, shortcuts) | missing | backlog #5 |
-| Product | Phone layout | partial | sidebar clips content at 400px |
-| Product | Visual identity matching the evolution page | missing | R-001 |
+| Product | Phone layout | partial | top-bar shell and dashboard fit 400px; other pages not yet checked at phone width |
+| Product | Visual identity matching the evolution page | partial | tokens, fonts and the dashboard done; other pages next (R-001) |
 | Simulator | Personas with habits (policy) and judgment (LLM mind) | built | 10 personas |
 | Simulator | Real prices, no lookahead, live quotes today | built | Tiingo and Coinbase via the app's cache |
 | Simulator | Trades through the app's API | built | timed |
@@ -158,7 +158,7 @@ format: Status is `built`, `partial` or `missing`.
 | Simulator | Dividend transactions | missing | Olenna's income feedback is unreliable until this exists |
 | Loop | Journal, digest and insights | built | ~/beobeo-sim |
 | Loop | Theme lifecycle (ship, reopen, artifact) | built | |
-| Loop | /evolve ships on evolve/ branches | partial | built, first cycle not run yet |
+| Loop | /evolve ships on evolve/ branches | built | first cycle 2026-10-25 |
 | Loop | Weekly population audit (/evolve-agents) | partial | built, not run yet |
 | Loop | Safety valve (propose-only) | built | 5 unmerged branches or 2 failed checks |
 | Loop | Daily 08:00 schedule | partial | installer ready, not armed |
@@ -171,4 +171,5 @@ format: Status is `built`, `partial` or `missing`.
 One entry per cycle, newest first: date · branch · what shipped · theme ids
 answered · before/after signal.
 
+- **2026-10-25 · `evolve/2026-10-25`.** First loop cycle. (1) R-001 phase 1: the evolution page's fonts (Shippori Mincho / Hanken Grotesk / JetBrains Mono) and cool indigo tokens are live app-wide, card shadows are gone, and the dashboard was restyled into hairline-ruled chapters. (2) Phone shell: the sidebar becomes a top bar with a scrolling nav row, the dashboard no longer clips, and holdings drop Qty/Price on phones (`dashboard-mobile-clipped-layout`). (3) Undoable transaction delete plus labels on every icon button (`unlabeled-buttons-transactions`, backlog #2). Expected signal: mobile and unlabeled-button themes stop recurring, look scores hold or rise (3.4 baseline).
 - **2026-10-23 · genesis · `salarabb/phase_1`.** The loop is built: PLAN.md, `packages/sim` (10 personas named after Game of Thrones and Harry Potter characters, about 1,100 real-price trades), journal, digest, `/evolve`, `/evolve-agents`, the live evolution page. The first simulated day surfaced chat latency, verbosity and the missing verdict as the top themes. Two simulator bugs (ledger comparison, rounding oversell) were found and fixed the same day.

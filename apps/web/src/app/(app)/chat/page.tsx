@@ -247,8 +247,13 @@ export default function ChatPage() {
             placeholder="Ask about your portfolio…"
             disabled={streaming}
           />
-          <Button type="submit" size="icon" disabled={streaming || !input.trim()}>
-            <Send className="size-4" />
+          <Button
+            type="submit"
+            size="icon"
+            aria-label="Send message"
+            disabled={streaming || !input.trim()}
+          >
+            <Send aria-hidden className="size-4" />
           </Button>
         </form>
       </div>

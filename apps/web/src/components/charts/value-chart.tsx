@@ -121,9 +121,9 @@ export function ValueChart({ data }: { data: ValuePoint[] }) {
   const shown = hover ?? last;
 
   return (
-    <div>
-      <div className="mb-2 flex items-center justify-between">
-        <div className="flex items-center gap-4 text-xs">
+    <div className="min-w-0">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
           <span className="flex items-center gap-1.5">
             <span
               className="inline-block h-0.5 w-4 rounded"
@@ -154,9 +154,10 @@ export function ValueChart({ data }: { data: ValuePoint[] }) {
               key={r.key}
               variant="ghost"
               size="sm"
+              aria-pressed={range === r.key}
               className={cn(
-                "h-7 px-2 text-xs",
-                range === r.key && "bg-secondary font-semibold",
+                "h-7 rounded-full px-2.5 text-xs text-muted-foreground",
+                range === r.key && "bg-accent font-semibold text-primary",
               )}
               onClick={() => setRange(r.key)}
             >

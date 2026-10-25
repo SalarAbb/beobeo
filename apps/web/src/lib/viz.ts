@@ -21,14 +21,16 @@ export interface VizTheme {
   areaBottom: string;
 }
 
+// Neutrals (surface/text/grid) follow the app's cool identity tokens in
+// globals.css; series and gain/loss hues are the validated palette — keep them.
 export const VIZ: { light: VizTheme; dark: VizTheme } = {
   light: {
-    surface: "#fcfcfb",
-    textPrimary: "#0b0b0b",
-    textSecondary: "#52514e",
-    muted: "#898781",
-    grid: "#e1e0d9",
-    baseline: "#c3c2b7",
+    surface: "#ffffff",
+    textPrimary: "#15171c",
+    textSecondary: "#4a4e59",
+    muted: "#8a8f9c",
+    grid: "#e3e5ea",
+    baseline: "#c9ccd4",
     series: [
       "#2a78d6", // blue
       "#1baf7a", // aqua
@@ -45,12 +47,12 @@ export const VIZ: { light: VizTheme; dark: VizTheme } = {
     areaBottom: "rgba(42, 120, 214, 0.02)",
   },
   dark: {
-    surface: "#1a1a19",
-    textPrimary: "#ffffff",
-    textSecondary: "#c3c2b7",
-    muted: "#898781",
-    grid: "#2c2c2a",
-    baseline: "#383835",
+    surface: "#161920",
+    textPrimary: "#eceef3",
+    textSecondary: "#b4b9c5",
+    muted: "#7d8392",
+    grid: "#262a33",
+    baseline: "#3a3f4a",
     series: [
       "#3987e5",
       "#199e70",

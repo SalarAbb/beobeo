@@ -311,9 +311,10 @@ export default function ComparePage() {
               variant="ghost"
               size="icon"
               className="size-8"
+              aria-label="Cancel adding a benchmark"
               onClick={() => setAddingCustom(false)}
             >
-              <X className="size-4" />
+              <X aria-hidden className="size-4" />
             </Button>
           </div>
         ) : (

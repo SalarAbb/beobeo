@@ -4,77 +4,88 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /* Beobeo identity (R-001): mirrors packages/sim/report/style.css — cool
+     indigo-biased neutrals, one ai-iro indigo accent, semantic good/warn/bad.
+     Raw tokens first; the shadcn slots below map onto them. */
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --ink: #15171c;
+  --ink-2: #4a4e59;
+  --ink-3: #6e7381; /* the page's muted #8a8f9c, darkened to pass AA on small text */
+  --rule: #e3e5ea;
+  --ai: #264478; /* ai-iro, Japanese indigo — the one accent */
+  --ai-soft: #e6ebf4;
+  --good: #0f7a3d;
+  --good-soft: #e3f3e9;
+  --warn: #9a5b00;
+  --warn-soft: #fbf0dc;
+  --bad: #c03636;
+  --bad-soft: #fbe6e6;
+
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --background: var(--bg);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  --primary: var(--ai);
+  --primary-foreground: #ffffff;
+  --secondary: #eceef2;
+  --secondary-foreground: var(--ink);
+  --muted: #eceef2;
+  --muted-foreground: var(--ink-3);
+  --accent: var(--ai-soft);
+  --accent-foreground: var(--ink);
+  --destructive: var(--bad);
+  --border: var(--rule);
+  --input: #d9dce3;
+  --ring: var(--ai);
+  --chart-1: #2a78d6;
+  --chart-2: #1baf7a;
+  --chart-3: #eda100;
+  --chart-4: #4a3aa7;
+  --chart-5: #e87ba4;
+  --sidebar: var(--bg);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--ai);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--ai-soft);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--rule);
+  --sidebar-ring: var(--ai);
   /* financial semantics */
-  --gain: oklch(0.627 0.17 149.2);
-  --loss: oklch(0.577 0.245 27.325);
+  --gain: var(--good);
+  --loss: var(--bad);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-  --gain: oklch(0.696 0.17 162.48);
-  --loss: oklch(0.704 0.191 22.216);
+  color-scheme: dark;
+  --bg: #0f1115;
+  --surface: #161920;
+  --ink: #eceef3;
+  --ink-2: #b4b9c5;
+  --ink-3: #8b91a0;
+  --rule: #262a33;
+  --ai: #9db4e0;
+  --ai-soft: #1d2433;
+  --good: #4cc27f;
+  --good-soft: #13261b;
+  --warn: #e2a33b;
+  --warn-soft: #2a2112;
+  --bad: #ef7c7c;
+  --bad-soft: #2c1717;
+
+  --primary-foreground: #0f1115;
+  --secondary: #1c1f27;
+  --muted: #1c1f27;
+  --input: #30343f;
+  --chart-1: #3987e5;
+  --chart-2: #199e70;
+  --chart-3: #c98500;
+  --chart-4: #9085e9;
+  --chart-5: #d55181;
+  --sidebar-primary-foreground: #0f1115;
 }
 
 @theme inline {
@@ -115,8 +126,14 @@
   --color-sidebar-ring: var(--sidebar-ring);
   --color-gain: var(--gain);
   --color-loss: var(--loss);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-ink-2: var(--ink-2);
+  --color-good-soft: var(--good-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad-soft: var(--bad-soft);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-data);
+  --font-display: var(--font-heading);
 }
 
 @layer base {
@@ -125,5 +142,16 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  /* Display serif: page titles and hero numbers only — sparingly. */
+  h1 {
+    @apply font-display font-bold tracking-[0.01em];
+  }
+}
+
+@layer components {
+  /* Small uppercase section label, as on the evolution page. */
+  .eyebrow {
+    @apply text-[11px] font-medium tracking-[0.14em] text-muted-foreground uppercase;
   }
 }
