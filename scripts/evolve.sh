@@ -103,7 +103,10 @@ UNMERGED="$(git -C "$REPO" for-each-ref --format='%(refname:short)' --no-merged 
 START="$BASE"
 if git -C "$REPO" rev-parse -q --verify "refs/heads/evolve/$DATE" >/dev/null; then
   # Already merged earlier today? Fast-forward it to $BASE so new rounds build on the latest main line.
-  git -C "$REPO" merge-base --is-ancestor "evolve/$DATE" "$BASE" && git -C "$REPO" branch -f "evolve/$DATE" "$BASE"
+  if git -C "$REPO" merge-base --is-ancestor "evolve/$DATE" "$BASE"; then
+    git -C "$WT" checkout -q --detach   # the worktree may hold the branch; git won't move a checked-out branch
+    git -C "$REPO" branch -f "evolve/$DATE" "$BASE" || exit 1
+  fi
   START="evolve/$DATE"
 fi
 git -C "$WT" checkout --detach "$START" || exit 1
