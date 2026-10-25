@@ -5,6 +5,7 @@ import {
   planSale,
   ripeningSoon,
   summarizeHarvest,
+  taxOwedSoFar,
   detectWashSaleBlocks,
   isLongTerm,
   type LossLotCandidate,
@@ -180,6 +181,7 @@ export function computeTaxNow(userId: string, portfolioId?: string) {
       // a YTD gain is worth more than one heading straight to carryforward.
       ytdShortTermGain: profile.ytdShortTermGain.toNumber(),
       ytdLongTermGain: profile.ytdLongTermGain.toNumber(),
+      taxOwedSoFarUsd: taxOwedSoFar(profile).toNumber(),
       ripeningSoon: soon,
       harvestPreview: harvest.sales.slice(0, 5).map((s) => serializeSale(s, asOf)),
       harvestOpportunityCount: harvest.sales.length,

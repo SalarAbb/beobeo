@@ -1,13 +1,12 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { PiggyBank } from "lucide-react";
 import { useState } from "react";
+import { Section, StatStrip, StatTile } from "@/components/page-section";
 import { usePortfolio } from "@/components/portfolio-context";
 import { LossBreakdownBar } from "@/components/tax-center/loss-breakdown-bar";
 import { PlanView } from "@/components/tax-center/plan-view";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTRPC } from "@/lib/trpc";
@@ -29,25 +28,29 @@ export function HarvestTab() {
   }
 
   const d = harvest.data;
+  const hasPlan = !!d && d.sales.length > 0;
 
   return (
-    <div className="grid gap-4">
-      <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
-          <p className="text-xs text-muted-foreground">
-            Sells every eligible unrealized loss (not blocked by the wash-sale rule) —
-            year-end harvesting is just this, run before December 31.
-          </p>
+    <div className="grid gap-10">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <p className="max-w-md text-sm text-muted-foreground">
+          Sell the positions that are below what you paid, so the loss cancels out gains or
+          trims your income tax. To count for this year, sell before December 31.
+        </p>
+        <div className="grid gap-1.5">
+          <label htmlFor="harvest-cap" className="eyebrow">
+            Take losses up to
+          </label>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Cap losses at</span>
             <span className="text-muted-foreground">$</span>
             <Input
+              id="harvest-cap"
               value={capInput}
               onChange={(e) => setCapInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && applyCap()}
-              placeholder="no cap"
+              placeholder="no limit"
               inputMode="decimal"
-              className="w-28"
+              className="data w-28"
             />
             <Button variant="outline" onClick={applyCap}>
               Apply
@@ -64,37 +67,58 @@ export function HarvestTab() {
               </Button>
             )}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {harvest.isLoading || !d ? (
         <Skeleton className="h-64 w-full" />
       ) : (
         <>
-          <Card className="border-primary/20 bg-secondary/40">
-            <CardContent className="grid gap-4 py-5">
-              <div className="flex items-center gap-3">
-                <PiggyBank className="size-6 shrink-0 text-muted-foreground" />
-                <div>
-                  <p className="figure text-xl">
-                    {fmtUsd(d.estTaxSavedUsd)} estimated tax savings
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {d.sales.length} lot{d.sales.length === 1 ? "" : "s"} harvested ·{" "}
-                    {fmtUsd(d.totalProceeds)} in proceeds
-                  </p>
-                </div>
-              </div>
-              <LossBreakdownBar breakdown={d.breakdown} />
-            </CardContent>
-          </Card>
+          {hasPlan ? (
+            <>
+              <StatStrip cols="grid-cols-1 sm:grid-cols-3">
+                <StatTile
+                  hero={false}
+                  label="Tax this saves"
+                  value={fmtUsd(d.estTaxSavedUsd)}
+                  tone="text-gain"
+                  subTone="text-muted-foreground"
+                  sub="estimated, at your saved rates"
+                />
+                <StatTile
+                  hero={false}
+                  label="Losses taken"
+                  value={fmtUsd(d.breakdown.totalHarvestedLossUsd)}
+                  sub={`${d.sales.length} ${d.sales.length === 1 ? "sale" : "sales"}`}
+                />
+                <StatTile
+                  hero={false}
+                  label="Cash freed up"
+                  value={fmtUsd(d.totalProceeds)}
+                  sub="buy something different to stay invested"
+                />
+              </StatStrip>
+              <Section title="Where the losses go">
+                <LossBreakdownBar breakdown={d.breakdown} />
+              </Section>
+            </>
+          ) : (
+            <p className="text-lg">
+              Nothing to harvest right now
+              {d.blocked.length > 0
+                ? ": the positions that are down were bought again recently."
+                : ": none of your positions are below what you paid."}
+            </p>
+          )}
 
-          <PlanView
-            sales={d.sales}
-            blocked={d.blocked}
-            totalProceeds={d.totalProceeds}
-            startingRealizedGain={d.startingRealizedGain}
-          />
+          {(hasPlan || d.blocked.length > 0) && (
+            <PlanView
+              sales={d.sales}
+              blocked={d.blocked}
+              totalProceeds={d.totalProceeds}
+              startingRealizedGain={d.startingRealizedGain}
+            />
+          )}
         </>
       )}
     </div>

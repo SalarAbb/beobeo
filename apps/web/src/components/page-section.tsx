@@ -71,12 +71,15 @@ export function StatTile({
   value,
   sub,
   tone,
+  subTone,
   hero = true,
 }: {
   label: string;
   value: string;
   sub?: string;
   tone?: string;
+  /** Defaults to `tone` (a delta under a value); set it when the sub-line is a description. */
+  subTone?: string;
   hero?: boolean;
 }) {
   return (
@@ -88,7 +91,9 @@ export function StatTile({
         {value}
       </p>
       {sub && (
-        <p className={`data mt-0.5 text-xs ${tone ?? "text-muted-foreground"}`}>{sub}</p>
+        <p className={`data mt-0.5 text-xs ${subTone ?? tone ?? "text-muted-foreground"}`}>
+          {sub}
+        </p>
       )}
     </div>
   );

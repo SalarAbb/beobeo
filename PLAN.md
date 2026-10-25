@@ -114,17 +114,14 @@ it against each digest; items cite the theme keys that motivated them.
    most often (this year's realized gains, lots turning long-term soon), and remember
    facts the user stated (age, targets) across threads. Themes:
    `slow-chat-first-token`, `chat-too-long-jargony`, `chat-no-direct-on-track-answer`.
-2. **Quiet the Tax Center's zero states.** "-$0.00" savings, rows of $0.00 boxes, and
-   jargon ("loss lot", "wash-sale rule") for users who've never sold. Lead with the
-   lots, or say "you owe nothing right now". Themes: `tax-center-noisy-zero-states`.
-3. **Tolerate dust in imports.** A sell that exceeds buys by 0.000001 drops the whole
+2. **Tolerate dust in imports.** A sell that exceeds buys by 0.000001 drops the whole
    position from the dashboard total while the chart still counts it. Clamp dust and say
    so, instead of excluding the asset. Theme: `dashboard-value-mismatch-excluded-qqq`.
-4. **Dividend income view.** Income per month and year, yield on cost (Olenna). Needs
+3. **Dividend income view.** Income per month and year, yield on cost (Olenna). Needs
    simulated dividends first (see the gaps below). Theme: `income-view-monthly-dividends-yoc`.
-5. **Power layer.** ⌘K command palette (add transaction, jump to symbol, switch
+4. **Power layer.** ⌘K command palette (add transaction, jump to symbol, switch
    portfolio) and keyboard shortcuts (Hermione).
-6. **Latency instrumentation.** `Server-Timing` on tRPC and a dev overlay, so
+5. **Latency instrumentation.** `Server-Timing` on tRPC and a dev overlay, so
    personas and humans see the same numbers.
 
 **Loop / simulator gaps** (infrastructure, not product):
@@ -189,6 +186,7 @@ format: Status is `built`, `partial` or `missing`.
 One entry per cycle, newest first: date · branch · what shipped · theme ids
 answered · before/after signal.
 
+- **2026-10-25 · Tax Center in the evolution look, zero states quieted.** All five tabs converted (R-001): page header, sideways-scrolling tab pills, hairline stat strips, serif sections over rules, ledger-style All Lots, sectioned Tax Profile. Each tab now opens with a plain verdict sentence ("You owe no capital-gains tax right now: you haven't sold anything at a gain this year", new tested core `taxOwedSoFar`), and sections appear only when they hold something, so no more "-$0.00" (fixed app-wide in `fmtUsd`) or rows of $0.00 boxes. On-hold losses are grouped per symbol and name the triggering buy, its account and the date it's safe to sell (petyr's ask). Tabs deep-link with `?tab=`. · R-001, `tax-center-noisy-zero-states` · expected signal: luna/augusta/petyr stop raising tax-center zero-state and jargon notes; look score holds or rises.
 - **2026-10-25 · Chat: snapshot preloaded, verdict first.** Every chat turn now starts with a portfolio snapshot (holdings and weights, totals, how much was put in and how fast, accounts, saved tax rates) in the system prompt, so most questions need no tool call. Thinking runs at low effort, and the prompt was rewritten: answer in the first sentence, ~120 words, plain words, state assumptions instead of asking, turn saved tax rates into dollars, and lean toward one of the user's named options. Probed on 5 sim personas before → after: total time Luna 22s → 6.7s (first word 1.9s, no tool calls), Samwell over 60s → 15s with "Roughly yes" up front, Fred ~20s → 8s, Gilderoy 37s → 17s, Olenna 35s → 21s. Tool-heavy questions still take 5–15s to the first word. · `slow-chat-first-token`, `chat-too-long-jargony`, `chat-no-direct-on-track-answer`, `chat-ignores-stated-tax-profile` · expected signal: chat:first-token p50 under 3s, chat:total p50 under 12s, fewer "wall of text" notes.
 
 - **2026-10-25 · R-001 phase 2: position, transactions, accounts, account pages.** The dashboard's building blocks (`PageHeader`, `Section`, `StatStrip`, `StatTile`) moved to a shared `page-section.tsx`, and four more pages now use them: hairline stat strips, serif section titles over rules, mono numerals, and quiet type pills on transactions. Found and fixed along the way: the position page crashed for anyone with two trades on the same day (duplicate avg-cost step timestamps), and past 12 trades the marker quantity labels smeared into an unreadable band, so they're now plain arrows. · R-001 · expected signal: look scores hold or rise; no `error-/positions` themes.

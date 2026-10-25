@@ -60,6 +60,7 @@ export {
   planHighestCostFirst,
   ripeningSoon,
   summarizeHarvest,
+  taxOwedSoFar,
   type TaxLot,
   type TaxProfile,
   type RipeningInfo,

@@ -5,7 +5,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { AssetLogo } from "@/components/asset-logo";
 import { usePortfolio } from "@/components/portfolio-context";
-import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -16,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useTRPC } from "@/lib/trpc";
-import { fmtUsd } from "@/lib/viz";
+import { fmtUsd, gainClass } from "@/lib/viz";
 import { cn } from "@/lib/utils";
 
 type SortKey = "symbol" | "marketValue" | "unrealizedGain" | "openedAt";
@@ -84,46 +83,49 @@ export function AllLotsTab() {
 
   if (sorted.length === 0) {
     return (
-      <Card>
-        <CardContent className="py-12 text-center text-sm text-muted-foreground">
-          No open lots in taxable accounts.
-        </CardContent>
-      </Card>
+      <p className="border-y py-12 text-center text-sm text-muted-foreground">
+        Nothing here: you have no holdings in taxable accounts (retirement accounts
+        aren&apos;t taxed when you sell).
+      </p>
     );
   }
 
   return (
-    <Card>
-      <CardContent className="px-0">
+    <div className="grid gap-3">
+      <p className="text-sm text-muted-foreground">
+        Every batch of shares you bought, listed separately. Each has its own price paid and
+        holding time, and that is what decides the tax when you sell it.
+      </p>
+      <div className="min-w-0 border-t">
         <Table>
           <TableHeader>
-            <TableRow>
+            <TableRow className="hover:bg-transparent">
               <SortableHead
                 label="Asset"
                 sortKey="symbol"
                 sort={sort}
                 onSort={toggleSort}
                 align="left"
-                className="pl-6"
+                className="pl-1"
               />
-              <TableHead>Account</TableHead>
-              <TableHead className="text-right">Qty</TableHead>
-              <SortableHead label="Opened" sortKey="openedAt" sort={sort} onSort={toggleSort} />
-              <TableHead className="text-right">Term</TableHead>
+              <TableHead className="hidden md:table-cell">Account</TableHead>
+              <TableHead className="hidden text-right sm:table-cell">Qty</TableHead>
+              <SortableHead label="Bought" sortKey="openedAt" sort={sort} onSort={toggleSort} />
+              <TableHead className="hidden text-right sm:table-cell">Held</TableHead>
               <SortableHead label="Value" sortKey="marketValue" sort={sort} onSort={toggleSort} />
               <SortableHead
-                label="Unrealized"
+                label="Gain if sold"
                 sortKey="unrealizedGain"
                 sort={sort}
                 onSort={toggleSort}
-                className="pr-6"
+                className="pr-1"
               />
             </TableRow>
           </TableHeader>
           <TableBody>
             {sorted.map((l) => (
               <TableRow key={l.lotId}>
-                <TableCell className="pl-6">
+                <TableCell className="pl-1">
                   <Link
                     href={`/positions/${l.assetId}`}
                     className="flex items-center gap-2.5 hover:underline"
@@ -132,24 +134,25 @@ export function AllLotsTab() {
                     <span className="font-medium">{l.symbol}</span>
                   </Link>
                 </TableCell>
-                <TableCell className="text-muted-foreground">{l.accountName}</TableCell>
-                <TableCell className="text-right data">
+                <TableCell className="hidden text-muted-foreground md:table-cell">
+                  {l.accountName}
+                </TableCell>
+                <TableCell className="hidden text-right data text-[13px] sm:table-cell">
                   {l.quantity.toLocaleString(undefined, { maximumFractionDigits: 6 })}
                 </TableCell>
-                <TableCell className="text-right text-muted-foreground">
+                <TableCell className="whitespace-nowrap text-right data text-[13px] text-muted-foreground">
                   {l.openedAt.slice(0, 10)}
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="hidden text-right sm:table-cell">
                   <span className="text-xs text-muted-foreground">
-                    {l.isLongTerm ? "Long-term" : "Short-term"}
+                    {l.isLongTerm ? "over a year" : "under a year"}
                   </span>
                 </TableCell>
-                <TableCell className="text-right data">{fmtUsd(l.marketValue)}</TableCell>
+                <TableCell className="text-right data text-[13px]">
+                  {fmtUsd(l.marketValue)}
+                </TableCell>
                 <TableCell
-                  className={cn(
-                    "pr-6 text-right data",
-                    l.unrealizedGain >= 0 ? "text-gain" : "text-loss",
-                  )}
+                  className={cn("pr-1 text-right data text-[13px]", gainClass(l.unrealizedGain))}
                 >
                   {fmtUsd(l.unrealizedGain)}
                 </TableCell>
@@ -157,7 +160,7 @@ export function AllLotsTab() {
             ))}
           </TableBody>
         </Table>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

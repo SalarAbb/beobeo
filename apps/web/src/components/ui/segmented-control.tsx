@@ -13,14 +13,14 @@ export function SegmentedControl<T extends string>({
   options: { value: T; label: string }[];
 }) {
   return (
-    <div className="flex gap-0.5 rounded-full border bg-card p-0.5">
+    <div className="flex w-max gap-0.5 rounded-full border bg-card p-0.5">
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
           aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
-          className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+          className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
             value === o.value
               ? "bg-accent text-primary"
               : "text-muted-foreground hover:text-foreground"

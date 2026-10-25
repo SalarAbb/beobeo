@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { use, useState } from "react";
+import { PageHeader } from "@/components/page-section";
 import { usePortfolio } from "@/components/portfolio-context";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { AllLotsTab } from "@/components/tax-center/all-lots-tab";
@@ -19,16 +20,27 @@ const TABS: { value: Tab; label: string }[] = [
   { value: "profile", label: "Tax Profile" },
 ];
 
-export default function TaxCenterPage() {
+const isTab = (v: unknown): v is Tab => TABS.some((t) => t.value === v);
+
+/** `?tab=cash` deep-links a tab (also how the sim screenshots each one). */
+export default function TaxCenterPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const requested = use(searchParams).tab;
   const { activeName } = usePortfolio();
-  const [tab, setTab] = useState<Tab>("now");
+  const [tab, setTab] = useState<Tab>(isTab(requested) ? requested : "now");
 
   return (
-    <div className="mx-auto grid max-w-5xl gap-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <h1 className="text-3xl">Tax Center</h1>
-        <span className="text-sm text-muted-foreground">· {activeName}</span>
-        <div className="ml-auto">
+    <div className="mx-auto grid w-full max-w-5xl grid-cols-1 gap-8">
+      <div className="grid gap-4">
+        <PageHeader
+          title="Tax Center"
+          subtitle={`${activeName} · what selling would cost you, and how to pay less`}
+        />
+        {/* Five tabs don't fit a phone: the row scrolls sideways instead of wrapping. */}
+        <div className="-mx-1 overflow-x-auto px-1 pb-1">
           <SegmentedControl value={tab} onChange={setTab} options={TABS} />
         </div>
       </div>

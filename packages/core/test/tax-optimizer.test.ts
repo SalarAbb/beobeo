@@ -7,6 +7,7 @@ import {
   planSale,
   ripeningSoon,
   summarizeHarvest,
+  taxOwedSoFar,
   type TaxLot,
   type TaxProfile,
 } from "../src/tax-optimizer";
@@ -426,5 +427,29 @@ describe("summarizeHarvest", () => {
   it("ignores gain sales — only losses count as harvested", () => {
     const b = summarizeHarvest(baseProfile, [sale(500, false), sale(-1000, false)]);
     expect(b.totalHarvestedLossUsd.toNumber()).toBeCloseTo(1000, 8);
+  });
+});
+
+describe("taxOwedSoFar", () => {
+  it("taxes each bucket at its own rate", () => {
+    // ST $1,000 × 32% = $320; LT $2,000 × 15% = $300 -> $620.
+    const p = { ...baseProfile, ytdShortTermGain: D(1000), ytdLongTermGain: D(2000) };
+    expect(taxOwedSoFar(p).toNumber()).toBeCloseTo(620, 8);
+  });
+
+  it("cross-nets a short-term loss against long-term gains first", () => {
+    // ST −$1,500 cancels $1,500 of the $2,000 LT gain -> $500 × 15% = $75.
+    const p = { ...baseProfile, ytdShortTermGain: D(-1500), ytdLongTermGain: D(2000) };
+    expect(taxOwedSoFar(p).toNumber()).toBeCloseTo(75, 8);
+  });
+
+  it("a carryforward that covers the gains leaves nothing owed (never negative)", () => {
+    // ST $1,000 − $1,500 carryforward = −$500 net loss -> owes $0, not −$160.
+    const p = { ...baseProfile, ytdShortTermGain: D(1000), carryforwardShortTerm: D(1500) };
+    expect(taxOwedSoFar(p).toNumber()).toBe(0);
+  });
+
+  it("owes nothing with no sales", () => {
+    expect(taxOwedSoFar(baseProfile).toNumber()).toBe(0);
   });
 });
