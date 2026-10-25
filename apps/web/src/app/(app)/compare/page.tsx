@@ -2,13 +2,13 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Check, ChevronDown, Plus, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { AssetLogo } from "@/components/asset-logo";
 import { usePortfolio } from "@/components/portfolio-context";
 import { CompareChart, benchColor } from "@/components/charts/compare-chart";
 import { AssetPicker } from "@/components/transactions/asset-picker";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader, Section, StatStrip, StatTile } from "@/components/page-section";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTRPC } from "@/lib/trpc";
@@ -22,8 +22,71 @@ interface BenchAsset {
   class: string;
 }
 
-const fmtXirr = (v: number | null) =>
-  v === null ? "—" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(2)}% / yr`;
+/** Literal class strings per tile count so Tailwind sees them. */
+const STRIP_COLS: Record<number, string> = {
+  2: "grid-cols-2",
+  3: "grid-cols-2 lg:grid-cols-3",
+  4: "grid-cols-2 lg:grid-cols-4",
+  5: "grid-cols-2 lg:grid-cols-5",
+};
+
+/** Your value minus the benchmark's, to the cent; under a cent is a tie. */
+const edge = (delta: number | null) =>
+  delta === null ? null : Math.abs(delta) < 0.005 ? 0 : delta;
+
+const edgeLine = (delta: number | null) => {
+  const d = edge(delta);
+  if (d === null) return undefined;
+  if (d === 0) return "dead even with you";
+  return d > 0 ? `you're ${fmtUsd(d)} ahead` : `you're ${fmtUsd(-d)} behind`;
+};
+
+/** One plain sentence first: are you ahead of each benchmark, and by how much. */
+function Verdict({
+  subject,
+  value,
+  benchmarks,
+}: {
+  subject: string;
+  value: number;
+  benchmarks: { assetId: string; symbol: string; series: { value: number }[] }[];
+}) {
+  const rows = benchmarks.map((b) => ({
+    symbol: b.symbol,
+    delta: edge(value - (b.series[b.series.length - 1]?.value ?? value))!,
+  }));
+  const ahead = rows.filter((r) => r.delta > 0);
+  const behind = rows.filter((r) => r.delta < 0);
+  const even = rows.filter((r) => r.delta === 0);
+  const list = (rs: typeof rows) =>
+    rs.map((r, i) => (
+      <span key={r.symbol}>
+        {i > 0 && (i === rs.length - 1 ? " and " : ", ")}
+        {r.symbol}
+        {r.delta !== 0 && (
+          <>
+            {" "}by <span className="data">{fmtUsd(Math.abs(r.delta))}</span>
+          </>
+        )}
+      </span>
+    ));
+  const clauses: ReactNode[] = [];
+  if (ahead.length) clauses.push(<span key="a">ahead of {list(ahead)}</span>);
+  if (behind.length) clauses.push(<span key="b">behind {list(behind)}</span>);
+  if (even.length) clauses.push(<span key="e">dead even with {list(even)}</span>);
+  return (
+    <p className="max-w-3xl text-[15px] leading-relaxed">
+      {subject} is{" "}
+      {clauses.map((c, i) => (
+        <span key={i}>
+          {i > 0 && (i === clauses.length - 1 ? ", and " : ", ")}
+          {c}
+        </span>
+      ))}
+      .
+    </p>
+  );
+}
 
 const fmtSignedPct = (v: number | null) =>
   v === null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
@@ -60,7 +123,7 @@ const METRIC_ROWS: {
   signed: boolean;
 }[] = [
   {
-    name: "Annual return",
+    name: "Yearly rate",
     term: "XIRR",
     explainer: "what the same money earns per year",
     value: (c) => (c.xirr === null ? null : c.xirr * 100),
@@ -69,7 +132,7 @@ const METRIC_ROWS: {
     signed: true,
   },
   {
-    name: "Total return",
+    name: "Total growth",
     term: "TWR",
     explainer: "overall growth, ignoring deposit timing",
     value: (c) => c.metrics.twr,
@@ -78,8 +141,8 @@ const METRIC_ROWS: {
     signed: true,
   },
   {
-    name: "Volatility",
-    term: "",
+    name: "Swings",
+    term: "volatility",
     explainer: "bumpiness of the ride — lower is calmer",
     value: (c) => c.metrics.volatility,
     format: fmtAbsPct,
@@ -96,7 +159,7 @@ const METRIC_ROWS: {
     signed: false,
   },
   {
-    name: "Risk-adjusted",
+    name: "Reward for risk",
     term: "Sharpe",
     explainer: "reward per unit of risk — above 1 is good",
     value: (c) => c.metrics.sharpe,
@@ -112,11 +175,9 @@ function MetricsTable({ columns }: { columns: MetricColumn[] }) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b text-left">
-            <th className="py-2 pr-4 font-normal text-muted-foreground">
-              Metric
-            </th>
+            <th className="eyebrow py-2 pr-4 font-normal">Measure</th>
             {columns.map((c) => (
-              <th key={c.key} className="px-3 py-2 text-right font-medium">
+              <th key={c.key} className="whitespace-nowrap px-3 py-2 text-right font-medium">
                 <span className="inline-flex items-center gap-1.5">
                   <span
                     className="inline-block size-2 rounded-full"
@@ -144,7 +205,7 @@ function MetricsTable({ columns }: { columns: MetricColumn[] }) {
                   <div className="flex items-baseline gap-1.5">
                     <span className="text-sm font-medium">{row.name}</span>
                     {row.term && (
-                      <span className="text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
+                      <span className="eyebrow text-[10px]">
                         {row.term}
                       </span>
                     )}
@@ -241,16 +302,22 @@ export default function ComparePage() {
           .join(" + ") || "Selection";
 
   return (
-    <div className="mx-auto grid max-w-5xl gap-4">
-      <div>
-        <h1 className="text-3xl">Compare</h1>
-        <p className="text-sm text-muted-foreground">
-          What if every dollar you invested — same dates, same amounts — had
-          gone into a benchmark instead?
-        </p>
+    <div className="mx-auto grid w-full max-w-5xl grid-cols-1 gap-12">
+      <div className="grid gap-5">
+        <PageHeader
+          title="Compare"
+          subtitle="What if every dollar you invested, on the same dates, had gone into a benchmark instead?"
+        />
+        {data && lastP && data.benchmarks.length > 0 && (
+          <Verdict
+            subject={scopeIds.length === 0 ? "Your portfolio" : scopeLabel}
+            value={lastP.value}
+            benchmarks={data.benchmarks}
+          />
+        )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="-mt-6 flex flex-wrap items-center gap-2">
         <span className="text-sm text-muted-foreground">Benchmarks:</span>
         {presets.isLoading && <Skeleton className="h-8 w-64" />}
         {chips.map((p) => {
@@ -271,7 +338,7 @@ export default function ComparePage() {
                     : "Click to add to comparison"
               }
               className={cn(
-                "h-8 gap-1.5 transition-all",
+                "h-8 gap-1.5 rounded-full transition-all",
                 active
                   ? "bg-secondary font-semibold"
                   : "opacity-55 hover:opacity-100",
@@ -328,177 +395,149 @@ export default function ComparePage() {
           </Button>
         )}
 
-        <span className="ml-auto" />
-        <span className="text-sm text-muted-foreground">Comparing:</span>
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              className={cn(
-                "h-8",
-                scopeIds.length > 0 && "border-primary bg-secondary font-semibold",
-              )}
-            >
-              {scopeLabel}
-              <ChevronDown className="ml-1 size-3.5 opacity-60" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-64 p-2" align="end">
-            <button
-              className={cn(
-                "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-secondary",
-                scopeIds.length === 0 && "font-semibold",
-              )}
-              onClick={() => setScopeIds([])}
-            >
-              Whole portfolio
-            </button>
-            <div className="my-1 border-t" />
-            {holdings.map((h) => (
-              <button
-                key={h.assetId}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-secondary"
-                onClick={() => toggleScope(h.assetId)}
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Comparing:</span>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn(
+                  "h-8 rounded-full",
+                  scopeIds.length > 0 &&
+                    "border-primary/40 bg-accent font-semibold text-primary hover:bg-accent",
+                )}
               >
-                <input
-                  type="checkbox"
-                  readOnly
-                  checked={scopeIds.includes(h.assetId)}
-                  className="accent-primary"
-                />
-                <AssetLogo symbol={h.symbol} assetClass={h.class} size={18} />
-                <span className="font-medium">{h.symbol}</span>
+                {scopeLabel}
+                <ChevronDown className="ml-1 size-3.5 opacity-60" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-2" align="end">
+              <button
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-secondary",
+                  scopeIds.length === 0 && "font-semibold",
+                )}
+                onClick={() => setScopeIds([])}
+              >
+                Whole portfolio
               </button>
-            ))}
-            {holdings.length === 0 && (
-              <p className="px-2 py-1.5 text-xs text-muted-foreground">
-                No holdings yet
-              </p>
-            )}
-          </PopoverContent>
-        </Popover>
+              <div className="my-1 border-t" />
+              {holdings.map((h) => (
+                <button
+                  key={h.assetId}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-secondary"
+                  onClick={() => toggleScope(h.assetId)}
+                >
+                  <input
+                    type="checkbox"
+                    readOnly
+                    checked={scopeIds.includes(h.assetId)}
+                    className="accent-primary"
+                  />
+                  <AssetLogo symbol={h.symbol} assetClass={h.class} size={18} />
+                  <span className="font-medium">{h.symbol}</span>
+                </button>
+              ))}
+              {holdings.length === 0 && (
+                <p className="px-2 py-1.5 text-xs text-muted-foreground">
+                  No holdings yet
+                </p>
+              )}
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
 
       {compare.isLoading || !data ? (
         <Skeleton className="h-96 w-full" />
       ) : data.portfolio.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-sm text-muted-foreground">
-            {scopeIds.length > 0
-              ? "No transactions in the selected assets."
-              : "Add some transactions first — the comparison replays your actual purchase history."}
-          </CardContent>
-        </Card>
+        <p className="text-sm text-muted-foreground">
+          {scopeIds.length > 0
+            ? "No transactions in the selected assets."
+            : "Add some transactions first: the comparison replays your actual purchase history."}
+        </p>
       ) : (
         <>
-          <div
-            className={cn(
-              "grid gap-4",
-              data.benchmarks.length <= 1
-                ? "grid-cols-2"
-                : "grid-cols-2 lg:grid-cols-3",
-            )}
-          >
-            <Card className="py-4">
-              <CardContent className="px-4">
-                <p className="text-xs text-muted-foreground">
-                  {scopeIds.length === 0 ? "Your portfolio" : scopeLabel}
-                </p>
-                <p className="figure mt-1 text-2xl">
-                  {fmtUsd(lastP?.value ?? null)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  <span className="data">{fmtXirr(data.portfolioXirr)}</span> · invested{" "}
-                  <span className="data">{fmtUsd(lastP?.invested ?? null, 0)}</span>
-                </p>
-              </CardContent>
-            </Card>
+          <StatStrip cols={STRIP_COLS[1 + data.benchmarks.length] ?? STRIP_COLS[5]!}>
+            <StatTile
+              className={data.benchmarks.length % 2 === 0 ? "col-span-2 lg:col-span-1" : undefined}
+              label={scopeIds.length === 0 ? "Your portfolio" : scopeLabel}
+              value={fmtUsd(lastP?.value ?? null)}
+              sub={`invested ${fmtUsd(lastP?.invested ?? null, 0)}`}
+              subTone="text-muted-foreground"
+              hero={data.benchmarks.length < 3}
+            />
             {data.benchmarks.map((b, i) => {
               const last = b.series[b.series.length - 1];
-              const delta =
-                lastP && last ? lastP.value - last.value : null;
+              const delta = lastP && last ? lastP.value - last.value : null;
               return (
-                <Card key={b.assetId} className="py-4">
-                  <CardContent className="px-4">
-                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <StatTile
+                  key={b.assetId}
+                  label={
+                    <>
                       <span
-                        className="inline-block size-2 rounded-full"
+                        aria-hidden
+                        className="mr-1.5 inline-block size-2 rounded-full"
                         style={{ background: benchColor(theme, i) }}
                       />
-                      {b.symbol} (same cash flows)
-                    </p>
-                    <p className="figure mt-1 text-2xl">
-                      {fmtUsd(last?.value ?? null)}
-                    </p>
-                    <p className="text-xs">
-                      <span className="text-muted-foreground">
-                        <span className="data">{fmtXirr(b.xirr)}</span> · your edge{" "}
-                      </span>
-                      <span className={cn("data font-medium", gainClass(delta))}>
-                        {delta !== null && delta > 0 ? "+" : ""}
-                        {fmtUsd(delta)}
-                      </span>
-                    </p>
-                  </CardContent>
-                </Card>
+                      {b.symbol} instead
+                    </>
+                  }
+                  value={fmtUsd(last?.value ?? null)}
+                  sub={edgeLine(delta)}
+                  subTone={gainClass(delta)}
+                  hero={data.benchmarks.length < 3}
+                />
               );
             })}
-          </div>
+          </StatStrip>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">
-                Dollar-cost-average comparison
-                {scopeIds.length > 0 && (
-                  <span className="ml-2 font-sans text-sm font-normal text-muted-foreground">
-                    {scopeLabel} only
-                  </span>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CompareChart
-                portfolio={data.portfolio}
-                portfolioLabel={scopeIds.length === 0 ? "Your portfolio" : scopeLabel}
-                benchmarks={data.benchmarks.map((b) => ({
+          <Section
+            title="Over time"
+            aside={
+              scopeIds.length > 0 && (
+                <span className="text-sm text-muted-foreground">{scopeLabel} only</span>
+              )
+            }
+          >
+            <CompareChart
+              portfolio={data.portfolio}
+              portfolioLabel={scopeIds.length === 0 ? "Your portfolio" : scopeLabel}
+              benchmarks={data.benchmarks.map((b) => ({
+                label: b.symbol,
+                series: b.series,
+              }))}
+            />
+          </Section>
+
+          <Section
+            title="Head to head"
+            aside={
+              <span className="hidden text-sm text-muted-foreground sm:inline">
+                same dollars, same dates; only the asset differs
+              </span>
+            }
+          >
+            <MetricsTable
+              columns={[
+                {
+                  key: "you",
+                  label: scopeIds.length === 0 ? "You" : scopeLabel,
+                  color: theme.series[0]!,
+                  xirr: data.portfolioXirr,
+                  metrics: data.portfolioMetrics,
+                },
+                ...data.benchmarks.map((b, i) => ({
+                  key: b.assetId,
                   label: b.symbol,
-                  series: b.series,
-                }))}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">
-                Head to head
-                <span className="ml-2 font-sans text-sm font-normal text-muted-foreground">
-                  same dollars, same dates — only the asset differs
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <MetricsTable
-                columns={[
-                  {
-                    key: "you",
-                    label: scopeIds.length === 0 ? "You" : scopeLabel,
-                    color: theme.series[0]!,
-                    xirr: data.portfolioXirr,
-                    metrics: data.portfolioMetrics,
-                  },
-                  ...data.benchmarks.map((b, i) => ({
-                    key: b.assetId,
-                    label: b.symbol,
-                    color: benchColor(theme, i),
-                    xirr: b.xirr,
-                    metrics: b.metrics,
-                  })),
-                ]}
-              />
-            </CardContent>
-          </Card>
+                  color: benchColor(theme, i),
+                  xirr: b.xirr,
+                  metrics: b.metrics,
+                })),
+              ]}
+            />
+          </Section>
         </>
       )}
     </div>
