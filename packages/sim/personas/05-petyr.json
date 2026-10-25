@@ -1,0 +1,36 @@
+{
+  "id": "petyr", "version": 3,
+  "name": "Petyr Baelish", "age": 52,
+  "life": "Orthodontist with his own practice, high income. Manages his own money across a brokerage, a rollover IRA and a Roth. Spreadsheet person.",
+  "techSavviness": 3, "patienceMs": 3000,
+  "aesthetic": "Wants precise numbers and tables he can trust. Fine with density if it's organized. Hates rounding that hides dollars.",
+  "strategy": "Monthly taxable contributions split across VTI/VXUS/QQQ; harvests losses at 10% using substitute ETFs (VTI→ITOT, VXUS→IXUS, QQQ→QQQM); bonds in the IRA, growth in the Roth.",
+  "riskTolerance": "medium",
+  "tax": { "filingStatus": "married_joint", "ordinaryRate": 35, "ltcgRate": 20 },
+  "accounts": [
+    { "name": "Schwab Brokerage", "institution": "Schwab", "type": "taxable" },
+    { "name": "Rollover IRA", "institution": "Schwab", "type": "traditional_ira" },
+    { "name": "Roth IRA", "institution": "Schwab", "type": "roth_ira" }
+  ],
+  "universe": [
+    { "symbol": "VTI", "name": "Vanguard Total Stock Market ETF", "class": "etf" },
+    { "symbol": "ITOT", "name": "iShares Core S&P Total U.S. Stock Market ETF", "class": "etf" },
+    { "symbol": "VXUS", "name": "Vanguard Total International Stock ETF", "class": "etf" },
+    { "symbol": "IXUS", "name": "iShares Core MSCI Total International Stock ETF", "class": "etf" },
+    { "symbol": "QQQ", "name": "Invesco QQQ Trust", "class": "etf" },
+    { "symbol": "QQQM", "name": "Invesco NASDAQ 100 ETF", "class": "etf" },
+    { "symbol": "BND", "name": "Vanguard Total Bond Market ETF", "class": "etf" }
+  ],
+  "biases": ["overweights tax savings vs. returns", "distrusts black-box numbers"],
+  "goals": ["minimize taxes every year", "never trigger a wash sale across accounts", "know exactly which lots to sell"],
+  "typicalQuestions": ["Which lots should I sell to raise $20k with the least tax?", "Will buying VTI in my IRA trigger a wash sale?", "How much in losses have I harvested YTD?", "Which of my lots go long-term soon?"],
+  "discretionaryUsdPerMonth": 3000,
+  "joinedOn": "2024-10-01",
+  "explore": { "chance": 0.6, "steps": 8, "affinity": { "/tax-center": 6, "/accounts": 2, "/transactions": 2, "/dashboard": 2 } },
+  "policy": [
+    { "kind": "rebalance", "targets": { "VTI": 0.5, "VXUS": 0.3, "QQQ": 0.2 }, "amountUsd": 2000, "every": "month", "day": 5, "account": "Schwab Brokerage" },
+    { "kind": "dca", "symbol": "BND", "amountUsd": 1000, "every": "month", "day": 5, "account": "Rollover IRA" },
+    { "kind": "dca", "symbol": "QQQ", "amountUsd": 583, "every": "month", "day": 20, "account": "Roth IRA" },
+    { "kind": "harvest", "symbols": ["VTI", "VXUS", "QQQ"], "lossPct": 10, "substitutes": { "VTI": "ITOT", "VXUS": "IXUS", "QQQ": "QQQM" }, "cooldownDays": 31, "account": "Schwab Brokerage" }
+  ]
+}

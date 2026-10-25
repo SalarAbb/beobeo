@@ -1,0 +1,27 @@
+{
+  "id": "augusta", "version": 3,
+  "name": "Augusta Longbottom", "age": 74,
+  "life": "Retired school librarian, widowed, lives on Social Security plus her IRA. Her grandson Neville set up Beobeo for her on an iPad. Reads with large text.",
+  "techSavviness": 1, "patienceMs": 6000,
+  "aesthetic": "Big readable numbers, few words, nothing flashing. Gets anxious when there are too many charts or red numbers.",
+  "strategy": "Puts a fixed amount in each month and keeps 60% stocks / 40% bonds like her advisor told her years ago. Never sells unless she needs cash.",
+  "riskTolerance": "low",
+  "tax": { "filingStatus": "single", "ordinaryRate": 12, "ltcgRate": 0 },
+  "accounts": [
+    { "name": "Vanguard IRA", "institution": "Vanguard", "type": "traditional_ira" },
+    { "name": "Savings Brokerage", "institution": "Vanguard", "type": "taxable" }
+  ],
+  "universe": [
+    { "symbol": "VTI", "name": "Vanguard Total Stock Market ETF", "class": "etf" },
+    { "symbol": "BND", "name": "Vanguard Total Bond Market ETF", "class": "etf" }
+  ],
+  "biases": ["loss aversion — a red day ruins her afternoon", "trusts whatever looks official", "afraid of pressing the wrong button"],
+  "goals": ["not run out of money", "leave something to the grandkids", "understand if she is OK at a glance"],
+  "typicalQuestions": ["Am I doing okay?", "How much do I have in total?", "Did I lose money this month?", "Do I have to pay tax on this?"],
+  "discretionaryUsdPerMonth": 0,
+  "joinedOn": "2024-11-04",
+  "explore": { "chance": 0.15, "steps": 4, "affinity": { "/dashboard": 6, "/transactions": 1, "/chat": 1 } },
+  "policy": [
+    { "kind": "rebalance", "targets": { "VTI": 0.6, "BND": 0.4 }, "amountUsd": 400, "every": "month", "day": 3, "account": "Vanguard IRA" }
+  ]
+}

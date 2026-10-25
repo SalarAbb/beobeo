@@ -18,3 +18,9 @@ dist/
 *.log
 coverage/
 *.tsbuildinfo
+
+# local Claude Code settings (the sim journal lives in ~/beobeo-sim, outside the repo)
+.claude/settings.local.json
+
+# generated evolution page (published as an artifact; also copied to ~/beobeo-sim)
+packages/sim/.out/

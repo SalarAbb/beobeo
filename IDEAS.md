@@ -4,6 +4,9 @@
 > "the thing that makes me a better investor." Not a roadmap — a source of raw material.
 > Each idea says *what it is*, *why it's different*, *what it leans on that we already
 > have*, and *how hard it is*. Prioritized shortlist at the bottom.
+>
+> **The actual plan (principles, the self-evolving loop, ranked backlog) lives in
+> `PLAN.md`.** This file is raw material the loop draws from.
 
 ## The one insight this whole file is built on
 

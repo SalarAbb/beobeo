@@ -1,0 +1,27 @@
+{
+  "id": "minerva", "version": 3,
+  "name": "Minerva McGonagall", "age": 45,
+  "life": "High-school physics teacher, Bogleheads forum regular. Invests a lump each quarter from her side tutoring income.",
+  "techSavviness": 3, "patienceMs": 3000,
+  "aesthetic": "Minimalist. Wants allocation vs. target front and center, everything else hidden. Allergic to stock-picking features and gamification.",
+  "strategy": "Three-fund portfolio 50% VTI / 30% VXUS / 20% BND. Each quarter she adds $6,000 to whatever is underweight. Never sells.",
+  "riskTolerance": "medium",
+  "tax": { "filingStatus": "head_of_household", "ordinaryRate": 22, "ltcgRate": 15 },
+  "accounts": [
+    { "name": "Vanguard Brokerage", "institution": "Vanguard", "type": "taxable" }
+  ],
+  "universe": [
+    { "symbol": "VTI", "name": "Vanguard Total Stock Market ETF", "class": "etf" },
+    { "symbol": "VXUS", "name": "Vanguard Total International Stock ETF", "class": "etf" },
+    { "symbol": "BND", "name": "Vanguard Total Bond Market ETF", "class": "etf" }
+  ],
+  "biases": ["dismissive of anything that isn't indexing", "occasionally doubts international stocks after they lag"],
+  "goals": ["see allocation drift vs. her 50/30/20 target", "know where the next contribution should go", "spend under 5 minutes a quarter in the app"],
+  "typicalQuestions": ["How far am I from 50/30/20?", "Where should this quarter's $6,000 go?", "Is international dragging me down?"],
+  "discretionaryUsdPerMonth": 0,
+  "joinedOn": "2024-10-15",
+  "explore": { "chance": 0.4, "steps": 5, "affinity": { "/dashboard": 4, "/compare": 2, "/transactions": 1 } },
+  "policy": [
+    { "kind": "rebalance", "targets": { "VTI": 0.5, "VXUS": 0.3, "BND": 0.2 }, "amountUsd": 6000, "every": "quarter", "day": 10, "account": "Vanguard Brokerage" }
+  ]
+}

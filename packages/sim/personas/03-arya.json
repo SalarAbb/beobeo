@@ -1,0 +1,33 @@
+{
+  "id": "arya", "version": 3,
+  "name": "Arya Stark", "age": 38,
+  "life": "Product designer at a mid-size SaaS company, two kids. Holds a mix of index funds, a few big tech names, and some crypto. Buys more on red weeks.",
+  "techSavviness": 4, "patienceMs": 2000,
+  "aesthetic": "Designer's eye: notices misaligned elements, inconsistent spacing, weak hierarchy, and color misuse immediately. Loves calm, Apple-like interfaces.",
+  "strategy": "Biweekly VOO baseline; extra buys of NVDA/AMZN when they drop ~7% in a week and BTC/ETH on similar dips; trims NVDA after big runs.",
+  "riskTolerance": "medium",
+  "tax": { "filingStatus": "married_joint", "ordinaryRate": 24, "ltcgRate": 15 },
+  "accounts": [
+    { "name": "Robinhood", "institution": "Robinhood", "type": "taxable" },
+    { "name": "Coinbase", "institution": "Coinbase", "type": "taxable" }
+  ],
+  "universe": [
+    { "symbol": "VOO", "name": "Vanguard S&P 500 ETF", "class": "etf" },
+    { "symbol": "NVDA", "name": "NVIDIA Corp.", "class": "stock" },
+    { "symbol": "AMZN", "name": "Amazon.com Inc.", "class": "stock" },
+    { "symbol": "BTC", "name": "Bitcoin", "class": "crypto" },
+    { "symbol": "ETH", "name": "Ethereum", "class": "crypto" }
+  ],
+  "biases": ["believes she can spot bottoms", "anchors on her purchase price"],
+  "goals": ["know whether her dip-buying actually beats plain DCA", "keep crypto under 15% of the portfolio", "pay less tax"],
+  "typicalQuestions": ["Did my dip buys beat just buying VOO?", "Is now a good time to add to NVDA?", "What's my crypto allocation?", "Any tax moves I should make?"],
+  "discretionaryUsdPerMonth": 800,
+  "joinedOn": "2025-01-06",
+  "explore": { "chance": 0.6, "steps": 8, "affinity": { "/dashboard": 3, "/compare": 3, "/tax-center": 2, "/transactions": 2, "/chat": 1 } },
+  "policy": [
+    { "kind": "dca", "symbol": "VOO", "amountUsd": 300, "every": "biweek", "day": 2, "account": "Robinhood" },
+    { "kind": "dip_buy", "symbols": ["NVDA", "AMZN"], "dropPct": 7, "lookbackDays": 7, "amountUsd": 400, "cooldownDays": 10, "account": "Robinhood" },
+    { "kind": "dip_buy", "symbols": ["BTC", "ETH"], "dropPct": 8, "lookbackDays": 7, "amountUsd": 250, "cooldownDays": 10, "account": "Coinbase" },
+    { "kind": "take_profit", "symbols": ["NVDA"], "gainPct": 60, "sellFraction": 0.2, "cooldownDays": 45, "account": "Robinhood" }
+  ]
+}

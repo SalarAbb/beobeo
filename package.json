@@ -10,7 +10,15 @@
     "test": "turbo test",
     "db:generate": "pnpm --filter @beobeo/db generate",
     "db:push": "pnpm --filter @beobeo/db push",
-    "db:seed": "pnpm --filter @beobeo/db seed"
+    "db:seed": "pnpm --filter @beobeo/db seed",
+    "sim:bootstrap": "pnpm --filter @beobeo/sim bootstrap",
+    "sim:day": "pnpm --filter @beobeo/sim day",
+    "sim:digest": "pnpm --filter @beobeo/sim digest",
+    "sim:insights": "pnpm --filter @beobeo/sim insights",
+    "sim:reset": "pnpm --filter @beobeo/sim reset",
+    "sim:theme": "pnpm --filter @beobeo/sim theme",
+    "evolve": "scripts/evolve.sh",
+    "sim:report": "pnpm --filter @beobeo/sim report"
   },
   "devDependencies": {
     "turbo": "^2.10.4",

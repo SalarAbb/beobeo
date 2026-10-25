@@ -1,0 +1,28 @@
+{
+  "id": "samwell", "version": 3,
+  "name": "Samwell Tarly", "age": 31,
+  "life": "Nurse working rotating shifts. Read 'The Simple Path to Wealth' and automated everything. Checks the app on his phone on breaks.",
+  "techSavviness": 3, "patienceMs": 2500,
+  "aesthetic": "Clean, mobile-first, wants one number that says whether he's on track. Dislikes finance-bro jargon.",
+  "strategy": "Buys $250 of VOO every Monday in his brokerage and maxes his Roth IRA with VTI monthly. Never sells.",
+  "riskTolerance": "medium",
+  "tax": { "filingStatus": "single", "ordinaryRate": 22, "ltcgRate": 15 },
+  "accounts": [
+    { "name": "Fidelity Brokerage", "institution": "Fidelity", "type": "taxable" },
+    { "name": "Roth IRA", "institution": "Fidelity", "type": "roth_ira" }
+  ],
+  "universe": [
+    { "symbol": "VOO", "name": "Vanguard S&P 500 ETF", "class": "etf" },
+    { "symbol": "VTI", "name": "Vanguard Total Stock Market ETF", "class": "etf" }
+  ],
+  "biases": ["slight FOMO when friends brag about stock picks", "checks too often during red weeks"],
+  "goals": ["retire by 55", "know if his DCA beats trying to time the market", "see progress toward $1M"],
+  "typicalQuestions": ["Am I on track for my goal?", "Is DCA working for me vs lump sum?", "How much have I put in vs how much it's worth?"],
+  "discretionaryUsdPerMonth": 200,
+  "joinedOn": "2024-10-28",
+  "explore": { "chance": 0.45, "steps": 6, "affinity": { "/dashboard": 5, "/compare": 3, "/chat": 2, "/transactions": 1, "/tax-center": 1 } },
+  "policy": [
+    { "kind": "dca", "symbol": "VOO", "amountUsd": 250, "every": "week", "day": 1, "account": "Fidelity Brokerage" },
+    { "kind": "dca", "symbol": "VTI", "amountUsd": 583, "every": "month", "day": 15, "account": "Roth IRA" }
+  ]
+}

@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>/*__TITLE__*/</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/*__CSS__*/
+:root { padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="nav" id="nav"></nav>
+
+  <header class="top">
+    <p class="eyebrow">Beobeo · daily report</p>
+    <h1 id="title"></h1>
+    <p class="lede" id="lede"></p>
+    <div class="chips" id="chips"></div>
+  </header>
+
+  <section aria-labelledby="h-shipped">
+    <div class="sec-head">
+      <p class="eyebrow">What changed in the product</p>
+      <h2 id="h-shipped">What shipped</h2>
+    </div>
+    <div class="prose" id="shipped"></div>
+  </section>
+
+  <section aria-labelledby="h-voices">
+    <div class="sec-head">
+      <p class="eyebrow">In their own words</p>
+      <h2 id="h-voices">What they said</h2>
+      <p>How each persona felt about their money, what they asked the companion, how they rated the reply (chat), and how they rated the whole day (day).</p>
+    </div>
+    <div class="exp"><div><div class="exp-head" id="exp-head"></div><div class="dims" id="dims"></div></div><div></div></div>
+    <div class="voices" id="voices"></div>
+  </section>
+
+  <section aria-labelledby="h-explore">
+    <div class="sec-head">
+      <p class="eyebrow">Curiosity</p>
+      <h2 id="h-explore">Who wandered, and where</h2>
+      <p>Each persona has a daily chance of exploring the app at random, weighted toward what they care about. The path is replayable: the same persona on the same day takes the same steps.</p>
+    </div>
+    <div class="explore-list" id="explore"></div>
+  </section>
+
+  <section aria-labelledby="h-themes">
+    <div class="sec-head">
+      <p class="eyebrow">Feedback</p>
+      <h2 id="h-themes">Themes raised this day</h2>
+      <p>New themes appeared for the first time this day; the rest had come up before. Hover a row for quotes.</p>
+    </div>
+    <div class="themes" id="themes"></div>
+  </section>
+
+  <section aria-labelledby="h-trades">
+    <div class="sec-head">
+      <p class="eyebrow">Activity</p>
+      <h2 id="h-trades">Trades</h2>
+      <p>Habit trades follow each persona's fixed rules. Judgment trades are decisions their mind made that day, with its reason.</p>
+    </div>
+    <div class="tablewrap" id="trades"></div>
+  </section>
+
+  <section aria-labelledby="h-speed">
+    <div class="sec-head">
+      <p class="eyebrow">Principle 5: speed is a feature</p>
+      <h2 id="h-speed">How fast it felt</h2>
+    </div>
+    <div class="axis" aria-hidden="true"><span></span><div class="ticks" id="ticks"></div><span></span></div>
+    <div class="speed" id="speed"></div>
+  </section>
+
+  <section aria-labelledby="h-answers">
+    <div class="sec-head">
+      <p class="eyebrow">The companion</p>
+      <h2 id="h-answers">How good were the answers?</h2>
+    </div>
+    <div class="answers">
+      <div><div class="strip" id="strip"></div><p class="avg" id="avg"></p></div>
+      <blockquote id="worst"></blockquote>
+    </div>
+  </section>
+
+  <nav class="nav" id="nav2"></nav>
+  <footer id="foot"></footer>
+</div>
+<div id="tip" hidden></div>
+
+<script>
+const D = /*__DATA__*/null;
+/*__COMMON_JS__*/
+
+const long = (d) => fmtDate(d, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+const navHtml = `<span>${D.prev ? `<a href="${D.prev}.html">← ${esc(fmtDate(D.prev))}</a>` : `<span class="muted">First day</span>`}</span>
+  <a class="mid" href="../index.html">Beobeo Evolution</a>
+  <span>${D.next ? `<a href="${D.next}.html">${esc(fmtDate(D.next))} →</a>` : `<span class="muted">Latest</span>`}</span>`;
+$("nav").innerHTML = navHtml; $("nav2").innerHTML = navHtml;
+$("title").textContent = fmtDate(D.date, { month: "long", day: "numeric" });
+$("lede").innerHTML = `${esc(fmtDate(D.date, { weekday: "long" }))}, ${D.date.slice(0, 4)}. Day ${D.dayNumber} of the loop. ${D.personasActive} personas used the app${D.snapshot ? `; <a href="../snapshots/${D.date}.html">see the evolution page as it looked this evening</a>` : ""}.`;
+$("chips").innerHTML = [
+  `<span class="chip mono">${esc(D.appRef)}</span>`,
+  `<span class="chip"><b class="num">${D.trades.length}</b> trades</span>`,
+  `<span class="chip"><b class="num">${D.feedbackCount}</b> notes</span>`,
+  `<span class="chip">Answers <b class="num">${D.avgRating === null ? "—" : D.avgRating.toFixed(1) + "/5"}</b></span>`,
+  `<span class="chip">Spend <b class="num">$${D.spend.toFixed(2)}</b></span>`,
+].join("");
+
+$("shipped").innerHTML = D.evolveReport
+  ? mdBlock(D.evolveReport.replace(/^#\s.*\n/, ""))
+  : `<p class="empty">No evolve cycle ran on this day${D.dayNumber === 1 ? ". The loop was built today; the first cycle ships changes on the next run" : ""}. Nothing changed in the product.</p>`;
+
+const expBy = new Map(D.experience.map((e) => [e.persona, e]));
+const avgOf = (k) => (D.experience.length ? D.experience.reduce((s, e) => s + e[k], 0) / D.experience.length : null);
+const dayAvg = D.experience.length ? Object.fromEntries(["overall", "ease", "speed", "trust", "usefulness", "look"].map((k) => [k, avgOf(k)])) : null;
+$("exp-head").innerHTML = dayAvg
+  ? `<span class="big num">${dayAvg.overall.toFixed(1)}</span><span class="of">out of 5 · how the day felt, across ${D.experience.length} personas · ${Math.round(avgOf("recommend") * 100)}% would recommend it</span>`
+  : `<span class="of">No experience ratings this day (they started on Oct 24).</span>`;
+renderDims($("dims"), dayAvg);
+
+$("explore").innerHTML = D.exploration.length ? D.exploration.map((x) => `<div class="ex"><span class="who">${esc(first(x.persona))}</span><div style="display:grid;gap:6px">
+  <div class="path">${x.steps.map((st, i) => `${i ? "<i>→</i>" : ""}<span class="${st.error ? "err" : ""}" title="${esc(st.error ?? `${st.to} · ${ms(st.ms)}`)}">${st.error ? "couldn't click" : esc(st.action === "goto" ? st.to : st.action === "escape" ? "Esc" : st.action === "fill" ? `type ${st.target.split(" = ").at(-1)}` : st.target)}</span>`).join("")}</div>
+  <span class="muted" style="font-size:12.5px">${x.steps.length} steps · ${new Set(x.steps.map((s) => s.to)).size} pages · ${x.errors.length ? `<span style="color:var(--bad)">${x.errors.length} error${x.errors.length > 1 ? "s" : ""}: ${esc(x.errors[0].quote)}</span>` : "no errors"}</span></div></div>`).join("")
+  : `<p class="empty">Nobody wandered off the beaten path this day.</p>`;
+
+$("voices").innerHTML = D.voices.map((v) => `<article class="voice">
+  <div class="who"><b>${esc(byId[v.persona]?.name ?? v.persona)}</b><span>${scorePill("day", expBy.get(v.persona)?.overall)} ${scorePill("chat", v.rating)}${v.keep === false ? ` <span class="pill bad">would leave</span>` : v.keep ? ` <span class="pill good">would stay</span>` : ""}</span></div>
+  ${v.mood ? `<p class="quote">${esc(v.mood)}</p>` : ""}
+  ${v.question ? `<p class="ask">${esc(v.question)}</p>` : ""}
+  ${v.impression ? `<p class="ask seen">${esc(v.impression)}</p>` : ""}
+  ${expBy.get(v.persona) ? `<p class="ask day">${esc(expBy.get(v.persona).why)}</p>` : ""}
+</article>`).join("") || `<p class="empty">No persona spoke this day.</p>`;
+
+const maxP = Math.max(1, ...D.themes.map((t) => t.personas));
+const themeRow = (t, i) => `<div class="trow" tabindex="0" data-t="${i}">
+  <div class="lab"><b>${esc(t.title)}</b><small>${t.personas} ${t.personas === 1 ? "persona" : "personas"} · severity ${t.severity.toFixed(1)}/5</small></div>
+  <div class="bar" aria-hidden="true"><i style="width:${(t.personas / maxP) * 100}%;background:var(--s1)"></i></div>
+  <div class="sc">${t.isNew ? `<span class="pill warn">new</span>` : `<span class="pill none">again</span>`}</div></div>`;
+const SHOWN = 10;
+$("themes").innerHTML = D.themes.length
+  ? D.themes.slice(0, SHOWN).map(themeRow).join("") +
+    (D.themes.length > SHOWN ? `<details class="more"><summary>Show ${D.themes.length - SHOWN} more</summary>${D.themes.slice(SHOWN).map((t, i) => themeRow(t, i + SHOWN)).join("")}</details>` : "")
+  : `<p class="empty">No feedback this day.</p>`;
+document.querySelectorAll(".trow").forEach((row) => {
+  const t = D.themes[+row.dataset.t];
+  hover(row, () => `<b>${esc(t.title)}</b>${t.quotes.map((q) => `<div class="q">“${esc(q.quote)}” <span class="w">— ${esc(first(q.persona))}</span></div>`).join("")}`);
+});
+
+$("trades").innerHTML = D.trades.length ? `<table class="trades"><thead><tr><th>Who</th><th>Trade</th><th>Why</th><th style="text-align:right">Amount</th></tr></thead><tbody>${D.trades.map((t) => `<tr>
+  <td>${esc(first(t.persona))}</td>
+  <td><span class="mono">${esc(t.type)} ${esc(t.symbol)}</span> <span class="muted">· ${esc(t.account)}</span></td>
+  <td>${t.reason === "mind" ? `<span class="pill warn">judgment</span> ${esc(t.why ?? "")}` : `<span class="pill none">habit</span> <span class="muted">${esc(t.reason.replace("_", " "))}</span>`}</td>
+  <td class="r">$${Math.round(t.usd).toLocaleString()}</td></tr>`).join("")}</tbody></table>` : `<p class="empty">No trades this day.</p>`;
+
+renderSpeed(D.latency, $("ticks"), $("speed"), "on this day");
+renderStrip(D.answers, $("strip"));
+$("avg").innerHTML = D.avgRating !== null ? `<b class="num">${D.avgRating.toFixed(1)}</b> average across ${D.answers.length} answers` : "No rated answers this day.";
+$("worst").innerHTML = worstQuote(D.answers[0]);
+$("foot").innerHTML = `<span>Report for ${esc(long(D.date))} · generated ${new Date(D.generatedAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}</span><span class="mono">${esc(D.appRef)}</span>`;
+</script>
+</body>
+</html>

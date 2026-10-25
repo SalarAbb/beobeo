@@ -1,0 +1,38 @@
+{
+  "id": "gilderoy", "version": 3,
+  "name": "Gilderoy Lockhart", "age": 34,
+  "life": "Sales manager, listens to investing podcasts, picks individual stocks with momentum. Trades a lot, usually from his phone at lunch.",
+  "techSavviness": 3, "patienceMs": 2000,
+  "aesthetic": "Likes charts and green numbers, wants to see his winners. Impatient with long text.",
+  "strategy": "Every week buys whichever big-tech name had the best month; takes half off at +25%; dumps anything down 15%.",
+  "riskTolerance": "high",
+  "tax": { "filingStatus": "single", "ordinaryRate": 24, "ltcgRate": 15 },
+  "accounts": [
+    { "name": "Webull", "institution": "Webull", "type": "taxable" }
+  ],
+  "universe": [
+    { "symbol": "AAPL", "name": "Apple Inc.", "class": "stock" },
+    { "symbol": "MSFT", "name": "Microsoft Corp.", "class": "stock" },
+    { "symbol": "NVDA", "name": "NVIDIA Corp.", "class": "stock" },
+    { "symbol": "AMZN", "name": "Amazon.com Inc.", "class": "stock" },
+    { "symbol": "GOOGL", "name": "Alphabet Inc. Class A", "class": "stock" },
+    { "symbol": "META", "name": "Meta Platforms Inc.", "class": "stock" },
+    { "symbol": "TSLA", "name": "Tesla Inc.", "class": "stock" },
+    { "symbol": "AMD", "name": "Advanced Micro Devices", "class": "stock" },
+    { "symbol": "AVGO", "name": "Broadcom Inc.", "class": "stock" },
+    { "symbol": "NFLX", "name": "Netflix Inc.", "class": "stock" },
+    { "symbol": "COST", "name": "Costco Wholesale Corp.", "class": "stock" },
+    { "symbol": "JPM", "name": "JPMorgan Chase & Co.", "class": "stock" }
+  ],
+  "biases": ["recency bias", "overtrades", "remembers wins, forgets losses", "doesn't think about short-term tax rates"],
+  "goals": ["beat the S&P", "know which picks are working", "understand why his tax bill was so big last year"],
+  "typicalQuestions": ["Am I beating the S&P?", "What's my best and worst pick?", "Should I buy more TSLA?", "Why do I owe so much tax?"],
+  "discretionaryUsdPerMonth": 1500,
+  "joinedOn": "2025-02-03",
+  "explore": { "chance": 0.5, "steps": 7, "affinity": { "/dashboard": 5, "/compare": 2, "/chat": 2, "/transactions": 1 } },
+  "policy": [
+    { "kind": "momentum", "symbols": ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AMD", "AVGO", "NFLX", "COST", "JPM"], "lookbackDays": 30, "amountUsd": 500, "every": "week", "day": 3, "account": "Webull" },
+    { "kind": "take_profit", "symbols": ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AMD", "AVGO", "NFLX", "COST", "JPM"], "gainPct": 25, "sellFraction": 0.5, "cooldownDays": 14, "account": "Webull" },
+    { "kind": "harvest", "symbols": ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AMD", "AVGO", "NFLX", "COST", "JPM"], "lossPct": 15, "substitutes": {}, "cooldownDays": 30, "account": "Webull" }
+  ]
+}

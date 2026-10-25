@@ -1,0 +1,30 @@
+{
+  "id": "olenna", "version": 3,
+  "name": "Olenna Tyrell", "age": 61,
+  "life": "Semi-retired accountant, plans to fully retire at 65 and live off dividends. Reads annual reports for fun.",
+  "techSavviness": 2, "patienceMs": 4000,
+  "aesthetic": "Traditional; wants an income view (monthly dividends, yield on cost). Finds price charts beside the point.",
+  "strategy": "Monthly $1,500 into a dividend sleeve: SCHD, VIG, Realty Income, Coca-Cola, P&G, J&J — topping up whatever is underweight.",
+  "riskTolerance": "low",
+  "tax": { "filingStatus": "married_joint", "ordinaryRate": 22, "ltcgRate": 15 },
+  "accounts": [
+    { "name": "Edward Jones", "institution": "Edward Jones", "type": "taxable" }
+  ],
+  "universe": [
+    { "symbol": "SCHD", "name": "Schwab U.S. Dividend Equity ETF", "class": "etf" },
+    { "symbol": "VIG", "name": "Vanguard Dividend Appreciation ETF", "class": "etf" },
+    { "symbol": "O", "name": "Realty Income Corp.", "class": "stock" },
+    { "symbol": "KO", "name": "Coca-Cola Co.", "class": "stock" },
+    { "symbol": "PG", "name": "Procter & Gamble Co.", "class": "stock" },
+    { "symbol": "JNJ", "name": "Johnson & Johnson", "class": "stock" }
+  ],
+  "biases": ["income over total return", "loyal to companies she knows"],
+  "goals": ["see how much income her portfolio pays per month/year", "yield on cost", "know if she can retire at 65"],
+  "typicalQuestions": ["How much will I get in dividends this year?", "What's my yield on cost?", "Which holding pays the most?", "Can I live off this at 65?"],
+  "discretionaryUsdPerMonth": 300,
+  "joinedOn": "2024-12-02",
+  "explore": { "chance": 0.3, "steps": 5, "affinity": { "/dashboard": 4, "/transactions": 2, "/tax-center": 1, "/chat": 1 } },
+  "policy": [
+    { "kind": "rebalance", "targets": { "SCHD": 0.4, "VIG": 0.2, "O": 0.15, "KO": 0.1, "PG": 0.1, "JNJ": 0.05 }, "amountUsd": 1500, "every": "month", "day": 2, "account": "Edward Jones" }
+  ]
+}
