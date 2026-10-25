@@ -153,10 +153,36 @@ ALLOWED=(Read Edit Write Glob Grep
   "Bash(pnpm sim:report:*)" Artifact
   "Bash(ls:*)" "Bash(cat:*)" "Bash(head:*)" "Bash(tail:*)" "Bash(wc:*)" "Bash(mkdir:*)" "Bash(sqlite3:*)" "Bash(curl -s:*)")
 DENIED=("Bash(git push:*)" "Bash(git merge:*)" "Bash(git reset:*)" "Bash(git rebase:*)" "Bash(rm:*)" "Bash(git worktree:*)")
+LIMITED=0
 run_claude() {
-  SIM_APP_URL="http://localhost:$SIM_PORT" claude -p "$1" --permission-mode acceptEdits \
-    --allowedTools "${ALLOWED[@]}" --disallowedTools "${DENIED[@]}" --add-dir "$SIM_HOME" \
+  local out
+  out="$(SIM_APP_URL="http://localhost:$SIM_PORT" claude -p "$1" --permission-mode acceptEdits \
+    --allowedTools "${ALLOWED[@]}" --disallowedTools "${DENIED[@]}" --add-dir "$SIM_HOME" 2>&1)" \
     || echo "claude exited non-zero for: $1"
+  echo "$out"
+  LIMITED=0
+  grep -qiE "hit your (session|usage) limit|usage limit reached" <<<"$out" && LIMITED=1
+  # "resets 1:20pm (America/Los_Angeles)" → epoch of that time today (or tomorrow if already past)
+  LIMIT_RESET=""
+  local t; t="$(grep -oiE 'resets [0-9]{1,2}(:[0-9]{2})?(am|pm)' <<<"$out" | head -1 | awk '{print toupper($2)}')"
+  if [[ -n "$t" ]]; then
+    [[ "$t" == *:* ]] || t="${t%??}:00${t: -2}"
+    LIMIT_RESET="$(date -j -f "%Y-%m-%d %I:%M%p" "$(date +%F) $t" +%s 2>/dev/null)"
+    [[ -n "$LIMIT_RESET" ]] && (( LIMIT_RESET < $(date +%s) )) && LIMIT_RESET=$(( LIMIT_RESET + 86400 ))
+  fi
+  return 0
+}
+# A session limit is a pause, not the end of the day: sleep until it resets (the wait doesn't
+# count against the time budget), unless that's more than $EVOLVE_MAX_WAIT_HOURS (6) away.
+wait_for_limit() {
+  local until="${LIMIT_RESET:-$(( $(date +%s) + 900 ))}" now; now=$(date +%s)
+  until=$(( until + 120 ))
+  if (( until - now > ${EVOLVE_MAX_WAIT_HOURS:-6} * 3600 )); then echo "Session limit resets too late ($(date -r "$until" +%H:%M)) — stopping."; return 1; fi
+  echo "Session limit hit — waiting until $(date -r "$until" +%H:%M) and resuming."
+  notify "Beobeo evolve paused" "Claude session limit; resuming at $(date -r "$until" +%H:%M)."
+  sleep $(( until - now ))
+  DEADLINE=$(( DEADLINE + until - now ))
+  return 0
 }
 cd "$WT"
 REPORT="$SIM_HOME/reports/$DATE.md"
@@ -169,6 +195,11 @@ while (( round < MAX_ROUNDS )) && (( $(date +%s) < DEADLINE )); do
   before="$(git -C "$WT" rev-parse HEAD)"
   echo "--- round $round ($(date +%T), deadline $(date -r "$DEADLINE" +%H:%M)) ---"
   run_claude "/evolve $DIGEST $MODE $START round=$round deadline=$(date -r "$DEADLINE" +%H:%M)"
+  if (( LIMITED )); then
+    round=$((round - 1))   # the round never ran; retry it after the reset
+    wait_for_limit || break
+    continue
+  fi
   [[ -f "$EMPTY" || $MODE == propose ]] && { echo "Queue empty after round $round."; break; }
   # Two rounds in a row that commit nothing means it's stuck, not done.
   if [[ "$(git -C "$WT" rev-parse HEAD)" == "$before" ]]; then
