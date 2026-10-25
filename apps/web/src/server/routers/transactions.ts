@@ -1,4 +1,5 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { splitDuplicates } from "@beobeo/importers";
 import { z } from "zod";
 import { schema } from "@beobeo/db";
 import { invalidateUserComputations } from "../cache";
@@ -85,12 +86,36 @@ export const transactionsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const accountIds = [...new Set(input.transactions.map((t) => t.accountId))];
       for (const id of accountIds) await assertOwnAccount(ctx, id);
+      // Overlapping exports must not double-count: skip rows the account already has.
+      const times = input.transactions.map((t) => t.tradedAt.getTime());
+      const existing = await ctx.db
+        .select({
+          accountId: schema.transactions.accountId,
+          assetId: schema.transactions.assetId,
+          type: schema.transactions.type,
+          quantity: schema.transactions.quantity,
+          pricePerUnit: schema.transactions.pricePerUnit,
+          fees: schema.transactions.fees,
+          tradedAt: schema.transactions.tradedAt,
+        })
+        .from(schema.transactions)
+        .where(
+          and(
+            eq(schema.transactions.userId, ctx.userId),
+            inArray(schema.transactions.accountId, accountIds),
+            inArray(schema.transactions.assetId, [...new Set(input.transactions.map((t) => t.assetId))]),
+            gte(schema.transactions.tradedAt, new Date(Math.min(...times) - 60_000)),
+            lte(schema.transactions.tradedAt, new Date(Math.max(...times) + 60_000)),
+          ),
+        );
+      const { fresh, duplicates } = splitDuplicates(input.transactions, existing);
+      if (fresh.length === 0) return { inserted: 0, skipped: duplicates.length };
       const rows = await ctx.db
         .insert(schema.transactions)
-        .values(input.transactions.map((t) => ({ ...t, userId: ctx.userId })))
+        .values(fresh.map((t) => ({ ...t, userId: ctx.userId })))
         .returning({ id: schema.transactions.id });
       await invalidateUserComputations(ctx.userId);
-      return { inserted: rows.length };
+      return { inserted: rows.length, skipped: duplicates.length };
     }),
 
   update: protectedProcedure

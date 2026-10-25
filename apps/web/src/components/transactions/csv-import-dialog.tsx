@@ -165,7 +165,7 @@ export function CsvImportDialog({ onImported }: { onImported?: () => void }) {
         assetIds.set(key, asset.id);
       }
 
-      const { inserted } = await bulkCreate.mutateAsync({
+      const { inserted, skipped } = await bulkCreate.mutateAsync({
         transactions: parsed.transactions.map((t) => ({
           accountId,
           assetId: assetIds.get(`${t.symbol}|${t.assetClass ?? "stock"}`)!,
@@ -179,7 +179,11 @@ export function CsvImportDialog({ onImported }: { onImported?: () => void }) {
         })),
       });
       await queryClient.invalidateQueries();
-      toast.success(`Imported ${inserted} transactions`);
+      toast.success(
+        skipped > 0
+          ? `Imported ${inserted} transactions · skipped ${skipped} already in this account`
+          : `Imported ${inserted} transactions`,
+      );
       setOpen(false);
       reset();
       onImported?.();
