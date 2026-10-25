@@ -263,8 +263,11 @@ export default function ComparePage() {
     return [...presetChips, ...customBenchmarks.filter((c) => !seen.has(c.id))];
   }, [presets.data, customBenchmarks]);
 
-  const activeIds =
-    selectedIds ?? (presets.data?.[0] ? [presets.data[0].id] : []);
+  // Only ids that still have a chip: a remembered pick of a since-removed preset (VOO,
+  // which just duplicated SPY) must not linger in the chart with no way to turn it off.
+  const defaultIds = presets.data?.[0] ? [presets.data[0].id] : [];
+  const remembered = (selectedIds ?? []).filter((id) => chips.some((c) => c.id === id));
+  const activeIds = remembered.length > 0 ? remembered : defaultIds;
 
   function toggleBenchmark(id: string) {
     const next = activeIds.includes(id)

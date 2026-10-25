@@ -34,7 +34,6 @@ export const compareRouter = router({
   presets: protectedProcedure.query(async ({ ctx }) => {
     const wanted = [
       { symbol: "SPY", name: "SPDR S&P 500 ETF", class: "etf" as const },
-      { symbol: "VOO", name: "Vanguard S&P 500 ETF", class: "etf" as const },
       { symbol: "QQQ", name: "Invesco QQQ Trust", class: "etf" as const },
       { symbol: "BTC", name: "Bitcoin", class: "crypto" as const, providerRef: "bitcoin" },
     ];
