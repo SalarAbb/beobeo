@@ -143,7 +143,7 @@ export default function TransactionsPage() {
             <TableBody>
               {list.data!.filter(({ txn }) => !pendingDelete.has(txn.id)).map(({ txn, asset, account }) => (
                 <TableRow key={txn.id}>
-                  <TableCell className="whitespace-nowrap pl-1 font-mono text-[13px] tabular-nums">
+                  <TableCell className="whitespace-nowrap pl-1 data text-[13px]">
                     {txn.tradedAt.toISOString().slice(0, 10)}
                   </TableCell>
                   <TableCell>
@@ -159,13 +159,13 @@ export default function TransactionsPage() {
                       {txn.type.replace("_", " ")}
                     </span>
                   </TableCell>
-                  <TableCell className="text-right font-mono text-[13px] tabular-nums">
+                  <TableCell className="text-right data text-[13px]">
                     {txn.type === "split" ? `${fmtQty(txn.quantity)}:1` : fmtQty(txn.quantity)}
                   </TableCell>
-                  <TableCell className="text-right font-mono text-[13px] tabular-nums">
+                  <TableCell className="text-right data text-[13px]">
                     {fmtMoney(txn.pricePerUnit)}
                   </TableCell>
-                  <TableCell className="hidden text-right font-mono text-[13px] tabular-nums sm:table-cell">
+                  <TableCell className="hidden text-right data text-[13px] sm:table-cell">
                     {Number(txn.fees) > 0 ? fmtMoney(txn.fees) : "—"}
                   </TableCell>
                   <TableCell className="hidden text-muted-foreground md:table-cell">

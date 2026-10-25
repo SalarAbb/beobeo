@@ -84,7 +84,7 @@ export function LossBreakdownBar({ breakdown }: { breakdown: Breakdown }) {
                 style={{ background: s.color }}
               />
               <span className="text-muted-foreground">{s.label}</span>
-              <span className="font-medium tabular-nums">{fmtUsd(s.value)}</span>
+              <span className="font-medium data">{fmtUsd(s.value)}</span>
             </div>
           ))}
         </div>

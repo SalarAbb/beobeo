@@ -111,7 +111,7 @@ export function SellPlanChart({
         style={{ top: yToPx(value), left: AXIS_W, right: 0, borderColor: color ?? theme.baseline }}
       />
       <span
-        className="absolute -translate-y-1/2 text-right text-[10px] font-medium tabular-nums"
+        className="absolute -translate-y-1/2 text-right text-[10px] font-medium data"
         style={{ top: yToPx(value), left: 22, width: AXIS_W - 28, color: color ?? undefined }}
       >
         {tick}
@@ -191,7 +191,7 @@ export function SellPlanChart({
             className="absolute -translate-y-1/2 text-right"
             style={{ top: zeroPx, left: 22, width: AXIS_W - 28 }}
           >
-            <div className="text-[11px] font-semibold tabular-nums">$0</div>
+            <div className="text-[11px] font-semibold data">$0</div>
             <div className="text-[9px] leading-tight text-muted-foreground">
               {nowIsZero ? "now · no tax" : "no tax"}
             </div>
@@ -280,7 +280,7 @@ export function SellPlanChart({
                 key: "gl",
                 label: "Gain / loss",
                 cell: (col: (typeof columns)[number]) => (
-                  <span className={`tabular-nums ${gainClass(col.net)}`}>
+                  <span className={`data ${gainClass(col.net)}`}>
                     {fmtSigned(col.net)}
                   </span>
                 ),
@@ -289,7 +289,7 @@ export function SellPlanChart({
                 key: "units",
                 label: "Units to sell",
                 cell: (col: (typeof columns)[number]) => (
-                  <span className="tabular-nums text-foreground">
+                  <span className="data text-foreground">
                     {col.lots
                       .reduce((s, l) => s + l.sellQuantity, 0)
                       .toLocaleString(undefined, { maximumFractionDigits: 6 })}
@@ -300,7 +300,7 @@ export function SellPlanChart({
                 key: "cash",
                 label: "Cash raised",
                 cell: (col: (typeof columns)[number]) => (
-                  <span className="tabular-nums text-foreground">
+                  <span className="data text-foreground">
                     {fmtUsd(col.lots.reduce((s, l) => s + l.proceeds, 0))}
                   </span>
                 ),

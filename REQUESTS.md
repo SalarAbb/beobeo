@@ -15,7 +15,7 @@
 - **Shipped on:** —
 - **In your words:** "Keep similar aesthetics for the website btw, in terms of font/coloring." "Use similar aesthetics of this html file (font/colors/visualization) in the actual website's UI."
 - **Done means:**
-  - ✓ Shippori Mincho for headings and hero numbers (sparingly), Hanken Grotesk for body text, JetBrains Mono for data and numerals, loaded with `next/font`
+  - ✓ Shippori Mincho for headings and hero numbers (sparingly), Hanken Grotesk for body text, JetBrains Mono for data and numerals, loaded with `next/font`, applied by one rule on every page (`.figure` / `.data`, see CLAUDE.md "Type system"), never mixed ad hoc
   - ✓ Light and dark tokens from `packages/sim/report/style.css` (cool indigo-biased neutrals, one ai-iro indigo accent, semantic good/warn/bad) live in `apps/web/src/app/globals.css`
   - Hairline rules and quiet surfaces replace stacked shadows and cards; generous spacing
   - Charts keep the validated `viz.ts` palette; chips, pills and tooltips match the page's style

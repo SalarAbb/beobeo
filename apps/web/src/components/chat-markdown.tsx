@@ -25,7 +25,7 @@ export function ChatMarkdown({ children }: { children: string }) {
             />
           ),
           td: (props) => (
-            <td className="border-b border-border/50 px-2 py-1 tabular-nums" {...props} />
+            <td className="border-b border-border/50 px-2 py-1 data" {...props} />
           ),
           ul: (props) => <ul className="list-disc pl-5" {...props} />,
           ol: (props) => <ol className="list-decimal pl-5" {...props} />,

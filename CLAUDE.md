@@ -179,6 +179,15 @@ Pure TS, zero framework/DB deps. Exhaustive Vitest fixtures in `packages/core/te
 - Position price chart: buy/sell markers drop their quantity text past 12 trades (labels smeared into noise); `costBasisSteps` collapse same-day trades to one end-of-day step — lightweight-charts throws on duplicate timestamps, which crashed the page for anyone with two trades on one day.
 - App shell (`(app)/layout.tsx` + client `components/app-nav.tsx`): sidebar on `md+`. On phones it becomes a top bar (logo, portfolio switcher, avatar → /account) over a horizontally scrolling nav row that keeps the active tab scrolled into view. The page container must be `grid-cols-1`/`min-w-0`, because a grid track otherwise grows to its widest child and clips the page on phones. Holdings hide Qty/Price under `sm`.
 
+## Type system (don't freelance fonts) — R-001, user-enforced
+
+Three faces from the evolution page (`next/font` in `app/layout.tsx`), each with ONE job. The user called out mixed fonts on one screen ("all over the place"), so this is a hard rule:
+- **Display serif (Shippori Mincho)**: page titles (`h1`, always `text-3xl`), section titles (`PageSection` h2, `CardTitle`, which is serif by default) and **standalone headline figures**, via the `.figure` class (stat tiles, metric cells, a page's headline stat).
+- **Mono (JetBrains Mono)**: **every number inside a table, list, legend, tooltip, sub-line or delta**, via the `.data` class. Charts too: lightweight-charts gets `fontFamily: chartFont()` (from `lib/viz.ts`, since canvas can't resolve CSS vars), and Recharts containers get `className="data"` (SVG text inherits).
+- **Sans (Hanken Grotesk)**: all words — labels, names, prose, buttons. When a line mixes words and a number, only the number gets `.data` (`waiting saves <span className="data">~$20</span>`), and a sans subtitle inside a serif title needs `font-sans`.
+- Never use bare `font-mono`/`tabular-nums`/`font-display` for numbers; use `.figure`/`.data` (defined in `globals.css`, `@layer components`). `font-mono` stays only for code (chat code spans, CSV column names).
+- Verify type changes with a fresh dev server: Turbopack's `.next` cache once served a stale `globals.css` after a merge, making a correct fix look broken. When CSS changes don't show, stop the server, `rm -rf apps/web/.next`, restart.
+
 ## Visualization system (don't freelance colors)
 
 `src/lib/viz.ts` is the single source for chart tokens. Its neutrals (surface/text/grid/baseline) follow the identity tokens; the series and gain/loss hues are the **validated reference palette from the dataviz skill** (light: worst adjacent CVD ΔE 24.2; dark: 10.3 floor-band, mitigated by direct labels + 2px gaps). Rules honored throughout — keep honoring them:

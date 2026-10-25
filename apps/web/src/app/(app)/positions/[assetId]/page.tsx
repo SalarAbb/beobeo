@@ -24,7 +24,7 @@ import { fmtPct, fmtQty, fmtUsd, gainClass } from "@/lib/viz";
 
 type LotsView = "lots" | "sales";
 
-const NUM = "text-right font-mono text-[13px] tabular-nums";
+const NUM = "text-right data text-[13px]";
 
 export default function PositionPage() {
   const { assetId } = useParams<{ assetId: string }>();
@@ -140,7 +140,7 @@ export default function PositionPage() {
                 <TableBody>
                   {data.lots.map((l, i) => (
                     <TableRow key={i}>
-                      <TableCell className="pl-1 font-mono text-[13px] tabular-nums">
+                      <TableCell className="pl-1 data text-[13px]">
                         {l.openedAt}
                       </TableCell>
                       <TableCell className={NUM}>{fmtQty(l.quantity)}</TableCell>
@@ -166,7 +166,7 @@ export default function PositionPage() {
               <TableBody>
                 {data.realizedEntries.map((g, i) => (
                   <TableRow key={i}>
-                    <TableCell className="pl-1 font-mono text-[13px] tabular-nums">
+                    <TableCell className="pl-1 data text-[13px]">
                       {g.soldAt}
                     </TableCell>
                     <TableCell className={NUM}>{fmtQty(g.quantity)}</TableCell>

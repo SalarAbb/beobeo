@@ -159,7 +159,7 @@ function MetricsTable({ columns }: { columns: MetricColumn[] }) {
                     <td
                       key={c.key}
                       className={cn(
-                        "px-3 py-2.5 text-right tabular-nums",
+                        "data px-3 py-2.5 text-right text-[13px]",
                         row.signed && gainClass(v),
                         // Subtle emphasis on the best value — weight, never
                         // color (color follows the entity, not its rank).
@@ -243,7 +243,7 @@ export default function ComparePage() {
   return (
     <div className="mx-auto grid max-w-5xl gap-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Compare</h1>
+        <h1 className="text-3xl">Compare</h1>
         <p className="text-sm text-muted-foreground">
           What if every dollar you invested — same dates, same amounts — had
           gone into a benchmark instead?
@@ -405,12 +405,12 @@ export default function ComparePage() {
                 <p className="text-xs text-muted-foreground">
                   {scopeIds.length === 0 ? "Your portfolio" : scopeLabel}
                 </p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums">
+                <p className="figure mt-1 text-2xl">
                   {fmtUsd(lastP?.value ?? null)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {fmtXirr(data.portfolioXirr)} · invested{" "}
-                  {fmtUsd(lastP?.invested ?? null, 0)}
+                  <span className="data">{fmtXirr(data.portfolioXirr)}</span> · invested{" "}
+                  <span className="data">{fmtUsd(lastP?.invested ?? null, 0)}</span>
                 </p>
               </CardContent>
             </Card>
@@ -428,14 +428,14 @@ export default function ComparePage() {
                       />
                       {b.symbol} (same cash flows)
                     </p>
-                    <p className="mt-1 text-2xl font-semibold tabular-nums">
+                    <p className="figure mt-1 text-2xl">
                       {fmtUsd(last?.value ?? null)}
                     </p>
                     <p className="text-xs">
                       <span className="text-muted-foreground">
-                        {fmtXirr(b.xirr)} · your edge{" "}
+                        <span className="data">{fmtXirr(b.xirr)}</span> · your edge{" "}
                       </span>
-                      <span className={cn("font-medium tabular-nums", gainClass(delta))}>
+                      <span className={cn("data font-medium", gainClass(delta))}>
                         {delta !== null && delta > 0 ? "+" : ""}
                         {fmtUsd(delta)}
                       </span>
@@ -448,10 +448,10 @@ export default function ComparePage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">
+              <CardTitle className="text-lg">
                 Dollar-cost-average comparison
                 {scopeIds.length > 0 && (
-                  <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  <span className="ml-2 font-sans text-sm font-normal text-muted-foreground">
                     {scopeLabel} only
                   </span>
                 )}
@@ -471,9 +471,9 @@ export default function ComparePage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">
+              <CardTitle className="text-lg">
                 Head to head
-                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                <span className="ml-2 font-sans text-sm font-normal text-muted-foreground">
                   same dollars, same dates — only the asset differs
                 </span>
               </CardTitle>

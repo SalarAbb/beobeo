@@ -110,7 +110,7 @@ function ProfileForm({ initial }: { initial: NonNullable<Profile> }) {
     <div className="grid gap-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Tax rates</CardTitle>
+          <CardTitle className="text-lg">Tax rates</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <Field label="Federal ordinary" value={fedOrdinary} onChange={setFedOrdinary} />
@@ -133,7 +133,7 @@ function ProfileForm({ initial }: { initial: NonNullable<Profile> }) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">This year so far</CardTitle>
+          <CardTitle className="text-lg">This year so far</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <Field label="YTD short-term gain/loss" value={ytdST} onChange={setYtdST} suffix="$" />
@@ -147,7 +147,7 @@ function ProfileForm({ initial }: { initial: NonNullable<Profile> }) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Loss carryforward</CardTitle>
+          <CardTitle className="text-lg">Loss carryforward</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <Field label="Short-term carryforward" value={carryST} onChange={setCarryST} suffix="$" />

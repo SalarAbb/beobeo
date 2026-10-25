@@ -133,7 +133,7 @@ export function AllLotsTab() {
                   </Link>
                 </TableCell>
                 <TableCell className="text-muted-foreground">{l.accountName}</TableCell>
-                <TableCell className="text-right tabular-nums">
+                <TableCell className="text-right data">
                   {l.quantity.toLocaleString(undefined, { maximumFractionDigits: 6 })}
                 </TableCell>
                 <TableCell className="text-right text-muted-foreground">
@@ -144,10 +144,10 @@ export function AllLotsTab() {
                     {l.isLongTerm ? "Long-term" : "Short-term"}
                   </span>
                 </TableCell>
-                <TableCell className="text-right tabular-nums">{fmtUsd(l.marketValue)}</TableCell>
+                <TableCell className="text-right data">{fmtUsd(l.marketValue)}</TableCell>
                 <TableCell
                   className={cn(
-                    "pr-6 text-right tabular-nums",
+                    "pr-6 text-right data",
                     l.unrealizedGain >= 0 ? "text-gain" : "text-loss",
                   )}
                 >

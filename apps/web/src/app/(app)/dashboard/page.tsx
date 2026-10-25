@@ -208,7 +208,7 @@ function MetricCell({
           <span className="self-start text-xs font-medium text-muted-foreground underline decoration-muted-foreground/40 decoration-dotted underline-offset-4">
             {label}
           </span>
-          <span className={`font-mono text-lg font-medium tabular-nums ${tone ?? ""}`}>
+          <span className={`figure text-xl ${tone ?? ""}`}>
             {value}
           </span>
         </div>
@@ -521,17 +521,17 @@ export default function DashboardPage() {
                         )}
                       </Link>
                     </TableCell>
-                    <TableCell className="hidden text-right font-mono text-[13px] tabular-nums sm:table-cell">
+                    <TableCell className="hidden text-right data text-[13px] sm:table-cell">
                       {fmtQty(h.quantity)}
                     </TableCell>
-                    <TableCell className="hidden text-right font-mono text-[13px] tabular-nums sm:table-cell">
+                    <TableCell className="hidden text-right data text-[13px] sm:table-cell">
                       {fmtUsd(h.price)}
                     </TableCell>
-                    <TableCell className="text-right font-mono text-[13px] font-medium tabular-nums">
+                    <TableCell className="data text-right text-[13px] font-medium">
                       {fmtUsd(h.marketValue)}
                     </TableCell>
                     <TableCell
-                      className={`pr-1 text-right font-mono text-[13px] tabular-nums ${gainClass(
+                      className={`pr-1 text-right data text-[13px] ${gainClass(
                         windowed ? h.periodGain : h.unrealizedGain,
                       )}`}
                     >

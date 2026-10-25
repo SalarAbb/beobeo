@@ -53,9 +53,9 @@ export function NowTab({
           <Sparkles className="size-6 shrink-0 text-muted-foreground" />
           <div className="flex-1">
             <p className="text-xs text-muted-foreground">Available right now</p>
-            <p className="text-2xl font-semibold tabular-nums">
+            <p className="figure text-2xl">
               {fmtUsd(d.harvestEstTaxSavedUsd)}
-              <span className="ml-2 text-sm font-normal text-muted-foreground">
+              <span className="ml-2 font-sans text-sm font-normal tracking-normal text-muted-foreground">
                 in estimated tax savings from {d.harvestOpportunityCount} loss lot
                 {d.harvestOpportunityCount === 1 ? "" : "s"}
                 {d.blockedCount > 0 &&
@@ -77,13 +77,13 @@ export function NowTab({
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-2">
             <div>
               <p className="text-xs text-muted-foreground">Short-term</p>
-              <p className={`text-lg font-semibold tabular-nums ${gainClass(d.ytdShortTermGain)}`}>
+              <p className={`figure text-xl ${gainClass(d.ytdShortTermGain)}`}>
                 {fmtUsd(d.ytdShortTermGain)}
               </p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Long-term</p>
-              <p className={`text-lg font-semibold tabular-nums ${gainClass(d.ytdLongTermGain)}`}>
+              <p className={`figure text-xl ${gainClass(d.ytdLongTermGain)}`}>
                 {fmtUsd(d.ytdLongTermGain)}
               </p>
             </div>
@@ -112,7 +112,7 @@ export function NowTab({
                 <AssetLogo symbol={s.lot.symbol} assetClass={s.lot.assetClass} size={22} />
                 <span className="font-medium">{s.lot.symbol}</span>
                 <span className="text-muted-foreground">{s.lot.accountName}</span>
-                <span className="ml-auto tabular-nums text-loss">
+                <span className="ml-auto data text-loss">
                   {fmtUsd(s.realizedGain)}
                 </span>
               </div>
@@ -137,8 +137,8 @@ export function NowTab({
                   long-term in {r.daysUntilLongTerm} day{r.daysUntilLongTerm === 1 ? "" : "s"}
                 </span>
                 {r.estSavingsIfWaited > 0.5 && (
-                  <span className="ml-auto tabular-nums text-gain">
-                    waiting saves ~{fmtUsd(r.estSavingsIfWaited)}
+                  <span className="ml-auto text-gain">
+                    waiting saves <span className="data">~{fmtUsd(r.estSavingsIfWaited)}</span>
                   </span>
                 )}
               </div>

@@ -36,7 +36,7 @@ export function RealizedBars({ data }: { data: YearGains[] }) {
   }
 
   return (
-    <div className="h-56 w-full">
+    <div className="data h-56 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 8 }} barCategoryGap="35%">
           <CartesianGrid vertical={false} stroke={theme.grid} />
@@ -62,10 +62,10 @@ export function RealizedBars({ data }: { data: YearGains[] }) {
               return (
                 <div className="rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow-md">
                   <p className="font-medium">{label}</p>
-                  <p className="tabular-nums">
+                  <p className="data">
                     Total <span className="font-medium">{fmtUsd(p.total)}</span>
                   </p>
-                  <p className="text-muted-foreground tabular-nums">
+                  <p className="text-muted-foreground data">
                     Short-term {fmtUsd(p.shortTerm)} · Long-term {fmtUsd(p.longTerm)}
                   </p>
                 </div>

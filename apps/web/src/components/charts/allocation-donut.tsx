@@ -71,8 +71,8 @@ export function AllocationDonut({ data }: { data: AllocationSlice[] }) {
                 return (
                   <div className="rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow-md">
                     <span className="font-medium">{p.name}</span>{" "}
-                    <span className="tabular-nums">{fmtUsd(v)}</span>{" "}
-                    <span className="text-muted-foreground tabular-nums">
+                    <span className="data">{fmtUsd(v)}</span>{" "}
+                    <span className="text-muted-foreground data">
                       ({((v / total) * 100).toFixed(1)}%)
                     </span>
                   </div>
@@ -91,7 +91,7 @@ export function AllocationDonut({ data }: { data: AllocationSlice[] }) {
               style={{ background: colorFor(s.symbol) }}
             />
             <span className="w-14 font-medium">{s.symbol}</span>
-            <span className="tabular-nums text-muted-foreground">
+            <span className="data text-muted-foreground">
               {((s.value / total) * 100).toFixed(1)}%
             </span>
           </li>

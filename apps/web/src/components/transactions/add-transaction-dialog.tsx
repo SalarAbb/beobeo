@@ -262,7 +262,7 @@ export function AddTransactionDialog({ onCreated }: { onCreated?: () => void }) 
             {totalLabel && (
               <span className="text-right">
                 <span className="mr-2 text-xs text-muted-foreground">{totalLabel}</span>
-                <span className="text-base font-semibold tabular-nums">
+                <span className="text-base font-semibold data">
                   {total !== null ? fmtUsd(total) : "—"}
                 </span>
               </span>

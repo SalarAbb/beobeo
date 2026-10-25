@@ -76,7 +76,7 @@ export function HarvestTab() {
               <div className="flex items-center gap-3">
                 <PiggyBank className="size-6 shrink-0 text-muted-foreground" />
                 <div>
-                  <p className="text-xl font-semibold tabular-nums">
+                  <p className="figure text-xl">
                     {fmtUsd(d.estTaxSavedUsd)} estimated tax savings
                   </p>
                   <p className="text-xs text-muted-foreground">

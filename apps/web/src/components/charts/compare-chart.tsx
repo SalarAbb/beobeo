@@ -8,7 +8,7 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import { useEffect, useRef, useState } from "react";
-import { fmtCompactUsd, fmtUsd, useVizTheme, type VizTheme } from "@/lib/viz";
+import { fmtCompactUsd, fmtUsd, useVizTheme, type VizTheme, chartFont } from "@/lib/viz";
 
 export interface ComparePoint {
   date: string;
@@ -60,6 +60,7 @@ export function CompareChart({
         background: { color: "transparent" },
         textColor: theme.muted,
         fontSize: 11,
+        fontFamily: chartFont(),
         attributionLogo: false,
       },
       grid: { vertLines: { visible: false }, horzLines: { color: theme.grid } },
@@ -142,7 +143,7 @@ export function CompareChart({
             style={{ background: theme.series[0] }}
           />
           <span className="text-muted-foreground">{portfolioLabel}</span>
-          <span className="font-medium tabular-nums">
+          <span className="font-medium data">
             {fmtUsd(hover ? hover.portfolio : (lastP?.value ?? null))}
           </span>
         </span>
@@ -155,7 +156,7 @@ export function CompareChart({
                 style={{ background: benchColor(theme, i) }}
               />
               <span className="text-muted-foreground">{b.label}</span>
-              <span className="font-medium tabular-nums">
+              <span className="font-medium data">
                 {fmtUsd(hover ? hover.bench[i] : (last?.value ?? null))}
               </span>
             </span>
@@ -169,7 +170,7 @@ export function CompareChart({
           <span className="text-muted-foreground">Invested</span>
         </span>
         {hover && (
-          <span className="tabular-nums text-muted-foreground">{hover.date}</span>
+          <span className="data text-muted-foreground">{hover.date}</span>
         )}
       </div>
       <div ref={containerRef} className="h-80 w-full" />

@@ -10,7 +10,7 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import { useEffect, useRef, useState } from "react";
-import { fmtUsd, useVizTheme } from "@/lib/viz";
+import { fmtUsd, useVizTheme, chartFont } from "@/lib/viz";
 
 export interface PricePoint {
   date: string;
@@ -55,6 +55,7 @@ export function PriceChart({
         background: { color: "transparent" },
         textColor: theme.muted,
         fontSize: 11,
+        fontFamily: chartFont(),
         attributionLogo: false,
       },
       grid: {
@@ -149,7 +150,7 @@ export function PriceChart({
             style={{ background: theme.series[0] }}
           />
           <span className="text-muted-foreground">Price</span>
-          <span className="font-medium tabular-nums">
+          <span className="font-medium data">
             {shown ? fmtUsd(shown.close) : "—"}
           </span>
         </span>
@@ -167,7 +168,7 @@ export function PriceChart({
           <span className="text-muted-foreground">Sell</span>
         </span>
         {hover && (
-          <span className="text-muted-foreground tabular-nums">{hover.date}</span>
+          <span className="text-muted-foreground data">{hover.date}</span>
         )}
       </div>
       <div ref={containerRef} className="h-80 w-full" />

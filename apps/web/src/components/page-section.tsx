@@ -64,8 +64,8 @@ export function StatStrip({
   );
 }
 
-/** One cell of a StatStrip. `hero` values use the display serif — the one
- *  place it carries data; the rest stay in mono. */
+/** One cell of a StatStrip. The value is a headline figure (display serif);
+ *  `hero` makes it larger. The sub-line is data (mono). See `.figure`/`.data` in globals.css. */
 export function StatTile({
   label,
   value,
@@ -83,16 +83,12 @@ export function StatTile({
     <div className="min-w-0 bg-card px-5 py-4">
       <p className="eyebrow">{label}</p>
       <p
-        className={`mt-2 truncate tabular-nums ${
-          hero
-            ? "font-display text-2xl font-bold sm:text-[28px]"
-            : "font-mono text-lg font-medium"
-        } ${tone ?? ""}`}
+        className={`figure mt-2 truncate ${hero ? "text-2xl sm:text-[28px]" : "text-xl"} ${tone ?? ""}`}
       >
         {value}
       </p>
       {sub && (
-        <p className={`mt-0.5 font-mono text-xs ${tone ?? "text-muted-foreground"}`}>{sub}</p>
+        <p className={`data mt-0.5 text-xs ${tone ?? "text-muted-foreground"}`}>{sub}</p>
       )}
     </div>
   );

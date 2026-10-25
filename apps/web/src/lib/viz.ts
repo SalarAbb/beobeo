@@ -88,6 +88,10 @@ export function useVizTheme(): VizTheme {
   return usePrefersDark() ? VIZ.dark : VIZ.light;
 }
 
+/** The mono face for canvas charts (lightweight-charts can't resolve CSS variables). Client-only: call in effects. */
+export const chartFont = () =>
+  `${getComputedStyle(document.documentElement).getPropertyValue("--font-data").trim() || "ui-monospace"}, ui-monospace, monospace`;
+
 export const fmtUsd = (v: number | null | undefined, digits = 2) =>
   v === null || v === undefined
     ? "—"
@@ -102,8 +106,9 @@ export const fmtCompactUsd = (v: number) =>
   v.toLocaleString("en-US", {
     style: "currency",
     currency: "USD",
-    notation: Math.abs(v) >= 10000 ? "compact" : "standard",
-    maximumFractionDigits: Math.abs(v) >= 10000 ? 1 : 0,
+    // Compact from $1,000 so an axis never mixes "$8,000" with "$12K" (and mono labels stay narrow).
+    notation: Math.abs(v) >= 1000 ? "compact" : "standard",
+    maximumFractionDigits: Math.abs(v) >= 1000 ? 1 : 0,
   });
 
 export const fmtPct = (v: number | null | undefined) =>

@@ -111,7 +111,7 @@ export function RaiseCashTab() {
             <CardContent className="flex items-center gap-3 py-5">
               <TrendingUp className="size-6 shrink-0 text-muted-foreground" />
               <div>
-                <p className="text-xl font-semibold tabular-nums">
+                <p className="figure text-xl">
                   {d.headlineSavingsVsFifo >= 0.5
                     ? `Your broker's FIFO default would cost you ${fmtUsd(d.headlineSavingsVsFifo)} more`
                     : "This plan matches what FIFO would do here"}

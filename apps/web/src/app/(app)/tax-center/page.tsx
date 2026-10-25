@@ -26,7 +26,7 @@ export default function TaxCenterPage() {
   return (
     <div className="mx-auto grid max-w-5xl gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Tax Center</h1>
+        <h1 className="text-3xl">Tax Center</h1>
         <span className="text-sm text-muted-foreground">· {activeName}</span>
         <div className="ml-auto">
           <SegmentedControl value={tab} onChange={setTab} options={TABS} />

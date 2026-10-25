@@ -329,11 +329,11 @@ export function CsvImportDialog({ onImported }: { onImported?: () => void }) {
                       <TableCell>{t.tradedAt.toISOString().slice(0, 10)}</TableCell>
                       <TableCell className="font-medium">{t.symbol}</TableCell>
                       <TableCell>{t.type}</TableCell>
-                      <TableCell className="text-right font-mono">{t.quantity}</TableCell>
-                      <TableCell className="text-right font-mono">
+                      <TableCell className="data text-right">{t.quantity}</TableCell>
+                      <TableCell className="data text-right">
                         {t.pricePerUnit ?? "—"}
                       </TableCell>
-                      <TableCell className="text-right font-mono">{t.fees}</TableCell>
+                      <TableCell className="data text-right">{t.fees}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

@@ -10,7 +10,7 @@ import {
 } from "lightweight-charts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { fmtCompactUsd, fmtUsd, useVizTheme } from "@/lib/viz";
+import { fmtCompactUsd, fmtUsd, useVizTheme, chartFont } from "@/lib/viz";
 import { cn } from "@/lib/utils";
 
 export interface ValuePoint {
@@ -64,6 +64,7 @@ export function ValueChart({ data }: { data: ValuePoint[] }) {
         background: { color: "transparent" },
         textColor: theme.muted,
         fontSize: 11,
+        fontFamily: chartFont(),
         attributionLogo: false,
       },
       grid: {
@@ -130,7 +131,7 @@ export function ValueChart({ data }: { data: ValuePoint[] }) {
               style={{ background: theme.series[0] }}
             />
             <span className="text-muted-foreground">Value</span>
-            <span className="font-medium tabular-nums">
+            <span className="font-medium data">
               {shown ? fmtUsd(shown.value) : "—"}
             </span>
           </span>
@@ -140,12 +141,12 @@ export function ValueChart({ data }: { data: ValuePoint[] }) {
               style={{ borderColor: theme.muted }}
             />
             <span className="text-muted-foreground">Invested</span>
-            <span className="font-medium tabular-nums">
+            <span className="font-medium data">
               {shown ? fmtUsd(shown.invested) : "—"}
             </span>
           </span>
           {hover && (
-            <span className="text-muted-foreground tabular-nums">{hover.date}</span>
+            <span className="text-muted-foreground data">{hover.date}</span>
           )}
         </div>
         <div className="flex gap-1">
