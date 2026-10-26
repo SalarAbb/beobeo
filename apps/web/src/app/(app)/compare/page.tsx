@@ -153,7 +153,7 @@ const METRIC_ROWS: {
   {
     name: "Biggest drop",
     term: "max drawdown",
-    explainer: "deepest fall from a peak along the way",
+    explainer: "deepest market fall from a peak once most of your money was in; selling doesn't count",
     value: (c) => c.metrics.maxDrawdown,
     format: fmtAbsPct,
     better: "high", // less negative = shallower fall = better

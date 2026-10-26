@@ -6,6 +6,7 @@ import {
   chainReturns,
   currentDrawdown,
   dailyReturns,
+  materialDrawdown,
   maxDrawdown,
   sharpe,
   valueDrawdown,
@@ -253,5 +254,40 @@ describe("bestWorstDay", () => {
 
   it("is null when every day is a zero-fill day", () => {
     expect(bestWorstDay(rs([0, 0, 0]))).toBeNull();
+  });
+});
+
+describe("materialDrawdown", () => {
+  const pt = (date: string, value: number, invested: number): MetricSeriesPoint => ({ date: date as IsoDate, value, invested });
+
+  it("ignores a crash while the portfolio was a sliver of its eventual size", () => {
+    // $100 crashes to $10 (−90%), then $10,000 arrives and the real portfolio dips 10%.
+    // Peak invested 10,100 → material from the first day invested ≥ 1,010 (day c).
+    // From c: d = 9,009 / 10,010 − 1 = −10%; e = 9,909.9 / 9,009 − 1 = +10%. Max DD = −10%.
+    const s = [
+      pt("2021-01-01", 100, 100),
+      pt("2021-06-01", 10, 100),
+      pt("2025-01-01", 10_010, 10_100),
+      pt("2025-01-02", 9_009, 10_100),
+      pt("2025-01-03", 9_909.9, 10_100),
+    ];
+    const dd = materialDrawdown(s)!;
+    expect(dd.from).toBe("2025-01-01");
+    expect(dd.max).toBeCloseTo(-0.1, 10);
+    // The dollar-value measure it replaces reports the sliver's crash.
+    expect(valueDrawdown(s)!.max).toBeCloseTo(-0.9, 10);
+  });
+
+  it("does not count selling as a drop", () => {
+    // Sell half at flat prices: value 10,000 → 5,000, invested 10,000 → 5,000. r = 5,000 / (10,000 − 5,000) − 1 = 0.
+    const s = [pt("2026-01-01", 10_000, 10_000), pt("2026-01-02", 5_000, 5_000), pt("2026-01-03", 4_500, 5_000)];
+    // Only the real −10% on day 3 counts: 4,500 / 5,000 − 1.
+    expect(materialDrawdown(s)!.max).toBeCloseTo(-0.1, 10);
+    expect(valueDrawdown(s)!.max).toBeCloseTo(-0.55, 10);
+  });
+
+  it("returns null without capital or with a single point", () => {
+    expect(materialDrawdown([])).toBeNull();
+    expect(materialDrawdown([pt("2026-01-01", 100, 100)])).toBeNull();
   });
 });

@@ -200,6 +200,28 @@ export function valueDrawdown(
   return { max: worst, current };
 }
 
+/** Invested capital must reach this share of its peak before drawdowns count. */
+const MATERIAL_SHARE = 0.1;
+
+/**
+ * The drawdown a person recognizes as "my portfolio fell": the worst peak-to-trough decline
+ * of the flow-adjusted return index (deposits and sales never look like gains or losses),
+ * counted only from the first day invested capital reached 10% of its peak. Before that the
+ * portfolio was a different, much smaller thing: a real account showed "−90%" because its
+ * first $1k was all LINK in 2021, while ~$227k later came in over 2025–26. Comparisons over
+ * the same flows (DCA benchmarks) get the same start date, so columns stay apples to apples.
+ */
+export function materialDrawdown(
+  series: MetricSeriesPoint[],
+): { max: number; from: IsoDate } | null {
+  const peakInvested = Math.max(0, ...series.map((p) => p.invested));
+  if (peakInvested <= 0) return null;
+  const start = series.findIndex((p) => p.invested >= MATERIAL_SHARE * peakInvested);
+  const slice = series.slice(start);
+  if (slice.length < 2) return null;
+  return { max: maxDrawdown(dailyReturns(slice)), from: slice[0]!.date };
+}
+
 /** Best and worst single days among days with an actual move. */
 export function bestWorstDay(
   returns: DailyReturn[],

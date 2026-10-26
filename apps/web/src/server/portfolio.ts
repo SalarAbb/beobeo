@@ -8,7 +8,7 @@ import {
   D,
   dailyReturns,
   extractCashFlows,
-  valueDrawdown,
+  materialDrawdown,
   portfolioTimeSeries,
   positionFromLots,
   realizedByYear,
@@ -549,16 +549,19 @@ function seriesMetrics(points: MetricSeriesPoint[]) {
         86_400_000
       : 0;
   const twr = chainReturns(returns);
-  // Drawdowns are measured on the DOLLAR value series — what the chart
-  // shows — not the chained return index. A tiny early position's boom/bust
-  // once told a user at their all-time high they were "58% below peak".
-  const dd = valueDrawdown(points);
+  // Drawdown = core `materialDrawdown`: flow-adjusted (selling isn't a fall) and counted only
+  // once invested capital reached 10% of its peak. Both earlier measures misled a real user:
+  // the chained index from day one said "58% below peak" at an all-time high (a tiny early
+  // LINK boom), and the dollar series said "−90%" (that same $1k of LINK crashing in 2022,
+  // plus every sale counted as a loss).
+  const dd = materialDrawdown(points);
   return {
     spanDays,
     twr: pct(returns.length > 0 ? twr : null),
     twrAnnualized: pct(returns.length > 0 ? annualize(twr, spanDays) : null),
     volatility: pct(volatility(returns)),
     maxDrawdown: dd ? pct(dd.max) : null,
+    maxDrawdownFrom: dd?.from ?? null,
     sharpe: sharpe(returns, RISK_FREE_RATE),
   };
 }
@@ -769,7 +772,7 @@ export function computeDcaComparison(
   return cached(
     userCacheKey(
       userId,
-      "dca2", // v2: payload gained per-series `metrics` — don't serve stale v1 JSON
+      "dca3", // v3: drawdown became materialDrawdown (+ maxDrawdownFrom) — don't serve stale JSON
       opts.portfolioId ?? "all",
       scopeKey(opts.benchmarkIds),
       scopeKey(opts.scopeAssetIds),

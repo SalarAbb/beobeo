@@ -28,6 +28,7 @@ export {
   maxDrawdown,
   currentDrawdown,
   valueDrawdown,
+  materialDrawdown,
   volatility,
   sharpe,
   bestWorstDay,
