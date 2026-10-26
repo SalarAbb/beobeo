@@ -46,7 +46,7 @@ function MoveText({ move: m }: { move: Move }) {
       );
       why = (
         <>
-          books a <span className="data">{fmtUsd(m.lossUsd, 0)}</span> loss, same coins after ·{" "}
+          books a <span className="data">{fmtUsd(m.lossUsd, 0)}</span>{" "}loss, same coins after ·{" "}
           {m.accounts?.join(", ")}
         </>
       );
@@ -59,7 +59,7 @@ function MoveText({ move: m }: { move: Move }) {
       );
       why = (
         <>
-          books a <span className="data">{fmtUsd(m.lossUsd, 0)}</span> loss · don&apos;t buy it
+          books a <span className="data">{fmtUsd(m.lossUsd, 0)}</span>{" "}loss · don&apos;t buy it
           back before <span className="data">{day(m.rebuyAfter)}</span> (wash-sale rule)
         </>
       );
@@ -73,11 +73,11 @@ function MoveText({ move: m }: { move: Move }) {
       why = m.permanentlyDisallowed ? (
         <>
           a retirement account bought it recently; selling sooner loses the{" "}
-          <span className="data">{fmtUsd(m.lossUsd, 0)}</span> loss for good
+          <span className="data">{fmtUsd(m.lossUsd, 0)}</span>{" "}loss for good
         </>
       ) : (
         <>
-          a recent buy puts its <span className="data">{fmtUsd(m.lossUsd, 0)}</span> loss on hold
+          a recent buy puts its <span className="data">{fmtUsd(m.lossUsd, 0)}</span>{" "}loss on hold
           (wash-sale rule); buying more restarts the wait
         </>
       );
@@ -258,7 +258,7 @@ export function NowTab({
           {canHarvest && (
             <div className="grid gap-3">
               <p className="text-sm">
-                Selling every loss above books{" "}
+                Taking every loss above books{" "}
                 <span className="data">{fmtUsd(b.totalHarvestedLossUsd, 0)}</span> and saves
                 about <span className="data">{fmtUsd(d.movesTaxSavedUsd, 0)}</span>
                 {b.ordinaryDeductionUsd >= 1 && unusedDeduction >= 1 && (
