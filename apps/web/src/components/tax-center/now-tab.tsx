@@ -1,16 +1,22 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { CalendarClock, Clock, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { AssetLogo } from "@/components/asset-logo";
+import { Section, StatStrip, StatTile } from "@/components/page-section";
 import { usePortfolio } from "@/components/portfolio-context";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTRPC } from "@/lib/trpc";
 import { fmtUsd, gainClass } from "@/lib/viz";
 
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/**
+ * Zero-input view. Leads with the plain answer ("do I owe anything?"), then
+ * only the sections that have something in them — a user who has never sold
+ * sees one sentence, not a wall of $0.00 boxes (`tax-center-noisy-zero-states`).
+ */
 export function NowTab({
   onNavigate,
 }: {
@@ -27,139 +33,182 @@ export function NowTab({
 
   const d = now.data;
   const isYearEnd = d.daysLeftInTaxYear <= 90;
+  const netYtd = d.ytdShortTermGain + d.ytdLongTermGain;
+  const hasSales = Math.abs(d.ytdShortTermGain) >= 0.5 || Math.abs(d.ytdLongTermGain) >= 0.5;
+  const owes = d.taxOwedSoFarUsd >= 0.5;
+  const canHarvest = d.harvestOpportunityCount > 0 && d.harvestEstTaxSavedUsd >= 0.5;
 
   return (
-    <div className="grid gap-4">
-      {isYearEnd && (
-        <Card className="border-primary/30 bg-secondary/40">
-          <CardContent className="flex items-center gap-3 py-4">
-            <CalendarClock className="size-5 shrink-0 text-muted-foreground" />
-            <div>
-              <p className="text-sm font-semibold">
-                {d.daysLeftInTaxYear} day{d.daysLeftInTaxYear === 1 ? "" : "s"} left in the
-                tax year
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Losses harvested and long-term timing decisions only count if they happen
-                before December 31.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardContent className="flex flex-wrap items-center gap-4 py-5">
-          <Sparkles className="size-6 shrink-0 text-muted-foreground" />
-          <div className="flex-1">
-            <p className="text-xs text-muted-foreground">Available right now</p>
-            <p className="figure text-2xl">
-              {fmtUsd(d.harvestEstTaxSavedUsd)}
-              <span className="ml-2 font-sans text-sm font-normal tracking-normal text-muted-foreground">
-                in estimated tax savings from {d.harvestOpportunityCount} loss lot
-                {d.harvestOpportunityCount === 1 ? "" : "s"}
-                {d.blockedCount > 0 &&
-                  ` (${d.blockedCount} more blocked by the wash-sale rule)`}
-              </span>
-            </p>
-          </div>
-          {d.harvestOpportunityCount > 0 && (
-            <Button onClick={() => onNavigate("harvest")}>Review harvest plan</Button>
+    <div className="grid gap-10">
+      <div className="grid gap-4">
+        <p className="max-w-2xl text-lg leading-snug">
+          {owes ? (
+            <>
+              Your sales this year mean about{" "}
+              <span className="data">{fmtUsd(d.taxOwedSoFarUsd, 0)}</span> in capital-gains
+              tax so far.
+            </>
+          ) : hasSales && netYtd < 0 ? (
+            <>
+              You owe no capital-gains tax right now. Your sales this year net to a loss of{" "}
+              <span className="data">{fmtUsd(-netYtd, 0)}</span>, which lowers your income
+              tax instead.
+            </>
+          ) : (
+            <>
+              You owe no capital-gains tax right now
+              {hasSales ? "." : ": you haven't sold anything at a gain this year."}
+            </>
           )}
-        </CardContent>
-      </Card>
+          {canHarvest && (
+            <>
+              {" "}
+              Selling a few positions that are down could save you about{" "}
+              <span className="data">{fmtUsd(d.harvestEstTaxSavedUsd, 0)}</span>.
+            </>
+          )}
+        </p>
 
-      <Card>
-        <CardContent className="grid gap-3 py-4">
-          <p className="text-xs font-medium text-muted-foreground">
-            Your capital gains so far this year
-          </p>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-2">
-            <div>
-              <p className="text-xs text-muted-foreground">Short-term</p>
-              <p className={`figure text-xl ${gainClass(d.ytdShortTermGain)}`}>
-                {fmtUsd(d.ytdShortTermGain)}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Long-term</p>
-              <p className={`figure text-xl ${gainClass(d.ytdLongTermGain)}`}>
-                {fmtUsd(d.ytdLongTermGain)}
-              </p>
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            This is what every number on this page is measured against — a loss that offsets
-            a gain here is worth your full tax rate; one with nothing left to offset only
-            carries forward, worth less.{" "}
-            <button
-              type="button"
-              onClick={() => onNavigate("profile")}
-              className="underline hover:text-foreground"
-            >
-              Edit in Tax Profile →
-            </button>
-          </p>
-        </CardContent>
-      </Card>
+        {hasSales && (
+          <StatStrip cols="grid-cols-2 sm:grid-cols-3">
+            <StatTile
+              hero={false}
+              label="Short-term gains"
+              value={fmtUsd(d.ytdShortTermGain)}
+              tone={gainClass(d.ytdShortTermGain)}
+              subTone="text-muted-foreground"
+              sub="held a year or less"
+            />
+            <StatTile
+              hero={false}
+              label="Long-term gains"
+              value={fmtUsd(d.ytdLongTermGain)}
+              tone={gainClass(d.ytdLongTermGain)}
+              subTone="text-muted-foreground"
+              sub="lower tax rate"
+            />
+            <StatTile
+              hero={false}
+              label="Days left this year"
+              value={String(d.daysLeftInTaxYear)}
+              sub="sales count through Dec 31"
+            />
+          </StatStrip>
+        )}
 
-      {d.harvestPreview.length > 0 && (
-        <Card>
-          <CardContent className="grid gap-3 py-4">
-            <p className="text-xs font-medium text-muted-foreground">Top opportunities</p>
+        <p className="text-xs text-muted-foreground">
+          {hasSales
+            ? "Every number here is measured against these gains."
+            : "Sold something outside this app?"}{" "}
+          <button
+            type="button"
+            onClick={() => onNavigate("profile")}
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            Add it in Tax Profile
+          </button>
+        </p>
+      </div>
+
+      {canHarvest ? (
+        <Section
+          title="Losses you could take"
+          aside={
+            <Button size="sm" onClick={() => onNavigate("harvest")}>
+              See the plan
+            </Button>
+          }
+        >
+          <p className="-mt-2 text-sm text-muted-foreground">
+            These are below what you paid. Selling them books the loss, which cancels out
+            gains or trims your income tax
+            {isYearEnd && (
+              <>
+                {" "}
+                — only if you sell in the next{" "}
+                <span className="data">{d.daysLeftInTaxYear}</span> days
+              </>
+            )}
+            .
+          </p>
+          <ul className="grid divide-y border-y">
             {d.harvestPreview.map((s, i) => (
-              <div key={i} className="flex items-center gap-3 text-sm">
+              <li key={i} className="flex items-center gap-3 py-2.5 text-sm">
                 <AssetLogo symbol={s.lot.symbol} assetClass={s.lot.assetClass} size={22} />
                 <span className="font-medium">{s.lot.symbol}</span>
-                <span className="text-muted-foreground">{s.lot.accountName}</span>
-                <span className="ml-auto data text-loss">
-                  {fmtUsd(s.realizedGain)}
-                </span>
-              </div>
+                <span className="truncate text-muted-foreground">{s.lot.accountName}</span>
+                <span className="data ml-auto text-loss">{fmtUsd(s.realizedGain)}</span>
+              </li>
             ))}
-          </CardContent>
-        </Card>
+          </ul>
+          {d.blockedCount > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {`${plural(d.blockedCount, "more purchase")} on hold: `}
+              you bought the same asset again in the last 30 days.
+            </p>
+          )}
+        </Section>
+      ) : (
+        d.blockedCount > 0 && (
+          <Section
+            title="Losses on hold"
+            aside={
+              <Button size="sm" variant="outline" onClick={() => onNavigate("harvest")}>
+                See which
+              </Button>
+            }
+          >
+            <p className="-mt-2 text-sm text-muted-foreground">
+              {`${plural(d.blockedCount, "purchase")} ${d.blockedCount === 1 ? "is" : "are"} below what you paid, `}
+              but you bought the same asset again in the last 30 days. Selling now
+              wouldn&apos;t count as a loss (the wash-sale rule), so wait until 30 days after
+              that buy.
+            </p>
+          </Section>
+        )
       )}
 
       {d.ripeningSoon.length > 0 && (
-        <Card>
-          <CardContent className="grid gap-3 py-4">
-            <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-              <Clock className="size-3.5" /> Going long-term soon
-            </p>
+        <Section title="Hold a little longer">
+          <p className="-mt-2 text-sm text-muted-foreground">
+            After a year, a gain is taxed at the lower long-term rate. These cross that line
+            soon, so selling them now would cost more.
+          </p>
+          <ul className="grid divide-y border-y">
             {d.ripeningSoon.map((r, i) => (
-              <div key={i} className="flex items-center gap-3 text-sm">
+              <li key={i} className="flex items-center gap-3 py-2.5 text-sm">
                 <AssetLogo symbol={r.lot.symbol} assetClass={r.lot.assetClass} size={22} />
                 <Link href={`/positions/${r.lot.assetId}`} className="font-medium hover:underline">
                   {r.lot.symbol}
                 </Link>
                 <span className="text-muted-foreground">
-                  long-term in {r.daysUntilLongTerm} day{r.daysUntilLongTerm === 1 ? "" : "s"}
+                  in <span className="data">{r.daysUntilLongTerm}</span>{" "}
+                  {r.daysUntilLongTerm === 1 ? "day" : "days"}
                 </span>
                 {r.estSavingsIfWaited > 0.5 && (
-                  <span className="ml-auto text-gain">
+                  <span className="ml-auto text-right text-gain">
                     waiting saves <span className="data">~{fmtUsd(r.estSavingsIfWaited)}</span>
                   </span>
                 )}
-              </div>
+              </li>
             ))}
-          </CardContent>
-        </Card>
+          </ul>
+        </Section>
       )}
 
-      <Card>
-        <CardContent className="flex items-center justify-between py-4">
-          <div>
-            <p className="text-sm font-medium">Need to raise cash?</p>
-            <p className="text-xs text-muted-foreground">
-              Find the lots that minimize what you pay in tax.
-            </p>
-          </div>
-          <Button variant="outline" onClick={() => onNavigate("cash")}>
+      <Section
+        title="Need cash?"
+        aside={
+          <Button size="sm" variant="outline" onClick={() => onNavigate("cash")}>
             Plan a sale
           </Button>
-        </CardContent>
-      </Card>
+        }
+      >
+        <p className="-mt-2 text-sm text-muted-foreground">
+          Tell us how much you need and we&apos;ll pick the shares that cost you the least
+          tax to sell.
+        </p>
+      </Section>
     </div>
   );
 }

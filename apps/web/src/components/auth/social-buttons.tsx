@@ -81,7 +81,7 @@ export function SocialButtons({ providers }: { providers: SocialProvider[] }) {
           </Button>
         );
       })}
-      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+      <div className="eyebrow flex items-center gap-3">
         <span className="h-px flex-1 bg-border" />
         or
         <span className="h-px flex-1 bg-border" />

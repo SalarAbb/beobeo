@@ -5,12 +5,13 @@ import Link from "next/link";
 import { useState } from "react";
 import { usePortfolio } from "@/components/portfolio-context";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { Section } from "@/components/page-section";
 import { useTRPC } from "@/lib/trpc";
+import { fmtUsd } from "@/lib/viz";
 
 type Profile = ReturnType<typeof useProfileQuery>["data"];
 
@@ -35,7 +36,12 @@ function Field({
     <div className="grid gap-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       <div className="flex items-center gap-1.5">
-        <Input value={value} onChange={(e) => onChange(e.target.value)} inputMode="decimal" />
+        <Input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          inputMode="decimal"
+          className="data"
+        />
         <span className="text-xs text-muted-foreground">{suffix}</span>
       </div>
     </div>
@@ -57,11 +63,13 @@ function ProfileForm({ initial }: { initial: NonNullable<Profile> }) {
   const [carryST, setCarryST] = useState(String(initial.carryforwardShortTerm));
   const [carryLT, setCarryLT] = useState(String(initial.carryforwardLongTerm));
   const [discount, setDiscount] = useState(String(initial.carryforwardDiscountPct));
+  // Dollars to the cent: the computed value carries 8 decimals of float noise.
+  const cents = (v: number) => String(Math.round(v * 100) / 100);
   const [ytdST, setYtdST] = useState(
-    String(initial.ytdShortTermOverride ?? initial.ytdShortTermComputed),
+    cents(initial.ytdShortTermOverride ?? initial.ytdShortTermComputed),
   );
   const [ytdLT, setYtdLT] = useState(
-    String(initial.ytdLongTermOverride ?? initial.ytdLongTermComputed),
+    cents(initial.ytdLongTermOverride ?? initial.ytdLongTermComputed),
   );
 
   const save = useMutation(
@@ -107,12 +115,9 @@ function ProfileForm({ initial }: { initial: NonNullable<Profile> }) {
   }
 
   return (
-    <div className="grid gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Tax rates</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-4 md:grid-cols-4">
+    <div className="grid gap-10">
+      <Section title="Tax rates">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <Field label="Federal ordinary" value={fedOrdinary} onChange={setFedOrdinary} />
           <Field label="Federal long-term (LTCG)" value={fedLtcg} onChange={setFedLtcg} />
           <Field label="State ordinary" value={stateOrdinary} onChange={onStateOrdinaryChange} />
@@ -128,28 +133,26 @@ function ProfileForm({ initial }: { initial: NonNullable<Profile> }) {
               My state taxes long-term gains at the same rate as ordinary income
             </span>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </Section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">This year so far</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <Section title="This year so far">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <Field label="YTD short-term gain/loss" value={ytdST} onChange={setYtdST} suffix="$" />
           <Field label="YTD long-term gain/loss" value={ytdLT} onChange={setYtdLT} suffix="$" />
           <div className="col-span-2 flex items-end pb-1.5 text-xs text-muted-foreground md:col-span-2">
-            Pre-filled from your tracked transactions ({initial.ytdShortTermComputed.toFixed(0)}{" "}
-            / {initial.ytdLongTermComputed.toFixed(0)}) — edit if you have gains elsewhere.
+            <span>
+              Pre-filled from your tracked sales (
+              <span className="data">{fmtUsd(initial.ytdShortTermComputed, 0)}</span> /{" "}
+              <span className="data">{fmtUsd(initial.ytdLongTermComputed, 0)}</span>). Edit if
+              you have gains elsewhere.
+            </span>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </Section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Loss carryforward</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <Section title="Losses from past years">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <Field label="Short-term carryforward" value={carryST} onChange={setCarryST} suffix="$" />
           <Field label="Long-term carryforward" value={carryLT} onChange={setCarryLT} suffix="$" />
           <Field label="Carryforward discount" value={discount} onChange={setDiscount} />
@@ -157,8 +160,8 @@ function ProfileForm({ initial }: { initial: NonNullable<Profile> }) {
             How much a loss that only carries forward (doesn&apos;t offset anything this
             year) is worth today — real value, just deferred and uncertain.
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </Section>
 
       <div className="flex items-center justify-between">
         <Link href="/accounts" className="text-sm text-muted-foreground hover:underline">

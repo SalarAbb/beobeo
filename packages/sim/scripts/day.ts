@@ -15,7 +15,7 @@
  */
 import "../src/env";
 import { AppClient, AppError } from "../src/app/client";
-import { launchBrowser, newContext, signUpViaUi, walkthrough, type Shot } from "../src/app/browser";
+import { deviceStorage, launchBrowser, newContext, signUpViaUi, walkthrough, type Shot } from "../src/app/browser";
 import { explore, type ExploreResult } from "../src/app/explore";
 import { exploreProfile, mulberry32, seedFrom } from "../src/explore-rules";
 import { BudgetExceeded } from "../src/budget";
@@ -171,7 +171,9 @@ for (const p of personas) {
   let explored: ExploreResult | null = null;
   if (browser && rng() < profile.chance) {
     const scheme = p.aesthetic.toLowerCase().includes("dark mode") ? "dark" : "light";
-    const ctx = await newContext(browser, { viewport: rng() < 0.25 ? "mobile" : "desktop", scheme, cookies: client.cookieList });
+    const ctx = await newContext(browser, {
+      viewport: rng() < 0.25 ? "mobile" : "desktop", scheme, cookies: client.cookieList, storage: deviceStorage(p, client.userId),
+    });
     explored = await explore(ctx, { rng, profile, symbols: p.universe.map((u) => u.symbol), outDir: shotsDir, tag: p.id }).catch((e) => {
       notes.push(`${p.id}: exploration crashed: ${(e as Error).message}`);
       return null;
@@ -297,11 +299,15 @@ if (browser && useLlm && !budgetHit) {
       // Review what they actually wandered into today, when they explored; otherwise the core pages.
       if ((s.explored?.shots.length ?? 0) >= 2) shots.push(...s.explored!.shots.slice(0, 3));
       else {
-        const desktop = await newContext(browser, { viewport: "desktop", scheme, cookies: s.client.cookieList });
+        const desktop = await newContext(browser, {
+          viewport: "desktop", scheme, cookies: s.client.cookieList, storage: deviceStorage(p, s.client.userId),
+        });
         shots.push(...(await walkthrough(desktop, ["/dashboard", "/tax-center", "/transactions"], shotsDir, `${p.id}-desktop-${scheme}`)));
         await desktop.close();
       }
-      const mobile = await newContext(browser, { viewport: "mobile", scheme, cookies: s.client.cookieList });
+      const mobile = await newContext(browser, {
+        viewport: "mobile", scheme, cookies: s.client.cookieList, storage: deviceStorage(p, s.client.userId),
+      });
       shots.push(...(await walkthrough(mobile, ["/dashboard"], shotsDir, `${p.id}-mobile-${scheme}`)));
       await mobile.close();
       for (const sh of shots) {

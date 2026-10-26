@@ -1,7 +1,7 @@
 "use client";
 
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
-import { fmtUsd, useVizTheme } from "@/lib/viz";
+import { fmtUsd, useVizTheme, type VizTheme } from "@/lib/viz";
 
 export interface AllocationSlice {
   symbol: string;
@@ -11,14 +11,13 @@ export interface AllocationSlice {
 const MAX_SLICES = 7; // 7 named + "Other" keeps within the 8-slot palette
 
 /**
- * Allocation donut. Hue slots are assigned by stable symbol order
- * (alphabetical), so a holding keeps its color as the portfolio changes —
- * color follows the entity, never its rank.
+ * The donut's slices (top 7 + "Other") and their colors. Hue slots are
+ * assigned by stable symbol order (alphabetical), so a holding keeps its
+ * color as the portfolio changes — color follows the entity, never its rank.
+ * Exported so the target-mix table dots each row in its slice's color
+ * (anything folded into "Other", or not held, gets the muted gray).
  */
-export function AllocationDonut({ data }: { data: AllocationSlice[] }) {
-  const theme = useVizTheme();
-
-  const total = data.reduce((s, d) => s + d.value, 0);
+export function allocationSlices(data: AllocationSlice[], theme: VizTheme) {
   const sorted = [...data].sort((a, b) => b.value - a.value);
   const top = sorted.slice(0, MAX_SLICES);
   const rest = sorted.slice(MAX_SLICES);
@@ -30,9 +29,24 @@ export function AllocationDonut({ data }: { data: AllocationSlice[] }) {
   // stable hue assignment: alphabetical symbol order → palette slot
   const hueOrder = [...slices.map((s) => s.symbol)].sort();
   const colorFor = (symbol: string) =>
-    symbol === "Other"
+    symbol === "Other" || !hueOrder.includes(symbol)
       ? theme.muted
       : theme.series[hueOrder.indexOf(symbol) % theme.series.length]!;
+  return { slices, colorFor };
+}
+
+/** Allocation donut with direct labels; `legend={false}` when a table next
+ *  to it already names every slice. */
+export function AllocationDonut({
+  data,
+  legend = true,
+}: {
+  data: AllocationSlice[];
+  legend?: boolean;
+}) {
+  const theme = useVizTheme();
+  const total = data.reduce((s, d) => s + d.value, 0);
+  const { slices, colorFor } = allocationSlices(data, theme);
 
   if (total === 0) {
     return (
@@ -83,20 +97,22 @@ export function AllocationDonut({ data }: { data: AllocationSlice[] }) {
         </ResponsiveContainer>
       </div>
       {/* direct labels — the relief for sub-3:1 light-mode slots */}
-      <ul className="grid gap-1.5 text-xs">
-        {slices.map((s) => (
-          <li key={s.symbol} className="flex items-center gap-2">
-            <span
-              className="size-2.5 rounded-[3px]"
-              style={{ background: colorFor(s.symbol) }}
-            />
-            <span className="w-14 font-medium">{s.symbol}</span>
-            <span className="data text-muted-foreground">
-              {((s.value / total) * 100).toFixed(1)}%
-            </span>
-          </li>
-        ))}
-      </ul>
+      {legend && (
+        <ul className="grid gap-1.5 text-xs">
+          {slices.map((s) => (
+            <li key={s.symbol} className="flex items-center gap-2">
+              <span
+                className="size-2.5 rounded-[3px]"
+                style={{ background: colorFor(s.symbol) }}
+              />
+              <span className="w-14 font-medium">{s.symbol}</span>
+              <span className="data text-muted-foreground">
+                {((s.value / total) * 100).toFixed(1)}%
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

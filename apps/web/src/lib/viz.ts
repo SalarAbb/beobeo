@@ -100,6 +100,8 @@ export const fmtUsd = (v: number | null | undefined, digits = 2) =>
         currency: "USD",
         maximumFractionDigits: digits,
         minimumFractionDigits: digits > 2 ? 2 : digits,
+        // A value that rounds to zero prints "$0.00", never "-$0.00" (read as a bug).
+        signDisplay: "negative",
       });
 
 export const fmtCompactUsd = (v: number) =>
@@ -119,9 +121,10 @@ export const fmtPct = (v: number | null | undefined) =>
 export const fmtQty = (v: number) =>
   v.toLocaleString("en-US", { maximumFractionDigits: 8 });
 
+/** Zero (to the cent) is neutral: a green "$0.00" reads as good news that isn't there. */
 export const gainClass = (v: number | null | undefined) =>
-  v === null || v === undefined
+  v === null || v === undefined || Math.abs(v) < 0.005
     ? "text-muted-foreground"
-    : v >= 0
+    : v > 0
       ? "text-gain"
       : "text-loss";

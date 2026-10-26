@@ -17,20 +17,21 @@
 - **Done means:**
   - ✓ Shippori Mincho for headings and hero numbers (sparingly), Hanken Grotesk for body text, JetBrains Mono for data and numerals, loaded with `next/font`, applied by one rule on every page (`.figure` / `.data`, see CLAUDE.md "Type system"), never mixed ad hoc
   - ✓ Light and dark tokens from `packages/sim/report/style.css` (cool indigo-biased neutrals, one ai-iro indigo accent, semantic good/warn/bad) live in `apps/web/src/app/globals.css`
-  - Hairline rules and quiet surfaces replace stacked shadows and cards; generous spacing
-  - Charts keep the validated `viz.ts` palette; chips, pills and tooltips match the page's style
+  - ✓ Hairline rules and quiet surfaces replace stacked shadows and cards; generous spacing
+  - ✓ Charts keep the validated `viz.ts` palette; chips, pills and tooltips match the page's style
   - Every page screenshotted in light, dark and at phone width, and the personas' look scores don't drop
-- **Notes:** Ship page by page (dashboard first). The evolution page itself is the reference. 2026-10-25 (`evolve/2026-10-25`): fonts and light/dark tokens are live app-wide, card shadows are gone, and pills and the nav use the indigo accent. The dashboard is fully restyled (hairline summary strip, serif section titles over rules, mono numerals) and was checked in light, dark and at phone width. Remaining: convert transactions, tax center, compare, chat, accounts, account, positions and auth pages the same way, then confirm look scores held. 2026-10-25 round 1: the position, transactions, accounts and account pages are converted (shared `page-section.tsx` blocks), checked in light, dark and at phone width. Remaining: tax center, compare, chat, auth.
+- **Notes:** Ship page by page (dashboard first). The evolution page itself is the reference. 2026-10-25 (`evolve/2026-10-25`): fonts and light/dark tokens are live app-wide, card shadows are gone, and pills and the nav use the indigo accent. The dashboard is fully restyled (hairline summary strip, serif section titles over rules, mono numerals) and was checked in light, dark and at phone width. Remaining: convert transactions, tax center, compare, chat, accounts, account, positions and auth pages the same way, then confirm look scores held. 2026-10-25 round 1: the position, transactions, accounts and account pages are converted (shared `page-section.tsx` blocks), checked in light, dark and at phone width. Remaining: tax center, compare, chat, auth. 2026-10-25 round 3: the tax center is converted (all five tabs, plain verdict first, empty sections hidden), checked in light, dark and at phone width. Remaining: compare, chat, auth. 2026-10-25 round 3 (second pass): compare is converted (verdict sentence first, one hairline strip instead of four cards, sections over rules, pill chips), checked in light, dark and at phone width. Remaining: chat, auth. 2026-10-25 round 5: chat (a transcript with hairline turns instead of bubbles, dated conversations, a "Past chats" menu on phones) and sign-in/sign-up (serif title, form on a hairline surface) are converted and checked in light, dark and at phone width. Every page is now in the new look. The last line waits on the personas' next look scores.
 
 ## R-002 · Keep expert metrics discoverable, not front-facing
 - **Asked:** 2026-10-23
-- **Status:** open
+- **Status:** in progress
 - **Shipped on:** —
 - **In your words:** "Sharpe ratio is great but most users don't care about it so should be discoverable but not front facing." "We want to remove too much unnecessary info."
 - **Done means:**
-  - The dashboard's first screen shows value, gain or loss, the chart and holdings, and nothing a beginner has to decode
-  - Sharpe, volatility, TWR, XIRR and the behavior gap sit one deliberate tap away ("Performance details"), with exact values on hover for experts
+  - ✓ The dashboard's first screen shows value, gain or loss, the chart and holdings, and nothing a beginner has to decode
+  - ✓ Sharpe, volatility, TWR, XIRR and the behavior gap sit one deliberate tap away ("Performance details"), with exact values on hover for experts
   - Luna, Augusta and Olenna stop raising jargon themes; Hermione can still reach every number
+- **Notes:** 2026-10-25 (`evolve/2026-10-25`): the metrics grid is folded behind a closed "Performance details" pill under the chart, with plain labels (technical terms only in the hover card) and one sentence on why the three return numbers differ. Tiles say "Gain on holdings" / "Gain from sales" instead of "Unrealized/Realized P/L". The last line waits on the personas' next days.
 
 ## R-003 · Proactive tax moves ("free money" alerts)
 - **Asked:** 2026-10-23

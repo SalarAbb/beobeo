@@ -1,13 +1,13 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, TrendingUp } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { useState } from "react";
+import { Section, StatStrip, StatTile } from "@/components/page-section";
 import { usePortfolio } from "@/components/portfolio-context";
 import { LossBreakdownBar } from "@/components/tax-center/loss-breakdown-bar";
 import { PlanView } from "@/components/tax-center/plan-view";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -46,31 +46,31 @@ export function RaiseCashTab() {
   const d = plan.data;
 
   return (
-    <div className="grid gap-4">
-      <Card>
-        <CardContent className="flex flex-wrap items-end gap-3 py-4">
-          <div className="grid gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground">
-              I need to raise
-            </label>
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">$</span>
-              <Input
-                value={amountInput}
-                onChange={(e) => setAmountInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && submit()}
-                inputMode="decimal"
-                className="w-40"
-              />
-              <Button onClick={submit}>Plan</Button>
-            </div>
+    <div className="grid gap-10">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="grid gap-1.5">
+          <label htmlFor="raise-amount" className="eyebrow">
+            I need to raise
+          </label>
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground">$</span>
+            <Input
+              id="raise-amount"
+              value={amountInput}
+              onChange={(e) => setAmountInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && submit()}
+              inputMode="decimal"
+              className="data w-40"
+            />
+            <Button onClick={submit}>Plan</Button>
           </div>
+        </div>
 
-          <Popover>
+        <Popover>
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
-                className={cn(doNotSell.length > 0 && "border-primary bg-secondary")}
+                className={cn(doNotSell.length > 0 && "bg-accent text-primary")}
               >
                 {doNotSell.length === 0
                   ? "Do-not-sell list"
@@ -98,40 +98,54 @@ export function RaiseCashTab() {
                   </button>
                 ))
               )}
-            </PopoverContent>
-          </Popover>
-        </CardContent>
-      </Card>
+          </PopoverContent>
+        </Popover>
+      </div>
 
       {target === null ? null : plan.isLoading ? (
         <Skeleton className="h-64 w-full" />
       ) : d ? (
         <>
-          <Card className="border-primary/20 bg-secondary/40">
-            <CardContent className="flex items-center gap-3 py-5">
-              <TrendingUp className="size-6 shrink-0 text-muted-foreground" />
-              <div>
-                <p className="figure text-xl">
-                  {d.headlineSavingsVsFifo >= 0.5
-                    ? `Your broker's FIFO default would cost you ${fmtUsd(d.headlineSavingsVsFifo)} more`
-                    : "This plan matches what FIFO would do here"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Optimized nets {fmtUsd(d.optimized.totalAfterTax)} after tax · FIFO would
-                  net {fmtUsd(d.fifo.totalAfterTax)} · highest-cost-first would net{" "}
-                  {fmtUsd(d.highestCostFirst.totalAfterTax)}
-                </p>
-              </div>
-              {d.breakdown.totalHarvestedLossUsd > 0.5 && (
-                <div className="border-t pt-4">
-                  <p className="mb-2.5 text-xs font-medium text-muted-foreground">
-                    Where the loss in this plan actually goes
-                  </p>
-                  <LossBreakdownBar breakdown={d.breakdown} />
-                </div>
+          <div className="grid gap-4">
+            <p className="max-w-2xl text-lg leading-snug">
+              {d.headlineSavingsVsFifo >= 0.5 ? (
+                <>
+                  Selling these shares instead of your broker&apos;s default keeps{" "}
+                  <span className="data">{fmtUsd(d.headlineSavingsVsFifo)}</span> more in your
+                  pocket.
+                </>
+              ) : (
+                "Here your broker's default (oldest shares first) already costs the least tax."
               )}
-            </CardContent>
-          </Card>
+            </p>
+            <StatStrip cols="grid-cols-1 sm:grid-cols-3">
+              <StatTile
+                hero={false}
+                label={d.optimized.totalTaxCost < 0 ? "Tax this saves" : "Tax this costs"}
+                value={fmtUsd(Math.abs(d.optimized.totalTaxCost))}
+                tone={d.optimized.totalTaxCost < -0.005 ? "text-gain" : undefined}
+                subTone="text-muted-foreground"
+                sub="estimated, at your saved rates"
+              />
+              <StatTile
+                hero={false}
+                label="You keep after tax"
+                value={fmtUsd(d.optimized.totalAfterTax)}
+              />
+              <StatTile
+                hero={false}
+                label="Broker default would keep"
+                value={fmtUsd(d.fifo.totalAfterTax)}
+                sub="oldest shares first (FIFO)"
+              />
+            </StatStrip>
+          </div>
+
+          {d.breakdown.totalHarvestedLossUsd > 0.5 && (
+            <Section title="Where the losses in this plan go">
+              <LossBreakdownBar breakdown={d.breakdown} />
+            </Section>
+          )}
 
           <PlanView
             sales={d.optimized.sales}

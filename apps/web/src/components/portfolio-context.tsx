@@ -34,6 +34,8 @@ interface PortfolioContextValue {
   portfolios: { id: string; name: string }[];
   /** Name of the active portfolio ("All portfolios" when null). */
   activeName: string;
+  /** Signed-in user, for per-user device storage (allocation targets). */
+  userId: string;
 }
 
 const PortfolioContext = createContext<PortfolioContextValue>({
@@ -41,9 +43,16 @@ const PortfolioContext = createContext<PortfolioContextValue>({
   setPortfolioId: () => {},
   portfolios: [],
   activeName: "All portfolios",
+  userId: "",
 });
 
-export function PortfolioProvider({ children }: { children: React.ReactNode }) {
+export function PortfolioProvider({
+  userId,
+  children,
+}: {
+  userId: string;
+  children: React.ReactNode;
+}) {
   const trpc = useTRPC();
   const portfolios = useQuery(trpc.portfolios.list.queryOptions());
   const stored = useSyncExternalStore(
@@ -71,6 +80,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
         setPortfolioId: portfolioStore.set,
         portfolios: portfolios.data ?? [],
         activeName,
+        userId,
       }}
     >
       {children}

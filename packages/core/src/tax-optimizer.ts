@@ -187,6 +187,20 @@ export function summarizeHarvest(
   return { totalHarvestedLossUsd, gainsOffsetUsd, ordinaryDeductionUsd, carryforwardUsd };
 }
 
+/**
+ * Estimated tax owed on the gains realized so far this year (after the
+ * prior-year carryforward and cross-netting), never negative — the "do I owe
+ * anything right now?" answer. A net loss owes nothing; its deduction value
+ * is deliberately NOT subtracted here, so this is a bill, not a balance.
+ */
+export function taxOwedSoFar(profile: TaxProfile): Decimal {
+  const { st, lt } = effectiveStart(profile);
+  const n = explainNetting(st, lt, rates(profile));
+  return n.shortTermGainTaxed
+    .mul(profile.ordinaryRate)
+    .add(n.longTermGainTaxed.mul(profile.ltcgRate));
+}
+
 export interface PlanSaleOpts {
   targetProceeds: Decimal;
   lots: TaxLot[];
