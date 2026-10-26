@@ -11,6 +11,7 @@ import {
   type TaxProfile,
 } from "@beobeo/core";
 import { getMarketData } from "../market-data";
+import { loadKnownSplits, mergeKnownSplits } from "../portfolio";
 
 const DAY_MS = 86_400_000;
 /** Wash-sale window (30d) plus slack for the DRIP date-correlation heuristic. */
@@ -71,9 +72,12 @@ export async function loadTaxLots(
   const assetsById = new Map(rows.map((r) => [r.asset.id, r.asset]));
   const market = getMarketData();
   const today = toIsoDate(asOf);
-  const latestByAsset = await market
-    .getLatestPrices([...assetsById.values()], today)
-    .catch(() => new Map<string, { date: string; close: string }>());
+  const [latestByAsset, knownSplits] = await Promise.all([
+    market
+      .getLatestPrices([...assetsById.values()], today)
+      .catch(() => new Map<string, { date: string; close: string }>()),
+    loadKnownSplits(db, [...assetsById.keys()]),
+  ]);
 
   const lots: TaxLot[] = [];
   let ytdShortTermGain = ZERO;
@@ -82,15 +86,22 @@ export async function loadTaxLots(
 
   for (const groupRows of groups.values()) {
     const { account, asset } = groupRows[0]!;
-    const txns: EngineTransaction[] = groupRows.map(({ txn }) => ({
-      id: txn.id,
-      assetId: txn.assetId,
-      type: txn.type,
-      quantity: D(txn.quantity),
-      pricePerUnit: txn.pricePerUnit === null ? null : D(txn.pricePerUnit),
-      fees: D(txn.fees),
-      tradedAt: txn.tradedAt,
-    }));
+    // Same provider splits the dashboard injects: without them a position the
+    // user never recorded a split for keeps pre-split units at post-split
+    // prices (fake losses), and a post-split sale oversells and drops the
+    // whole asset from the Tax Center (gilderoy's NFLX).
+    const txns: EngineTransaction[] = mergeKnownSplits(
+      groupRows.map(({ txn }) => ({
+        id: txn.id,
+        assetId: txn.assetId,
+        type: txn.type,
+        quantity: D(txn.quantity),
+        pricePerUnit: txn.pricePerUnit === null ? null : D(txn.pricePerUnit),
+        fees: D(txn.fees),
+        tradedAt: txn.tradedAt,
+      })),
+      knownSplits.filter((s) => s.assetId === asset.id),
+    );
 
     let engineResult;
     try {

@@ -464,6 +464,10 @@ export default function DashboardPage() {
           label={windowed ? `Gain from sales · ${windowLabel}` : "Gain from sales"}
           value={fmtUsd(totals.realized)}
           tone={gainClass(totals.realized)}
+          // All time on its own reads as "this year" next to the Tax Center
+          // and chat (personas asked which one to put on their taxes).
+          sub={windowed ? undefined : `All time · ${fmtUsd(totals.realizedThisYear)} this year`}
+          subTone="text-muted-foreground"
         />
         <StatTile
           label={windowed ? `Dividends · ${windowLabel}` : "Dividends"}

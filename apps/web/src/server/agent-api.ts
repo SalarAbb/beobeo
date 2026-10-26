@@ -75,6 +75,7 @@ export function makePortfolioApi(userId: string, portfolioId?: string): Portfoli
           unrealized: overview.totals.unrealized,
           unrealizedPct: overview.totals.unrealizedPct,
           realizedAllTime: overview.totals.realized,
+          realizedThisYear: round2(overview.totals.realizedThisYear),
           dividendsAllTime: overview.totals.dividends,
         },
         holdings: overview.holdings.map((h) => ({

@@ -115,15 +115,35 @@ async function injectKnownSplits(
   txns: EngineTransaction[],
   assets: Map<string, AssetRow>,
 ): Promise<EngineTransaction[]> {
-  if (assets.size === 0) return txns;
-  const splitRows = await db
+  return mergeKnownSplits(txns, await loadKnownSplits(db, [...assets.keys()]));
+}
+
+export interface KnownSplit {
+  assetId: string;
+  date: string;
+  ratio: string;
+}
+
+/** Provider-known splits for these assets, in one query. */
+export async function loadKnownSplits(db: Db, assetIds: string[]): Promise<KnownSplit[]> {
+  if (assetIds.length === 0) return [];
+  return db
     .select({
       assetId: schema.assetSplits.assetId,
       date: schema.assetSplits.date,
       ratio: schema.assetSplits.ratio,
     })
     .from(schema.assetSplits)
-    .where(inArray(schema.assetSplits.assetId, [...assets.keys()]));
+    .where(inArray(schema.assetSplits.assetId, assetIds));
+}
+
+/** The pure half of `injectKnownSplits`. Works on any sorted slice of one
+ *  user's history (all assets, or one account's one asset as the Tax Center
+ *  groups it): "held before the split" is judged within the slice. */
+export function mergeKnownSplits(
+  txns: EngineTransaction[],
+  splitRows: KnownSplit[],
+): EngineTransaction[] {
   if (splitRows.length === 0) return txns;
 
   const firstTxnAt = new Map<string, number>();
@@ -248,7 +268,9 @@ async function computeOverviewUncached(
   let totalValue = 0;
   let totalCost = 0;
   let totalRealized = 0;
+  let realizedThisYear = 0;
   let totalDividends = 0;
+  const thisYear = today.slice(0, 4);
   const dataIssues: { symbol: string; message: string }[] = [];
 
   // One bulk query for every asset's latest close — the per-asset variant
@@ -300,6 +322,11 @@ async function computeOverviewUncached(
       continue;
     }
     const { openLots, realized, dividendIncome } = lots;
+    // Calendar-year (UTC) total, the scope the Tax Center and chat's
+    // get_realized_gains use, so the all-time tile can show both.
+    realizedThisYear += realized
+      .filter((g) => toIsoDate(g.soldAt).startsWith(thisYear))
+      .reduce((s, g) => s + g.gain.toNumber(), 0);
     if (baseline) {
       // Realized gains and dividend cash restricted to the window.
       totalRealized += realized
@@ -372,6 +399,8 @@ async function computeOverviewUncached(
       unrealized: totalValue - totalCost,
       unrealizedPct: totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : null,
       realized: totalRealized,
+      /** Realized gains in this calendar year, whatever the window. */
+      realizedThisYear,
       dividends: totalDividends,
       /** Flow-adjusted portfolio gain over the window (includes positions
        *  closed during it); null when window="all". */
