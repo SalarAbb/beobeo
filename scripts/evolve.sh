@@ -150,7 +150,7 @@ ALLOWED=(Read Edit Write Glob Grep
   "Bash(git commit:*)" "Bash(git rev-parse:*)" "Bash(git branch:*)" "Bash(git show:*)"
   "Bash(pnpm typecheck:*)" "Bash(pnpm lint:*)" "Bash(pnpm test:*)" "Bash(pnpm build:*)" "Bash(pnpm install:*)"
   "Bash(pnpm --filter:*)" "Bash(pnpm exec:*)" "Bash(pnpm sim:theme:*)" "Bash(pnpm sim:insights:*)" "Bash(pnpm sim:bootstrap:*)"
-  "Bash(pnpm sim:report:*)" Artifact
+  "Bash(pnpm sim:report:*)" "Bash(pnpm sim:mission:*)" "Bash(pnpm sim:digest:*)" Artifact
   "Bash(ls:*)" "Bash(cat:*)" "Bash(head:*)" "Bash(tail:*)" "Bash(wc:*)" "Bash(mkdir:*)" "Bash(sqlite3:*)" "Bash(curl -s:*)")
 DENIED=("Bash(git push:*)" "Bash(git merge:*)" "Bash(git reset:*)" "Bash(git rebase:*)" "Bash(rm:*)" "Bash(git worktree:*)")
 LIMITED=0
