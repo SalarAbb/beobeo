@@ -3,14 +3,14 @@ import {
   planFifo,
   planHighestCostFirst,
   planSale,
-  ripeningSoon,
   summarizeHarvest,
+  taxMoves,
   taxOwedSoFar,
+  toIsoDate,
   detectWashSaleBlocks,
   isLongTerm,
-  isWashSaleExempt,
-  lossLocks,
   type LossLotCandidate,
+  type TaxMove,
   type PlannedSale,
   type TaxLot,
   type TaxPlan,
@@ -152,24 +152,9 @@ export function computeTaxLotsList(userId: string, portfolioId?: string) {
 
 export function computeTaxNow(userId: string, portfolioId?: string) {
   const scope = portfolioKey(portfolioId);
-  return cached(userCacheKey(userId, "tax-now2", scope), TTL.now, async () => {
+  return cached(userCacheKey(userId, "tax-now3", scope), TTL.now, async () => {
     const asOf = new Date();
     const { lots, profile, blocked } = await assembleScope(userId, scope, asOf);
-
-    const soon = ripeningSoon(lots, profile, asOf, 45).map((r) => ({
-      lot: serializeLot(r.lot, asOf),
-      daysUntilLongTerm: r.ripening.daysUntilLongTerm,
-      estSavingsIfWaited: r.ripening.estSavingsIfWaited.toNumber(),
-    }));
-
-    const harvest = planSale({
-      objective: "harvest_losses",
-      targetProceeds: D(0),
-      lots,
-      blocked,
-      profile,
-      asOf,
-    });
 
     const yearEnd = new Date(Date.UTC(asOf.getUTCFullYear(), 11, 31, 23, 59, 59));
     const daysLeftInTaxYear = Math.max(
@@ -177,10 +162,8 @@ export function computeTaxNow(userId: string, portfolioId?: string) {
       Math.ceil((yearEnd.getTime() - asOf.getTime()) / 86_400_000),
     );
 
-    // Sell-and-buy-back moves (crypto: no wash-sale rule). Those assets are
-    // listed there, so the plain-sell preview below leaves them out.
-    const locks = lossLocks(lots, profile, asOf);
-    const plainHarvest = harvest.sales.filter((s) => !isWashSaleExempt(s.lot.assetClass));
+    // One ranked list (R-003); the same payload feeds the chat snapshot.
+    const tm = taxMoves(lots, blocked, profile, asOf);
 
     return {
       daysLeftInTaxYear,
@@ -190,26 +173,60 @@ export function computeTaxNow(userId: string, portfolioId?: string) {
       ytdShortTermGain: profile.ytdShortTermGain.toNumber(),
       ytdLongTermGain: profile.ytdLongTermGain.toNumber(),
       taxOwedSoFarUsd: taxOwedSoFar(profile).toNumber(),
-      ripeningSoon: soon,
-      lossLocks: locks.locks.map((l) => ({
-        assetId: l.assetId,
-        symbol: l.symbol,
-        assetClass: l.assetClass,
-        quantity: l.quantity.toNumber(),
-        proceeds: l.proceeds.toNumber(),
-        lossUsd: l.lossUsd.toNumber(),
-        taxSavedUsd: l.taxSavedUsd.toNumber(),
-        accounts: [...new Set(l.sales.map((s) => s.lot.accountName))],
-      })),
-      lossLocksTaxSavedUsd: locks.totalTaxSavedUsd.toNumber(),
-      harvestPreview: plainHarvest.slice(0, 5).map((s) => serializeSale(s, asOf)),
-      harvestPreviewCount: plainHarvest.length,
-      harvestOpportunityCount: harvest.sales.length,
-      harvestTotalLossUsd: harvest.sales.reduce((s, x) => s + x.realizedGain.toNumber(), 0),
-      harvestEstTaxSavedUsd: -harvest.totalTaxCost.toNumber(),
-      blockedCount: blocked.length,
+      moves: tm.moves.map(serializeMove),
+      movesTaxSavedUsd: tm.lockAndHarvestSavedUsd.toNumber(),
+      movesBreakdown: {
+        totalHarvestedLossUsd: tm.breakdown.totalHarvestedLossUsd.toNumber(),
+        gainsOffsetUsd: tm.breakdown.gainsOffsetUsd.toNumber(),
+        ordinaryDeductionUsd: tm.breakdown.ordinaryDeductionUsd.toNumber(),
+        carryforwardUsd: tm.breakdown.carryforwardUsd.toNumber(),
+      },
+      deductionRoomUsd: tm.deductionRoomUsd.toNumber(),
     };
   });
+}
+
+/** Plain-JSON move for the Now tab and the chat snapshot. */
+function serializeMove(m: TaxMove) {
+  const value = m.valueUsd === null ? null : m.valueUsd.toNumber();
+  switch (m.kind) {
+    case "lock":
+    case "harvest":
+      return {
+        kind: m.kind,
+        assetId: m.lock.assetId,
+        symbol: m.lock.symbol,
+        assetClass: m.lock.assetClass,
+        quantity: m.lock.quantity.toNumber(),
+        lossUsd: m.lock.lossUsd.toNumber(),
+        accounts: [...new Set(m.lock.sales.map((s) => s.lot.accountName))],
+        rebuyAfter: m.kind === "harvest" ? toIsoDate(m.rebuyAfter) : null,
+        taxSavedUsd: value,
+      };
+    case "on_hold":
+      return {
+        kind: m.kind,
+        assetId: m.assetId,
+        symbol: m.symbol,
+        assetClass: m.assetClass,
+        lots: m.lots,
+        lossUsd: m.lossUsd.toNumber(),
+        clearsOn: toIsoDate(m.clearsOn),
+        permanentlyDisallowed: m.permanentlyDisallowed,
+        taxSavedUsd: value,
+      };
+    case "wait":
+      return {
+        kind: m.kind,
+        assetId: m.assetId,
+        symbol: m.symbol,
+        assetClass: m.assetClass,
+        lots: m.lots,
+        firstLongTermOn: toIsoDate(m.firstLongTermOn),
+        lastLongTermOn: toIsoDate(m.lastLongTermOn),
+        taxSavedUsd: value,
+      };
+  }
 }
 
 export function computeTaxPlan(

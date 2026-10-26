@@ -521,9 +521,14 @@ export function lossLocks(
     profile,
     asOf,
   });
+  const locks = groupSalesByAsset(plan.sales);
+  return { locks, totalTaxSavedUsd: ZERO.sub(plan.totalTaxCost) };
+}
 
+/** Per-asset totals of a harvest plan's sales, biggest saving first. */
+function groupSalesByAsset(sales: PlannedSale[]): LossLock[] {
   const byAsset = new Map<string, LossLock>();
-  for (const s of plan.sales) {
+  for (const s of sales) {
     let lock = byAsset.get(s.lot.assetId);
     if (!lock) {
       lock = {
@@ -545,6 +550,194 @@ export function lossLocks(
     lock.taxSavedUsd = lock.taxSavedUsd.sub(s.taxCost);
   }
 
-  const locks = [...byAsset.values()].sort((a, b) => b.taxSavedUsd.cmp(a.taxSavedUsd));
-  return { locks, totalTaxSavedUsd: ZERO.sub(plan.totalTaxCost) };
+  return [...byAsset.values()].sort((a, b) => b.taxSavedUsd.cmp(a.taxSavedUsd));
+}
+
+/** One line of the "Moves available now" list. `valueUsd` is the tax it
+ *  saves (null when it can't be priced against this year's profile). */
+export type TaxMove =
+  | { kind: "lock"; lock: LossLock; valueUsd: Decimal }
+  | { kind: "harvest"; lock: LossLock; valueUsd: Decimal; rebuyAfter: Date }
+  | {
+      kind: "wait";
+      assetId: string;
+      symbol: string;
+      assetClass: string;
+      lots: number;
+      /** First day each of these lots counts as long-term (UTC date). */
+      firstLongTermOn: Date;
+      lastLongTermOn: Date;
+      valueUsd: Decimal;
+    }
+  | {
+      kind: "on_hold";
+      assetId: string;
+      symbol: string;
+      assetClass: string;
+      lots: number;
+      lossUsd: Decimal;
+      /** First day selling no longer trips the wash-sale rule. */
+      clearsOn: Date;
+      /** Selling before `clearsOn` loses the loss for good (IRA rebuy). */
+      permanentlyDisallowed: boolean;
+      valueUsd: Decimal | null;
+    };
+
+export interface TaxMoves {
+  /** Biggest value first; unpriced moves last. */
+  moves: TaxMove[];
+  /** Tax saved by every lock + harvest move together (they sum to this). */
+  lockAndHarvestSavedUsd: Decimal;
+  /** Where those booked losses land: gains cancelled / $3,000 / carryforward. */
+  breakdown: HarvestBreakdown;
+  /** Of the $3,000 a net loss can take off ordinary income, the part this
+   *  year's sales haven't used yet (before any move). */
+  deductionRoomUsd: Decimal;
+  /** Last day a sale counts for this tax year (Dec 31, UTC). */
+  deadline: Date;
+}
+
+const addDays = (d: Date, n: number) => new Date(d.getTime() + n * DAY_MS);
+const utcDay = (d: Date) =>
+  new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+
+/** Shift a profile's YTD position by sales already counted. */
+function afterSales(profile: TaxProfile, sales: PlannedSale[]): TaxProfile {
+  let st = profile.ytdShortTermGain;
+  let lt = profile.ytdLongTermGain;
+  for (const s of sales) {
+    if (s.isLongTerm) lt = lt.add(s.realizedGain);
+    else st = st.add(s.realizedGain);
+  }
+  return { ...profile, ytdShortTermGain: st, ytdLongTermGain: lt };
+}
+
+/**
+ * Everything worth doing (or not doing) for this year's taxes right now, as
+ * one list with a dollar value per line (R-003). Values stack in a fixed
+ * order so lock + harvest lines add up exactly to the joint saving:
+ *   1. lock: wash-sale-exempt losses (crypto) to sell and buy straight back
+ *      (`lossLocks`), valued first because you keep the position;
+ *   2. harvest: other unblocked losses, valued on top of the locks, with the
+ *      day it's safe to buy back (31 days later);
+ *   3. on_hold: losses a recent same-asset buy blocks, valued on top of 1+2
+ *      as if sold the day they clear (null if that's next year);
+ *   4. wait: short-term gains that turn long-term within 45 days, each lot
+ *      valued alone against the starting position (as `ripeningSoon`).
+ */
+export function taxMoves(
+  lots: TaxLot[],
+  blocked: WashSaleBlock[],
+  profile: TaxProfile,
+  asOf: Date,
+  opts: WashSaleOpts = {},
+): TaxMoves {
+  const deadline = new Date(Date.UTC(asOf.getUTCFullYear(), 11, 31));
+  const r = rates(profile);
+  const moves: TaxMove[] = [];
+
+  const locks = lossLocks(lots, profile, asOf, opts);
+  for (const lock of locks.locks) moves.push({ kind: "lock", lock, valueUsd: lock.taxSavedUsd });
+  const lockSales = locks.locks.flatMap((l) => l.sales);
+
+  const afterLocks = afterSales(profile, lockSales);
+  const harvest = planSale({
+    objective: "harvest_losses",
+    targetProceeds: ZERO,
+    lots: lots.filter((l) => !isWashSaleExempt(l.assetClass, opts)),
+    blocked,
+    profile: afterLocks,
+    asOf,
+  });
+  const rebuyAfter = addDays(utcDay(asOf), 31);
+  for (const lock of groupSalesByAsset(harvest.sales)) {
+    moves.push({ kind: "harvest", lock, valueUsd: lock.taxSavedUsd, rebuyAfter });
+  }
+  const harvestSales = [...lockSales, ...harvest.sales];
+
+  // On hold: group blocked loss lots per asset; the latest trigger decides
+  // when the whole asset clears.
+  const lotById = new Map(lots.map((l) => [l.lotId, l]));
+  const holds = new Map<string, { blocks: WashSaleBlock[]; lots: TaxLot[] }>();
+  for (const b of blocked) {
+    const l = lotById.get(b.lotId);
+    if (!l) continue;
+    const h = holds.get(b.assetId) ?? { blocks: [], lots: [] };
+    h.blocks.push(b);
+    h.lots.push(l);
+    holds.set(b.assetId, h);
+  }
+  let { st: afterSt, lt: afterLt } = effectiveStart(afterSales(profile, harvestSales));
+  for (const [assetId, h] of holds) {
+    const lastTrigger = Math.max(...h.blocks.map((b) => b.triggerDate.getTime()));
+    const clearsOn = addDays(utcDay(new Date(lastTrigger)), 31);
+    let lossUsd = ZERO;
+    let st = afterSt;
+    let lt = afterLt;
+    for (const l of h.lots) {
+      const gain = l.quantity.mul(l.price).sub(l.costBasis);
+      lossUsd = lossUsd.sub(gain);
+      if (isLongTerm(l.openedAt, clearsOn)) lt = lt.add(gain);
+      else st = st.add(gain);
+    }
+    let valueUsd: Decimal | null = null;
+    if (clearsOn.getTime() <= deadline.getTime()) {
+      valueUsd = totalTax(afterSt, afterLt, r).sub(totalTax(st, lt, r));
+      afterSt = st;
+      afterLt = lt;
+    }
+    const first = h.lots[0]!;
+    moves.push({
+      kind: "on_hold",
+      assetId,
+      symbol: first.symbol,
+      assetClass: first.assetClass,
+      lots: h.lots.length,
+      lossUsd,
+      clearsOn,
+      permanentlyDisallowed: h.blocks.some((b) => b.permanentlyDisallowed),
+      valueUsd,
+    });
+  }
+
+  const waits = new Map<string, Extract<TaxMove, { kind: "wait" }>>();
+  for (const { lot, ripening } of ripeningSoon(lots, profile, asOf)) {
+    if (ripening.estSavingsIfWaited.lte(0)) continue; // a loss gains nothing by waiting
+    const on = utcDay(longTermQualifyingInstant(lot.openedAt));
+    const w = waits.get(lot.assetId);
+    if (!w) {
+      waits.set(lot.assetId, {
+        kind: "wait",
+        assetId: lot.assetId,
+        symbol: lot.symbol,
+        assetClass: lot.assetClass,
+        lots: 1,
+        firstLongTermOn: on,
+        lastLongTermOn: on,
+        valueUsd: ripening.estSavingsIfWaited,
+      });
+      continue;
+    }
+    w.lots += 1;
+    if (on < w.firstLongTermOn) w.firstLongTermOn = on;
+    if (on > w.lastLongTermOn) w.lastLongTermOn = on;
+    w.valueUsd = w.valueUsd.add(ripening.estSavingsIfWaited);
+  }
+  moves.push(...waits.values());
+
+  moves.sort((a, b) => {
+    if (a.valueUsd === null || b.valueUsd === null) {
+      return a.valueUsd === null ? (b.valueUsd === null ? 0 : 1) : -1;
+    }
+    return b.valueUsd.cmp(a.valueUsd);
+  });
+
+  const { st, lt } = effectiveStart(profile);
+  return {
+    moves,
+    lockAndHarvestSavedUsd: locks.totalTaxSavedUsd.sub(harvest.totalTaxCost),
+    breakdown: summarizeHarvest(profile, harvestSales),
+    deductionRoomUsd: D(3000).sub(explainNetting(st, lt, r).ordinaryDeduction),
+    deadline,
+  };
 }

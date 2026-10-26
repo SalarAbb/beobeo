@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { D, ZERO } from "../src/types";
-import { detectWashSaleBlocks, type RecentBuyTxn } from "../src/tax-wash-sale";
+import {
+  detectWashSaleBlocks,
+  type RecentBuyTxn,
+  type WashSaleBlock,
+} from "../src/tax-wash-sale";
 import {
   planFifo,
   planHighestCostFirst,
@@ -9,6 +13,7 @@ import {
   summarizeHarvest,
   taxOwedSoFar,
   lossLocks,
+  taxMoves,
   type TaxLot,
   type TaxProfile,
 } from "../src/tax-optimizer";
@@ -520,5 +525,127 @@ describe("lossLocks (sell-and-buy-back crypto losses)", () => {
 
   it("finds nothing when no crypto is below cost", () => {
     expect(lossLocks([btcGain, stockLoss], profile, asOf).locks).toHaveLength(0);
+  });
+});
+
+describe("taxMoves (one ranked list of moves, R-003)", () => {
+  // $2,000 short-term gain already realized; 32% ordinary / 15% LT / 0.7 carryforward.
+  const profile: TaxProfile = { ...baseProfile, ytdShortTermGain: D(2000) };
+  const eth = lot({
+    lotId: "m-eth",
+    assetId: "asset-eth",
+    symbol: "ETH",
+    assetClass: "crypto",
+    quantity: D(2),
+    costBasis: D(6000),
+    price: D(2000), // loss 2,000, short-term
+    openedAt: daysAgo(100),
+  });
+  const btc = lot({
+    lotId: "m-btc",
+    assetId: "asset-btc",
+    symbol: "BTC",
+    assetClass: "crypto",
+    quantity: D("0.1"),
+    costBasis: D(10000),
+    price: D(60000), // loss 4,000, long-term
+    openedAt: daysAgo(400),
+  });
+  const xyz = lot({ lotId: "m-xyz", costBasis: D(5000), price: D(100) }); // loss 4,000, LT
+  const vti = lot({
+    lotId: "m-vti",
+    assetId: "asset-vti",
+    symbol: "VTI",
+    costBasis: D(2000),
+    price: D(100), // loss 1,000, short-term
+    openedAt: daysAgo(60),
+  });
+  const aapl1 = lot({
+    lotId: "m-aapl1",
+    assetId: "asset-aapl",
+    symbol: "AAPL",
+    openedAt: daysAgo(350), // 2025-06-30 -> long-term from 2026-06-30
+  }); // gain 500, short-term
+  const aapl2 = lot({
+    lotId: "m-aapl2",
+    assetId: "asset-aapl",
+    symbol: "AAPL",
+    openedAt: daysAgo(340), // 2025-07-10 -> long-term from 2026-07-10
+  });
+  const vtiBlock: WashSaleBlock = {
+    lotId: "m-vti",
+    assetId: "asset-vti",
+    symbol: "VTI",
+    disallowedLossUsd: D(1000),
+    permanentlyDisallowed: false,
+    triggerAccountName: "Roth",
+    triggerDate: daysAgo(10), // 2026-06-05 -> clears 2026-07-06
+    likelyDividendReinvestment: false,
+    reason: "bought again",
+  };
+
+  it("golden: locks, then harvest on top, then on-hold on top, then waits; ranked by dollars", () => {
+    // 1. Locks (same as the lossLocks golden): BTC 1,280, ETH 544; state after: ST 0,
+    //    LT -4,000 -> tax -960 - 224 = -1,184.
+    // 2. Harvest XYZ on top: LT -8,000 -> -960 - 5,000 x .224 = -2,080; saves 896.
+    // 3. VTI clears 2026-07-06 (still short-term): ST -1,000, LT -8,000 -> net -9,000
+    //    -> -960 - 6,000 x .224 = -2,304; saves 224.
+    // 4. Each AAPL lot alone vs. the start (ST +2,000 -> 640): short +500 -> 800 (+160),
+    //    long +500 -> 75 (+75); waiting saves 85 each, 170 for both.
+    const r = taxMoves([eth, btc, xyz, vti, aapl1, aapl2], [vtiBlock], profile, asOf);
+    expect(r.moves.map((m) => m.kind)).toEqual(["lock", "harvest", "lock", "on_hold", "wait"]);
+    const [btcLock, xyzHarvest, ethLock, vtiHold, aaplWait] = r.moves;
+    expect(btcLock!.valueUsd!.toNumber()).toBeCloseTo(1280, 6);
+    expect(xyzHarvest!.valueUsd!.toNumber()).toBeCloseTo(896, 6);
+    expect(ethLock!.valueUsd!.toNumber()).toBeCloseTo(544, 6);
+    expect(vtiHold!.valueUsd!.toNumber()).toBeCloseTo(224, 6);
+    expect(aaplWait!.valueUsd!.toNumber()).toBeCloseTo(170, 6);
+
+    if (xyzHarvest?.kind !== "harvest") throw new Error("expected harvest");
+    expect(xyzHarvest.lock.lossUsd.toNumber()).toBeCloseTo(4000, 6);
+    expect(xyzHarvest.rebuyAfter.toISOString().slice(0, 10)).toBe("2026-07-16");
+    if (vtiHold?.kind !== "on_hold") throw new Error("expected on_hold");
+    expect(vtiHold.clearsOn.toISOString().slice(0, 10)).toBe("2026-07-06");
+    expect(vtiHold.lossUsd.toNumber()).toBeCloseTo(1000, 6);
+    if (aaplWait?.kind !== "wait") throw new Error("expected wait");
+    expect(aaplWait.lots).toBe(2);
+    expect(aaplWait.firstLongTermOn.toISOString().slice(0, 10)).toBe("2026-06-30");
+    expect(aaplWait.lastLongTermOn.toISOString().slice(0, 10)).toBe("2026-07-10");
+
+    // Lock + harvest lines add up to the joint saving: 640 - (-2,080) = 2,720.
+    expect(r.lockAndHarvestSavedUsd.toNumber()).toBeCloseTo(2720, 6);
+    // 10,000 booked: 2,000 cancels the ST gain, 3,000 off income, 5,000 carries forward.
+    expect(r.breakdown.gainsOffsetUsd.toNumber()).toBeCloseTo(2000, 6);
+    expect(r.breakdown.ordinaryDeductionUsd.toNumber()).toBeCloseTo(3000, 6);
+    expect(r.breakdown.carryforwardUsd.toNumber()).toBeCloseTo(5000, 6);
+    expect(r.deductionRoomUsd.toNumber()).toBe(3000);
+    expect(r.deadline.toISOString().slice(0, 10)).toBe("2026-12-31");
+  });
+
+  it("a hold that clears next year has no value and sorts last; a net loss shrinks the $3,000 room", () => {
+    const lateAsOf = new Date("2026-12-20T00:00:00Z");
+    // A YTD net short-term loss of 1,000 already uses 1,000 of the 3,000.
+    const lossYear: TaxProfile = { ...baseProfile, ytdShortTermGain: D(-1000) };
+    const r = taxMoves(
+      [{ ...vti, openedAt: new Date("2026-10-01T00:00:00Z") }, xyz],
+      [{ ...vtiBlock, triggerDate: new Date("2026-12-10T00:00:00Z") }], // clears 2027-01-10
+      lossYear,
+      lateAsOf,
+    );
+    expect(r.moves.map((m) => m.kind)).toEqual(["harvest", "on_hold"]);
+    const hold = r.moves[1]!;
+    expect(hold.valueUsd).toBeNull();
+    if (hold.kind !== "on_hold") throw new Error("expected on_hold");
+    expect(hold.clearsOn.toISOString().slice(0, 10)).toBe("2027-01-10");
+    expect(r.deductionRoomUsd.toNumber()).toBe(2000);
+    // XYZ on top of ST -1,000: LT -4,000 -> net -5,000 -> -960 - 2,000 x .224 = -1,408;
+    // before: -1,000 x .32 = -320; saves 1,088.
+    expect(r.moves[0]!.valueUsd!.toNumber()).toBeCloseTo(1088, 6);
+  });
+
+  it("is empty when nothing is down, blocked or ripening", () => {
+    const r = taxMoves([lot({ openedAt: daysAgo(800) })], [], profile, asOf);
+    expect(r.moves).toHaveLength(0);
+    expect(r.lockAndHarvestSavedUsd.toNumber()).toBe(0);
   });
 });

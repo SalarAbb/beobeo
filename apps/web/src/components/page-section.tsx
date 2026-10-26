@@ -34,7 +34,7 @@ export function Section({
   children: ReactNode;
 }) {
   return (
-    <section className="grid min-w-0 gap-5">
+    <section className="grid min-w-0 grid-cols-1 gap-5">
       <div className="flex items-baseline justify-between gap-3 border-b pb-2.5">
         <h2 className="font-display text-lg font-bold">{title}</h2>
         {aside}

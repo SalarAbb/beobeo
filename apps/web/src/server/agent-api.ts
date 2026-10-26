@@ -10,7 +10,7 @@ import {
   computeTimeseries,
   loadEngineTransactions,
 } from "./portfolio";
-import { computeTaxLotsList, computeTaxProfile } from "./tax-center";
+import { computeTaxLotsList, computeTaxNow, computeTaxProfile } from "./tax-center";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -35,11 +35,12 @@ export function makePortfolioApi(userId: string, portfolioId?: string): Portfoli
     async getContextSnapshot() {
       const accountFilter = [eq(schema.accounts.userId, userId)];
       if (portfolioId) accountFilter.push(eq(schema.accounts.portfolioId, portfolioId));
-      const [overview, series, tax, taxLots, accounts] = await Promise.all([
+      const [overview, series, tax, taxLots, taxNow, accounts] = await Promise.all([
         computeOverview(userId, portfolioId),
         computeTimeseries(userId, undefined, portfolioId).catch(() => []),
         computeTaxProfile(userId, portfolioId).catch(() => null),
         computeTaxLotsList(userId, portfolioId).catch(() => []),
+        computeTaxNow(userId, portfolioId).catch(() => null),
         db
           .select({ name: schema.accounts.name, type: schema.accounts.accountType })
           .from(schema.accounts)
@@ -106,6 +107,15 @@ export function makePortfolioApi(userId: string, portfolioId?: string): Portfoli
           ytdLongTermGain: tax.ytdLongTermOverride ?? tax.ytdLongTermComputed,
           carryforwardShortTerm: tax.carryforwardShortTerm,
           carryforwardLongTerm: tax.carryforwardLongTerm,
+        },
+        // The Tax Center's "Moves available now" list, so "any tax moves I
+        // should make?" gets the same lines and dollars as the page.
+        taxMovesNow: taxNow && {
+          moves: taxNow.moves,
+          sellMovesTaxSavedUsd: round2(taxNow.movesTaxSavedUsd),
+          sellMovesLossBreakdown: taxNow.movesBreakdown,
+          incomeDeductionRoomUsd: round2(taxNow.deductionRoomUsd),
+          daysLeftInTaxYear: taxNow.daysLeftInTaxYear,
         },
       };
     },
