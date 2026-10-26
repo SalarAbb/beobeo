@@ -19,7 +19,8 @@
     "sim:theme": "pnpm --filter @beobeo/sim theme",
     "evolve": "scripts/evolve.sh",
     "sim:report": "pnpm --filter @beobeo/sim report",
-    "sim:mission": "pnpm --filter @beobeo/sim mission"
+    "sim:mission": "pnpm --filter @beobeo/sim mission",
+    "sim:ask": "pnpm --filter @beobeo/sim ask"
   },
   "devDependencies": {
     "turbo": "^2.10.4",

@@ -17,7 +17,8 @@
     "theme": "tsx scripts/theme.ts",
     "shoot": "tsx scripts/shoot.ts",
     "report": "tsx scripts/report.ts",
-    "mission": "tsx scripts/mission.ts"
+    "mission": "tsx scripts/mission.ts",
+    "ask": "tsx scripts/ask.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",

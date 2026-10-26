@@ -1,18 +1,32 @@
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
-import type { PortfolioApi } from "./api";
+import type { PortfolioApi, TaxLotFilter } from "./api";
 
 const json = (v: unknown) => JSON.stringify(v);
 
-/** Read-only tools over the authenticated user's own portfolio data. */
-export function buildPortfolioTools(api: PortfolioApi) {
+/** Read-only tools over the authenticated user's own portfolio data.
+ *  `onTimed` hears how long each tool took (for the turn's latency log). */
+export function buildPortfolioTools(
+  api: PortfolioApi,
+  onTimed?: (name: string, ms: number) => void,
+) {
+  const timed =
+    <A,>(name: string, run: (args: A) => Promise<string>) =>
+    async (args: A) => {
+      const t0 = performance.now();
+      try {
+        return await run(args);
+      } finally {
+        onTimed?.(name, Math.round(performance.now() - t0));
+      }
+    };
   return [
     betaZodTool({
       name: "get_portfolio_summary",
       description:
         "Current portfolio overview: every holding with quantity, cost basis, latest price, market value, and unrealized P/L, plus portfolio-level totals (value, unrealized, realized, dividends). The turn's snapshot already holds this; call it only to refresh.",
       inputSchema: z.object({}),
-      run: async () => json(await api.getPortfolioSummary()),
+      run: timed("get_portfolio_summary", async () => json(await api.getPortfolioSummary())),
     }),
     betaZodTool({
       name: "get_position_details",
@@ -21,7 +35,27 @@ export function buildPortfolioTools(api: PortfolioApi) {
       inputSchema: z.object({
         symbol: z.string().describe("Ticker symbol, e.g. AAPL or BTC"),
       }),
-      run: async ({ symbol }) => json(await api.getPositionDetails(symbol)),
+      run: timed("get_position_details", async ({ symbol }: { symbol: string }) =>
+        json(await api.getPositionDetails(symbol)),
+      ),
+    }),
+    betaZodTool({
+      name: "get_tax_lots",
+      description:
+        "Open lots in the user's taxable accounts, every holding in ONE call: account, purchase date, quantity, cost basis, value now, gain if sold now, short/long-term, and the date a short-term lot turns long-term. The same lots the Tax Center shows. Use this for any lot or holding-period question instead of calling get_position_details once per symbol. Long histories have hundreds of lots, so narrow with the filters (e.g. losses only, or short-term lots turning long-term by a date).",
+      inputSchema: z.object({
+        symbols: z
+          .array(z.string())
+          .optional()
+          .describe("Only these ticker symbols; omit for every holding"),
+        onlyLosses: z.boolean().optional().describe("Only lots worth less than they cost"),
+        term: z.enum(["short", "long"]).optional().describe("Only short- or long-term lots"),
+        turnsLongTermBy: z
+          .string()
+          .optional()
+          .describe("ISO date: only short-term lots that turn long-term on or before it"),
+      }),
+      run: timed("get_tax_lots", async (filter: TaxLotFilter) => json(await api.getTaxLots(filter))),
     }),
     betaZodTool({
       name: "get_transactions",
@@ -31,8 +65,9 @@ export function buildPortfolioTools(api: PortfolioApi) {
         symbol: z.string().optional().describe("Filter to one ticker symbol"),
         limit: z.number().int().min(1).max(200).default(50),
       }),
-      run: async ({ symbol, limit }) =>
+      run: timed("get_transactions", async ({ symbol, limit }: { symbol?: string; limit: number }) =>
         json(await api.getTransactions({ symbol, limit })),
+      ),
     }),
     betaZodTool({
       name: "get_realized_gains",
@@ -41,7 +76,9 @@ export function buildPortfolioTools(api: PortfolioApi) {
       inputSchema: z.object({
         year: z.number().int().optional().describe("Calendar year, e.g. 2025"),
       }),
-      run: async ({ year }) => json(await api.getRealizedGains(year)),
+      run: timed("get_realized_gains", async ({ year }: { year?: number }) =>
+        json(await api.getRealizedGains(year)),
+      ),
     }),
     betaZodTool({
       name: "run_dca_comparison",
@@ -52,8 +89,9 @@ export function buildPortfolioTools(api: PortfolioApi) {
           .string()
           .describe("Benchmark ticker: SPY, VOO, QQQ, or BTC"),
       }),
-      run: async ({ benchmarkSymbol }) =>
+      run: timed("run_dca_comparison", async ({ benchmarkSymbol }: { benchmarkSymbol: string }) =>
         json(await api.runDcaComparison(benchmarkSymbol)),
+      ),
     }),
     betaZodTool({
       name: "get_price_history",
@@ -63,7 +101,9 @@ export function buildPortfolioTools(api: PortfolioApi) {
         symbol: z.string().describe("Ticker symbol"),
         days: z.number().int().min(7).max(730).default(90),
       }),
-      run: async ({ symbol, days }) => json(await api.getPriceHistory(symbol, days)),
+      run: timed("get_price_history", async ({ symbol, days }: { symbol: string; days: number }) =>
+        json(await api.getPriceHistory(symbol, days)),
+      ),
     }),
   ];
 }

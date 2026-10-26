@@ -10,7 +10,9 @@ import {
   computeTimeseries,
   loadEngineTransactions,
 } from "./portfolio";
-import { computeTaxProfile } from "./tax-center";
+import { computeTaxLotsList, computeTaxProfile } from "./tax-center";
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /** Resolve a symbol to an asset the user actually holds/held. */
 async function findUserAsset(userId: string, symbol: string) {
@@ -33,10 +35,11 @@ export function makePortfolioApi(userId: string, portfolioId?: string): Portfoli
     async getContextSnapshot() {
       const accountFilter = [eq(schema.accounts.userId, userId)];
       if (portfolioId) accountFilter.push(eq(schema.accounts.portfolioId, portfolioId));
-      const [overview, series, tax, accounts] = await Promise.all([
+      const [overview, series, tax, taxLots, accounts] = await Promise.all([
         computeOverview(userId, portfolioId),
         computeTimeseries(userId, undefined, portfolioId).catch(() => []),
         computeTaxProfile(userId, portfolioId).catch(() => null),
+        computeTaxLotsList(userId, portfolioId).catch(() => []),
         db
           .select({ name: schema.accounts.name, type: schema.accounts.accountType })
           .from(schema.accounts)
@@ -54,6 +57,15 @@ export function makePortfolioApi(userId: string, portfolioId?: string): Portfoli
         netInvestedAllTime: last.invested,
         netInvestedLast12Months: last.invested - (atYearAgo?.invested ?? 0),
       };
+      // "What would I owe if I sold X?" needs each holding's short/long-term
+      // split; without it the agent fetched lots one symbol per round trip.
+      const taxable = new Map<string, { shortTerm: number; longTerm: number }>();
+      for (const l of taxLots) {
+        const t = taxable.get(l.symbol) ?? { shortTerm: 0, longTerm: 0 };
+        if (l.isLongTerm) t.longTerm += l.unrealizedGain;
+        else t.shortTerm += l.unrealizedGain;
+        taxable.set(l.symbol, t);
+      }
       return {
         contributions,
         totals: {
@@ -77,6 +89,12 @@ export function makePortfolioApi(userId: string, portfolioId?: string): Portfoli
           weightPct: value > 0 && h.marketValue !== null ? (h.marketValue / value) * 100 : null,
           unrealized: h.unrealizedGain,
           unrealizedPct: h.unrealizedGainPct,
+          ...(taxable.has(h.symbol) && {
+            taxableGainIfSoldNow: {
+              shortTerm: round2(taxable.get(h.symbol)!.shortTerm),
+              longTerm: round2(taxable.get(h.symbol)!.longTerm),
+            },
+          }),
         })),
         dataIssues: overview.dataIssues,
         accounts,
@@ -103,6 +121,43 @@ export function makePortfolioApi(userId: string, portfolioId?: string): Portfoli
       if (!position) return { error: `No position found for ${symbol}` };
       // Trim the price series — the agent doesn't need 900 rows of tape.
       return { ...position, priceSeries: position.priceSeries.slice(-30) };
+    },
+
+    async getTaxLots({ symbols, onlyLosses, term, turnsLongTermBy }) {
+      const wanted = symbols?.map((s) => s.toUpperCase());
+      const rows = (await computeTaxLotsList(userId, portfolioId))
+        .map((l) => {
+          // The day after the anniversary is the first safely long-term sale date.
+          const d = new Date(l.openedAt);
+          d.setUTCFullYear(d.getUTCFullYear() + 1);
+          d.setUTCDate(d.getUTCDate() + 1);
+          return { ...l, longTermOn: l.isLongTerm ? null : toIsoDate(d) };
+        })
+        .filter(
+          (l) =>
+            (!wanted || wanted.includes(l.symbol.toUpperCase())) &&
+            (!onlyLosses || l.unrealizedGain < 0) &&
+            (!term || (term === "long") === l.isLongTerm) &&
+            (!turnsLongTermBy || (l.longTermOn !== null && l.longTermOn <= turnsLongTermBy)),
+        )
+        .sort((a, b) => a.symbol.localeCompare(b.symbol) || a.openedAt.localeCompare(b.openedAt));
+      // Columnar: a long DCA history is hundreds of lots, and repeating the
+      // keys on every row tripled the tokens the model had to read.
+      return {
+        count: rows.length,
+        columns: ["symbol", "account", "bought", "quantity", "costBasis", "valueNow", "gainIfSoldNow", "term", "longTermOn"],
+        rows: rows.map((l) => [
+          l.symbol,
+          l.accountName,
+          l.openedAt.slice(0, 10),
+          l.quantity,
+          round2(l.costBasis),
+          round2(l.marketValue),
+          round2(l.unrealizedGain),
+          l.isLongTerm ? "long" : "short",
+          l.longTermOn,
+        ]),
+      };
     },
 
     async getTransactions({ symbol, limit = 50 }) {

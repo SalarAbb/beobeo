@@ -109,10 +109,12 @@ work that comes from the plan and from the personas. It's ranked, and the loop r
 it against each digest; items cite the theme keys that motivated them.
 
 1. **Answer in a heartbeat, verdict first.** First slice shipped 2026-10-25 (preloaded
-   snapshot, low-effort thinking, verdict-first prompt). Left: questions that need a
-   tool still take 5–15 s to the first word. Next: preload what those tools return
-   most often (this year's realized gains, lots turning long-term soon), and remember
-   facts the user stated (age, targets) across threads. Themes:
+   snapshot, low-effort thinking, verdict-first prompt); second slice 2026-10-26
+   (per-holding short/long-term gain in the snapshot, one-call `get_tax_lots`, turn
+   timings in the server log, 90s cap). Left: a lot-table answer still takes ~20s
+   after its one tool call, pure-math answers think ~9s, the snapshot costs ~1.5s
+   cold. Next: preload this year's realized gains by sale, warm the snapshot on page
+   load, and remember facts the user stated (age, targets) across threads. Themes:
    `slow-chat-first-token`, `chat-too-long-jargony`, `chat-no-direct-on-track-answer`.
 2. **Target mix on the server.** Move device-saved target mixes into an
    `allocation_targets` table keyed (user, portfolioKey) like `tax_profiles`
@@ -155,7 +157,7 @@ format: Status is `built`, `partial` or `missing`.
 | Product | Lot-level portfolio tracking (FIFO, splits, realized by year) | built | core engine, 120 golden tests |
 | Product | Tax Center: raise cash, harvest losses, wash-sale radar | built | deterministic, no LLM |
 | Product | DCA counterfactual vs. benchmarks | built | compare page, up to 4 benchmarks |
-| Product | Chat companion grounded in your data | partial | rated 3.0/5 before the snapshot + verdict-first prompt (2026-10-25); first word still 5–15s when a tool is needed (backlog #1) |
+| Product | Chat companion grounded in your data | partial | rated 3.0/5 before the snapshot + verdict-first prompt (2026-10-25); tax "if I sold" answers need no tool and lots come in one call (2026-10-26); a lot-table answer still ~20s, pure math ~9s to the first word (backlog #1) |
 | Product | Crypto wash-sale exemption | built | engine default, configurable, golden tests (2026-10-26) |
 | Product | Proactive tax moves (free-money alerts) | partial | "Moves available now" on the Now tab lists crypto sell-and-buy-back locks in dollars (2026-10-26); unused $3,000, 0% LT room, year-end and wash-sale traps not in the list yet, chat can't see it (R-003) |
 | Product | "I have $n" picks one of your candidates | missing | R-004 |
@@ -192,6 +194,8 @@ format: Status is `built`, `partial` or `missing`.
 
 One entry per cycle, newest first: date · branch · what shipped · theme ids
 answered · before/after signal.
+
+- **2026-10-26 · Chat: tax questions without the per-symbol round trips.** The server now logs where each chat turn's time goes (`[chat] snapshot · first text · model calls · tools`). On Fred's 68s question it showed 1.6s of snapshot, ~3.5s of tools and ~37s of model round trips: one `get_position_details` per coin, each followed by another model step. Fixes: (1) every snapshot holding carries `taxableGainIfSoldNow` {shortTerm, longTerm} from the Tax Center's own lots, so "what would I owe if I sold everything" needs no tool; (2) a new `get_tax_lots` tool returns every taxable lot in one call (the same lots as the Tax Center's All Lots), with filters (symbols, losses only, term, turns long-term by) and a columnar result, because hundreds of DCA lots with keys repeated on every row made the model read for two minutes; (3) the prompt says to answer from the snapshot when it's enough and to request all tools in one step; (4) the Anthropic client gets a 90s timeout and one retry, after a stalled stream held a turn for 13 minutes. Measured with the new `pnpm sim:ask`: Fred 42.7s → 7.1s to the first word (0 tools instead of 3, same numbers); Hermione's lot question 8 tool calls / 32s → 1 call, 25s total, and the answer now lists exactly the ten lots that ripen this quarter (before, it said "six" and called June lots "this quarter"). Not fixed: pure-reasoning answers (Samwell's compounding) still think for ~9s at low effort. · `slow-chat-first-token`, `chat-lot-detail-answer-missing` · expected signal: chat:first-token p95 under 15s; no 30s+ first words on tax/lot questions; hermione/arya lot answers judged verifiable.
 
 - **2026-10-26 · Crypto has no wash-sale rule; "Moves available now" starts with sell-and-buy-back.** The tax engine now treats crypto as exempt from the wash-sale rule (configurable default `["crypto"]`, so a recent ETH buy no longer puts an ETH loss on hold). New tested core `lossLocks` runs the harvest engine on crypto loss lots only and groups them per coin. The Tax Center's Now tab opens a "Moves available now" section: "Sell and buy back 0.053 BTC · books an $887 loss · saves ~$240", with a standing note that buying back resets the cost lower, so the tax is deferred rather than erased. Moves worth under $5 are hidden (the spread costs more). Those coins leave the plain "Losses you could take" list so nothing shows twice, and "Hold a little longer" now lists only lots where waiting actually saves tax; before, Fred's BTC loss lots appeared there too, contradicting the sell advice. Seven new golden tests (cross-netting, the $3,000 cap and carryforward hand-computed). · R-003 · expected signal: fred/arya mention booking crypto losses; no "on hold" notes for crypto.
 

@@ -81,6 +81,14 @@ export async function POST(req: Request) {
           api: makePortfolioApi(userId, parsed.data.portfolioId),
           messages,
           onEvent: (event) => send(event),
+          // Where the time went; latency is a principle, so every turn says.
+          onTimings: (t) => {
+            const tools = t.tools.map((x) => `${x.name} ${x.ms}ms`).join(", ");
+            const calls = t.modelMs.map((ms) => `${ms}ms`).join(" + ");
+            console.info(
+              `[chat] snapshot ${t.snapshotMs ?? "-"}ms · first text ${t.firstTextMs ?? "-"}ms · total ${t.totalMs}ms · model calls ${calls || "none"} · tools: ${tools || "none"}`,
+            );
+          },
         });
 
         await db.insert(schema.chatMessages).values({

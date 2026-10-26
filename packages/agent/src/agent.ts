@@ -3,19 +3,32 @@ import type { BetaMessageParam } from "@anthropic-ai/sdk/resources/beta/messages
 import type { PortfolioApi } from "./api";
 import { buildPortfolioTools } from "./tools";
 
-const SYSTEM_PROMPT = `You are Beobeo's investing companion: calm, plainspoken and quick. You can read this user's own portfolio. A snapshot of it (holdings, totals, how much they've put in, accounts, saved tax rates) follows these rules; tools fetch anything deeper.
+const SYSTEM_PROMPT = `You are Beobeo's investing companion: calm, plainspoken and quick. You can read this user's own portfolio. A snapshot of it (holdings, each with its short- and long-term gain if sold now in taxable accounts; totals; how much they've put in; accounts; saved tax rates) follows these rules; tools fetch anything deeper.
 
 How to answer:
 - The first sentence is the answer. A yes/no question gets "Yes", "No" or "Roughly yes" plus the key number, in one line.
 - Then at most a few short sentences or bullets of support. Aim for under 120 words. No headings. Use a table only when the user asks for one or the answer is a list of four or more rows of numbers (lots, for example).
 - Plain words. Avoid jargon; when a term is unavoidable, explain it in a few words the first time ("unrealized, meaning on paper, not sold yet"). Don't name metrics like XIRR or TWR unless the user did.
 - Use what you know: the snapshot, the saved tax rates, and anything the user said in this conversation (age, goals, target weights). When something is missing, make a reasonable assumption, say it, and answer anyway ("Assuming you're 31, ..."). Never answer a question with only a question.
+- Speed matters: every tool step makes the user wait several seconds. Answer from the snapshot when it's enough (it is for "tax if I sell everything / sell X"). When you need tools, request all of them in one step, never one after another. For lots or holding periods, one get_tax_lots call covers every holding; don't call get_position_details per symbol.
 - If a tool call would answer it, make the call instead of offering to ("Want me to pull ...?"). Don't narrate tool use ("Let me check ..."), and don't end with an offer or a question.
 - Taxes: turn rates into dollars with the saved rates ("selling before a year cost you about $X more at your 24% vs 15%"). Say "under current US rules" when you state a rule.
 - Ground every number in the snapshot or tool results; never estimate holdings, prices or gains from memory. If a tool returns nothing, say so. Money as $1,234.56, changes with a sign (+12.3%), weights without one (7.2%).
 - The snapshot's realized figure is all-time. For "this year" or a specific year, use get_realized_gains for that year, and say which one you mean.
 - When the user names options ("VOO or NVDA?"), say which one their own data leans toward and the one reason (concentration, target weights, taxes, account type), with a short note that it's their call. One pick, not a menu. No price predictions.
 - The user's data is private; never mention other users or benchmarks you didn't compute.`;
+
+/** Where a turn's time went, for the server log (latency is a principle). */
+export interface AgentTurnTimings {
+  /** null while the snapshot is still loading (a turn that hung there). */
+  snapshotMs: number | null;
+  /** From turn start to the first streamed text; null if none came. */
+  firstTextMs: number | null;
+  totalMs: number;
+  /** Duration of each model round trip; every tool step adds one. */
+  modelMs: number[];
+  tools: { name: string; ms: number }[];
+}
 
 export interface AgentStreamEvent {
   type: "text" | "tool" | "done" | "error";
@@ -33,14 +46,45 @@ export async function runPortfolioAgentTurn(opts: {
   /** Full prior conversation, oldest first (user + assistant turns). */
   messages: BetaMessageParam[];
   onEvent: (event: AgentStreamEvent) => void | Promise<void>;
+  /** Called once when the turn ends, whether it answered or failed. */
+  onTimings?: (timings: AgentTurnTimings) => void;
   apiKey?: string;
 }): Promise<{ finalText: string }> {
-  const client = new Anthropic(opts.apiKey ? { apiKey: opts.apiKey } : {});
+  // A stalled stream once held a turn open for 13 minutes; the route only
+  // lives 120s, so give up well before that.
+  const client = new Anthropic({
+    ...(opts.apiKey ? { apiKey: opts.apiKey } : {}),
+    timeout: 90_000,
+    maxRetries: 1,
+  });
+  const t0 = performance.now();
+  const timings: AgentTurnTimings = {
+    snapshotMs: null,
+    firstTextMs: null,
+    totalMs: 0,
+    modelMs: [],
+    tools: [],
+  };
 
+  try {
+    return await streamTurn(client, opts, t0, timings);
+  } finally {
+    timings.totalMs = Math.round(performance.now() - t0);
+    opts.onTimings?.(timings);
+  }
+}
+
+async function streamTurn(
+  client: Anthropic,
+  opts: Parameters<typeof runPortfolioAgentTurn>[0],
+  t0: number,
+  timings: AgentTurnTimings,
+): Promise<{ finalText: string }> {
   // Preloading the snapshot saves the summary-tool round trip that nearly
   // every question used to start with, the biggest chunk of first-token
   // latency. A failed snapshot only costs that round trip back.
   const snapshot = await opts.api.getContextSnapshot().catch(() => null);
+  timings.snapshotMs = Math.round(performance.now() - t0);
   const today = new Date().toISOString().slice(0, 10);
 
   const runner = client.beta.messages.toolRunner({
@@ -61,7 +105,7 @@ export async function runPortfolioAgentTurn(opts: {
     // and narrated tool calls; medium effort doubled the wait for no gain.
     thinking: { type: "adaptive" },
     output_config: { effort: "low" },
-    tools: buildPortfolioTools(opts.api),
+    tools: buildPortfolioTools(opts.api, (name, ms) => timings.tools.push({ name, ms })),
     messages: opts.messages,
     max_iterations: 8,
     stream: true,
@@ -72,6 +116,7 @@ export async function runPortfolioAgentTurn(opts: {
   try {
     for await (const messageStream of runner) {
       iterationHadText = false;
+      const callStart = performance.now();
       for await (const event of messageStream) {
         if (
           event.type === "content_block_delta" &&
@@ -84,6 +129,7 @@ export async function runPortfolioAgentTurn(opts: {
             await opts.onEvent({ type: "text", value: "\n\n" });
           }
           iterationHadText = true;
+          timings.firstTextMs ??= Math.round(performance.now() - t0);
           finalText += event.delta.text;
           await opts.onEvent({ type: "text", value: event.delta.text });
         } else if (
@@ -93,6 +139,7 @@ export async function runPortfolioAgentTurn(opts: {
           await opts.onEvent({ type: "tool", value: event.content_block.name });
         }
       }
+      timings.modelMs.push(Math.round(performance.now() - callStart));
       // Each iteration boundary: if more tool calls follow, text continues.
     }
     await opts.onEvent({ type: "done" });

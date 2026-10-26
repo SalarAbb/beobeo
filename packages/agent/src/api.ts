@@ -1,3 +1,11 @@
+export interface TaxLotFilter {
+  symbols?: string[];
+  onlyLosses?: boolean;
+  term?: "short" | "long";
+  /** ISO date: short-term lots that turn long-term on or before it. */
+  turnsLongTermBy?: string;
+}
+
 /**
  * Data-access surface the agent's tools run against. The web app supplies an
  * implementation bound to the authenticated user — the agent package never
@@ -9,6 +17,9 @@ export interface PortfolioApi {
   getContextSnapshot(): Promise<unknown>;
   getPortfolioSummary(): Promise<unknown>;
   getPositionDetails(symbol: string): Promise<unknown>;
+  /** Open lots in taxable accounts, every holding at once (narrowed by the
+   *  filter): the same lots the Tax Center lists. */
+  getTaxLots(filter: TaxLotFilter): Promise<unknown>;
   getTransactions(filter: { symbol?: string; limit?: number }): Promise<unknown>;
   getRealizedGains(year?: number): Promise<unknown>;
   runDcaComparison(benchmarkSymbol: string): Promise<unknown>;
