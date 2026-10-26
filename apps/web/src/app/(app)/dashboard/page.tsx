@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ChevronDown, Ruler } from "lucide-react";
+import { ChevronDown, Gauge, Ruler } from "lucide-react";
 import Link from "next/link";
 import { AssetLogo } from "@/components/asset-logo";
 import { usePortfolio } from "@/components/portfolio-context";
@@ -489,8 +489,9 @@ export default function DashboardPage() {
           onClick={() => setShowDetails((v) => !v)}
           aria-expanded={showDetails}
           aria-controls="performance-details"
-          className="inline-flex items-center gap-1.5 justify-self-start rounded-full -ml-3 px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-primary aria-expanded:bg-accent aria-expanded:text-primary"
+          className="inline-flex items-center gap-2 justify-self-start rounded-full border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-accent hover:text-primary aria-expanded:border-transparent aria-expanded:bg-accent aria-expanded:text-primary"
         >
+          <Gauge aria-hidden className="size-4 text-primary" />
           Performance details
           <ChevronDown
             aria-hidden
