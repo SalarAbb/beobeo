@@ -102,7 +102,7 @@ $("northstar").innerHTML = md(D.plan.northStar.replace(/:$/, "."));
 /* ---------- the ensō */
 const stations = [
   { t: "Market", n: "real prices", d: "Real closes plus today's live quotes from Tiingo and Coinbase. Personas never see tomorrow's price." },
-  { t: "Personas act", n: "trade · ask · wander", d: "Each persona runs its habits, decides what else to do, asks the assistant one question and rates the answer. Some wander the app at random; a few walk through the screens and critique them. Every fifth day a fresh copy signs up from scratch." },
+  { t: "Personas act", n: "trade · ask · missions", d: "Each persona runs its habits, decides what else to do, asks the assistant one question and rates the answer. A few go on <b>missions</b>: a real goal in the part of the app least recently tried, worked through step by step in a copy of their account. Others wander at random or critique the screens. Every fifth day a fresh copy signs up from scratch." },
   { t: "Journal", n: "on this Mac", d: "Every trade, answer, complaint, rating and timing is written to <code>~/beobeo-sim/journal.db</code>." },
   { t: "Digest", n: "themes, ranked", d: "Notes cluster into themes and get ranked. Problems caused by the simulator itself are set aside." },
   { t: "Evolve", n: "1–3 changes", d: "Claude takes your top open request, then the best-ranked themes, builds 1–3 improvements on an <code>evolve/</code> branch, runs every check and looks at screenshots of the result." },
@@ -168,6 +168,8 @@ $("gloss").innerHTML = [
   ["Habit vs. judgment", "Habit trades follow a persona's fixed rules (Samwell's weekly VOO). Judgment trades are decisions their mind made that day, always with its reason."],
   ["New · again · quiet", "A theme is new the first day anyone raises it, again when it comes back, and quiet when it was raised the day before but not today. A fix that held goes quiet and stays quiet."],
   ["Typical and slow (p50 · p95)", "Every request is timed. Typical is the median; slow is the time 95% of requests beat. The budget is the time we promised ourselves (principle 5)."],
+  ["Missions", "A persona sets itself a real goal (\"raise $20k without a big tax bill\") in one flow and works through it in the real app, step by step, on a disposable copy of its account, so it can save, edit, import and delete. Before each action it says what it expects; afterwards it checks. Surprises, wrong numbers and dead ends become feedback with reproduction steps. Flows are chosen by coverage: the least recently tried, weighted toward what fits the persona."],
+  ["Coverage", "Which flows have had a real attempt, and when. It's on the Progress page; empty rows are blind spots, and missions fill them first."],
   ["Wandering", "Personas explore at random with their curiosity chance, never touching anything that saves, deletes or spends. Same persona, same day, same path, so a bug they hit can be replayed exactly."],
   ["Set aside", "A theme the simulator caused, not the app. It's kept for the record and never becomes product work."],
   ["Your requests (R-001…)", "What you asked for directly, kept apart from persona feedback and always worked on first. Shipped only when every line of its checklist is true."],

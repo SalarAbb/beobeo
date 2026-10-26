@@ -97,3 +97,22 @@ export function rotation<T>(items: T[], date: IsoDate, perDay: number): T[] {
   const start = (day * perDay) % items.length;
   return Array.from({ length: Math.min(perDay, items.length) }, (_, i) => items[(start + i) % items.length]!);
 }
+
+// ---------------------------------------------------------------- what the app shows a persona
+
+export interface Overview {
+  holdings: { symbol: string; quantity: number; costBasis: number; marketValue: number | null; unrealizedGainPct: number | null; priceDate: string | null }[];
+  dataIssues: { symbol: string; message?: string }[];
+  totals: { value: number; cost: number; unrealizedPct: number | null; realized: number; dividends: number };
+}
+
+/** The persona's holdings as their Beobeo dashboard shows them: personas judge the app by its own numbers. */
+export function appBrief(o: Overview): string {
+  const usd = (x: number) => `$${x.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+  const pct = (x: number | null) => (x === null ? "n/a" : `${x >= 0 ? "+" : ""}${x.toFixed(1)}%`);
+  const lines = o.holdings.map(
+    (h) => `${h.symbol}: ${h.quantity.toFixed(4)} units, cost ${usd(h.costBasis)}, now ${h.marketValue === null ? "no price" : usd(h.marketValue)} (${pct(h.unrealizedGainPct)})${h.priceDate ? ` · priced ${h.priceDate}` : ""}`,
+  );
+  const issues = o.dataIssues.length ? `\nThe app flags data issues for: ${o.dataIssues.map((d) => d.symbol).join(", ")}` : "";
+  return `(as shown on your Beobeo dashboard)\n${lines.join("\n")}\nTOTAL: ${usd(o.totals.value)} on ${usd(o.totals.cost)} cost (${pct(o.totals.unrealizedPct)}) · realized ${usd(o.totals.realized)} · dividends ${usd(o.totals.dividends)}${issues}`;
+}

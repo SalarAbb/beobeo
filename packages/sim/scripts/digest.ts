@@ -75,6 +75,34 @@ if (wander.length) {
   line();
 }
 
+// ---------------------------------------------------------------- missions + coverage
+const missions = j.all<{ id: number; persona_id: string; feature: string; goal: string; status: string; difficulty: number | null; steps: number; summary: string | null; verdict: string | null }>(
+  `SELECT id, persona_id, feature, goal, status, difficulty, steps, summary, verdict FROM missions WHERE ${inRuns} OR sim_date = ? ORDER BY id`,
+  date,
+);
+if (missions.length) {
+  line(`## Missions (real goals in real flows)`);
+  line(`Re-run one after a fix: \`pnpm sim:mission --persona <id> --feature <feature>\`.`);
+  for (const m of missions) {
+    const v = m.verdict ? (JSON.parse(m.verdict) as { debrief?: { issues?: { title: string; severity: number }[]; trusted?: boolean } }) : null;
+    const issues = v?.debrief?.issues ?? [];
+    line(`- **${m.persona_id}** · \`${m.feature}\` · **${m.status}**${m.difficulty ? ` (difficulty ${m.difficulty}/5)` : ""} · ${m.steps} steps${v?.debrief?.trusted === false ? " · ⚠ didn't trust the numbers" : ""}`);
+    line(`  - Goal: ${m.goal}`);
+    if (m.summary) line(`  - ${m.summary}`);
+    for (const i of issues) line(`  - issue (sev ${i.severity}): ${i.title}`);
+  }
+  line();
+}
+{
+  const { FEATURES } = await import("../src/features");
+  const last = j.daysSinceTried(date);
+  const never = FEATURES.filter((f) => !last.has(f.id));
+  const stale = FEATURES.filter((f) => (last.get(f.id) ?? 0) > 7);
+  line(`## Coverage`);
+  line(`${FEATURES.length - never.length} of ${FEATURES.length} flows attempted by a mission so far.${never.length ? ` Never tried: ${never.map((f) => `\`${f.id}\``).join(", ")}.` : ""}${stale.length ? ` Not tried in over a week: ${stale.map((f) => `\`${f.id}\``).join(", ")}.` : ""}`);
+  line();
+}
+
 // ---------------------------------------------------------------- themes
 const stats = j.all<ThemeStats>(
   `SELECT t.key, t.title, t.area, t.kind, t.status,

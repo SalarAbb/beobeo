@@ -16,7 +16,8 @@
     "reset": "tsx scripts/reset.ts",
     "theme": "tsx scripts/theme.ts",
     "shoot": "tsx scripts/shoot.ts",
-    "report": "tsx scripts/report.ts"
+    "report": "tsx scripts/report.ts",
+    "mission": "tsx scripts/mission.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",

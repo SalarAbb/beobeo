@@ -52,6 +52,15 @@
     <div class="voices" id="voices"></div>
   </section>
 
+  <section aria-labelledby="h-missions">
+    <div class="sec-head">
+      <p class="eyebrow">Real goals, real flows</p>
+      <h2 id="h-missions">Missions</h2>
+      <p>A few personas set themselves a real goal in one part of the app (the part least recently tried) and work through it step by step in a copy of their account, saying what they expect before each action and checking afterwards.</p>
+    </div>
+    <div class="missions" id="missions"></div>
+  </section>
+
   <section aria-labelledby="h-themes">
     <div class="sec-head">
       <p class="eyebrow">Feedback</p>
@@ -151,6 +160,18 @@ $("voices").innerHTML = D.voices.map((v) => `<article class="voice">
   ${v.impression ? `<p class="ask seen">${esc(v.impression)}</p>` : ""}
   ${v.why ? `<p class="ask day">${esc(v.why)}</p>` : ""}
 </article>`).join("") || `<p class="empty">No persona spoke this day.</p>`;
+
+/* ---------- missions */
+const statusPill = { achieved: "good", struggled: "warn", failed: "bad", aborted: "none", running: "none" };
+$("missions").innerHTML = D.missions.length ? D.missions.map((m) => `<article class="mission">
+  <div class="mhead"><b>${esc(byId[m.persona]?.name ?? m.persona)}</b><span class="mono muted">${esc(m.feature)}${m.viewport === "mobile" ? " · on a phone" : ""}</span>
+    <span class="pill ${statusPill[m.status] ?? "none"}">${esc(m.status)}</span>${m.difficulty ? `<span class="muted" style="font-size:12.5px">difficulty ${m.difficulty}/5</span>` : ""}${m.trusted === false ? `<span class="pill bad">didn't trust the numbers</span>` : ""}</div>
+  <p class="quote">${esc(m.goal)}</p>
+  ${m.summary ? `<p class="ink2" style="font-size:14px">${esc(m.summary)}</p>` : ""}
+  <div class="path">${m.path.map((s, i) => `${i ? "<i>→</i>" : ""}<span class="${s.error ? "err" : s.surprise ? "sur" : ""}" title="${esc(s.surprise ?? s.route)}">${esc(s.kind === "type" ? `type "${(s.text ?? "").slice(0, 18)}"` : s.kind === "goto" ? s.text ?? s.route : s.kind)}</span>`).join("")}</div>
+  ${m.issues.length ? `<ul class="checks">${m.issues.map((i) => `<li><span class="pill ${i.severity >= 4 ? "bad" : "warn"}">sev ${i.severity}</span><span>${esc(i.title)}</span><small>Expected: ${esc(i.expected)} · Got: ${esc(i.actual)}</small></li>`).join("")}</ul>` : ""}
+  ${m.suggestion ? `<p class="muted" style="font-size:13px">Would have helped: ${esc(m.suggestion)}</p>` : ""}
+</article>`).join("") : `<p class="empty">No missions ran this day${D.date < "2026-10-26" ? " (they started on Oct 26)" : ""}.</p>`;
 
 /* ---------- themes: new first, recurring folded */
 const maxP = Math.max(1, ...D.themes.map((t) => t.personas));

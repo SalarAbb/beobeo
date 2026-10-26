@@ -61,6 +61,42 @@ export async function recreateSimUser(persona: Persona, email: string, password:
   return { userId, accounts: new Map(rows.map((r) => [r.name, r.id])) };
 }
 
+/**
+ * A disposable twin of a persona's account for missions: same portfolios, accounts, trades and tax
+ * profiles, under `sim+<id>-m@beobeo.sim`, recreated before every mission. Missions really use the
+ * app (save, edit, delete, import), and none of that may touch the persona's own history, which the
+ * daily habits keep building on.
+ */
+export async function cloneSimUser(sourceUserId: string, persona: Persona, email: string, password: string): Promise<SimUser> {
+  await db.delete(schema.user).where(eq(schema.user.email, email));
+  const userId = crypto.randomUUID();
+  await db.insert(schema.user).values({ id: userId, name: persona.name, email, emailVerified: true });
+  await db.insert(schema.account).values({ id: crypto.randomUUID(), accountId: userId, providerId: "credential", userId, password: await hashPassword(password) });
+
+  const portfolioMap = new Map<string, string>();
+  for (const { id, userId: _u, createdAt: _c, ...rest } of await db.select().from(schema.portfolios).where(eq(schema.portfolios.userId, sourceUserId))) {
+    const [row] = await db.insert(schema.portfolios).values({ ...rest, userId }).returning({ id: schema.portfolios.id });
+    portfolioMap.set(id, row!.id);
+  }
+  const accountMap = new Map<string, string>();
+  const accounts = new Map<string, string>();
+  for (const { id, userId: _u, createdAt: _c, portfolioId, ...rest } of await db.select().from(schema.accounts).where(eq(schema.accounts.userId, sourceUserId))) {
+    const [row] = await db
+      .insert(schema.accounts)
+      .values({ ...rest, userId, portfolioId: portfolioId ? (portfolioMap.get(portfolioId) ?? null) : null })
+      .returning({ id: schema.accounts.id });
+    accountMap.set(id, row!.id);
+    accounts.set(rest.name, row!.id);
+  }
+  const txns = await db.select().from(schema.transactions).where(eq(schema.transactions.userId, sourceUserId));
+  const copies = txns.map(({ id: _i, userId: _u, createdAt: _c, accountId, ...rest }) => ({ ...rest, userId, accountId: accountMap.get(accountId)! }));
+  for (let i = 0; i < copies.length; i += 500) await db.insert(schema.transactions).values(copies.slice(i, i + 500));
+  for (const { id: _i, userId: _u, portfolioKey, ...rest } of await db.select().from(schema.taxProfiles).where(eq(schema.taxProfiles.userId, sourceUserId))) {
+    await db.insert(schema.taxProfiles).values({ ...rest, userId, portfolioKey: portfolioMap.get(portfolioKey) ?? portfolioKey });
+  }
+  return { userId, accounts };
+}
+
 export async function findUserId(email: string): Promise<string | null> {
   const [u] = await db.select({ id: schema.user.id }).from(schema.user).where(eq(schema.user.email, email));
   return u?.id ?? null;

@@ -28,10 +28,13 @@ import {
   loadPolicyState,
   marketBrief,
   replayPolicy,
+  appBrief,
   rotation,
   savePolicyState,
+  type Overview,
   themesBrief,
 } from "../src/run";
+import { assignMissions, runOneMission } from "../src/missions";
 import { ensureAssets, findUserId, loadHoldings, loadPriceBook, loadSimUser, marketData, type AssetRow } from "../src/store";
 import { budgetFor } from "../src/themes";
 import { addDays, fmtQty, todayIso, type PriceBook } from "../src/world";
@@ -48,6 +51,7 @@ const only = opt("only")?.split(",");
 const useLlm = !flag("no-llm") && !!process.env.ANTHROPIC_API_KEY;
 const useUi = !flag("no-ui");
 const UI_REVIEWS_PER_DAY = Number(process.env.SIM_UI_REVIEWS_PER_DAY || 3);
+const MISSIONS_PER_DAY = Number(process.env.SIM_MISSIONS_PER_DAY || 3);
 
 const journal = new Journal();
 const git = gitInfo();
@@ -349,6 +353,18 @@ if (browser && useLlm && !budgetHit) {
     notes.push(`ui: ${(e as Error).message}`);
   }
 }
+
+// ------------------------------------------------------------------ missions: real goals, real flows
+// Each mission: one persona, one feature (least-recently-tried that fits them), driven step by step
+// in a disposable copy of their account. See src/missions.ts.
+if (browser && useLlm && !budgetHit && MISSIONS_PER_DAY > 0) {
+  const assignments = assignMissions(personas.filter((p) => sessions.has(p.id)), journal, date, MISSIONS_PER_DAY);
+  for (const a of assignments) {
+    if (budgetHit) break;
+    const outcome = await guard(`mission ${a.persona.id}/${a.feature.id}`, () => runOneMission(browser, a, { journal, runId, date, outDir: shotsDir, appSha: git.sha }));
+    if (outcome?.diaryLine) sessions.get(a.persona.id)?.diary.push(outcome.diaryLine);
+  }
+}
 await browser?.close();
 
 // ------------------------------------------------------------------ how was today, all things considered?
@@ -399,22 +415,8 @@ function recordExploration(p: Persona, x: ExploreResult, diary: string[]) {
   console.log(`    explored: ${x.steps.length} steps · ${new Set(x.steps.map((st) => st.to)).size} pages · ${x.errors.length} errors · ${[...x.unlabeled.values()].reduce((a, b) => a + b, 0)} unlabeled buttons`);
 }
 
-interface Overview {
-  holdings: { symbol: string; quantity: number; costBasis: number; marketValue: number | null; unrealizedGainPct: number | null; priceDate: string | null }[];
-  dataIssues: { symbol: string; message?: string }[];
-  totals: { value: number; cost: number; unrealizedPct: number | null; realized: number; dividends: number };
-}
 
 /** The persona's portfolio exactly as the app's dashboard shows it. */
-function appBrief(o: Overview): string {
-  const usd = (x: number) => `$${x.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
-  const pct = (x: number | null) => (x === null ? "n/a" : `${x >= 0 ? "+" : ""}${x.toFixed(1)}%`);
-  const lines = o.holdings.map(
-    (h) => `${h.symbol}: ${h.quantity.toFixed(4)} units, cost ${usd(h.costBasis)}, now ${h.marketValue === null ? "no price" : usd(h.marketValue)} (${pct(h.unrealizedGainPct)})${h.priceDate ? ` · priced ${h.priceDate}` : ""}`,
-  );
-  const issues = o.dataIssues.length ? `\nThe app flags data issues for: ${o.dataIssues.map((d) => d.symbol).join(", ")}` : "";
-  return `(as shown on your Beobeo dashboard)\n${lines.join("\n")}\nTOTAL: ${usd(o.totals.value)} on ${usd(o.totals.cost)} cost (${pct(o.totals.unrealizedPct)}) · realized ${usd(o.totals.realized)} · dividends ${usd(o.totals.dividends)}${issues}`;
-}
 
 /**
  * Real-time: today has no close yet, so personas trade at the live quote.

@@ -78,6 +78,16 @@
     </div>
   </section>
 
+  <section aria-labelledby="h-cov">
+    <div class="sec-head">
+      <p class="eyebrow">Is every part of the app being used?</p>
+      <h2 id="h-cov">Coverage</h2>
+      <p>Every flow in the app, against the last three weeks. A cell is a mission that went after it that day (✓ achieved, ~ struggled, ✗ failed) or a flow touched along the way (·). Missions go after the emptiest rows first, so blank rows fill in within about a week.</p>
+    </div>
+    <p class="ink2" id="cov-sum" style="font-size:14.5px"></p>
+    <div class="heat-wrap"><div class="heat cov" id="cov"></div></div>
+  </section>
+
   <section aria-labelledby="h-speed">
     <div class="sec-head">
       <p class="eyebrow">Principle 5: speed is a feature</p>
@@ -224,6 +234,19 @@ $("shipped").innerHTML = D.shippedThemes.map((t) => `<li>${t.daysSince === 0 ? `
   <small>Fixed ${esc(fmtDate(t.shipped_on))}${t.shipped_branch ? ` on <span class="mono">${esc(t.shipped_branch)}</span>` : ""}${t.daysSince ? ` · ${t.daysSince} ${t.daysSince === 1 ? "day" : "days"} since${t.raisedSince ? `, raised ${t.raisedSince}×` : ", not raised"}` : ""}</small></li>`).join("") || `<li class="muted">Nothing fixed yet.</li>`;
 $("artifacts").innerHTML = D.artifacts.map((a) => `<li><span class="pill none">artifact</span><span>${esc(a.title)}</span><small>${md((a.notes ?? "").replace(/^SIM ARTIFACT:\s*/, ""))}</small></li>`).join("") || `<li class="muted">None.</li>`;
 $("praise").innerHTML = D.praise.map((p) => `<li><span class="pill good">kept</span><span>${esc(p.title)}</span><small>praised ${p.n}×</small></li>`).join("") || `<li class="muted">No praise yet.</li>`;
+
+/* ---------- coverage */
+(function () {
+  const C = D.coverage, glyph = { achieved: "✓", struggled: "~", failed: "✗", visited: "·" };
+  const tried = C.features.filter((f) => f.last).length;
+  $("cov-sum").innerHTML = `<b class="num">${tried}</b> of ${C.features.length} flows have had a real attempt.${tried < C.features.length ? ` Not yet: ${C.features.filter((f) => !f.last).map((f) => `<span class="mono">${esc(f.id)}</span>`).join(", ")}.` : ""}`;
+  const el = $("cov");
+  el.style.setProperty("--cols", Math.max(1, C.dates.length));
+  el.innerHTML = C.features.map((f) => `<div class="hrow"><span class="hname mono" title="${esc(f.does)}">${esc(f.id)}</span>${C.dates.map((d, i) => {
+    const o = f.cells[i];
+    return o ? `<span class="cell c-${o}" tabindex="0" title="${esc(`${f.id} · ${fmtDate(d)} · ${o}`)}">${glyph[o]}</span>` : `<span class="cell none"></span>`;
+  }).join("")}</div>`).join("") + `<div class="hrow hdates"><span></span>${C.dates.map((d) => `<span>${esc(fmtDate(d, { day: "numeric" }))}</span>`).join("")}</div>`;
+})();
 
 /* ---------- speed */
 renderSpeed(D.latency, $("ticks"), $("speed"), "in the last 7 days", { key: "firstP95", label: "day one" });

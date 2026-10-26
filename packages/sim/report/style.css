@@ -368,3 +368,21 @@ a:hover { text-decoration: underline; }
 @media (max-width: 760px) {
   .since > div + div, .score > div + div { padding-left: 0; border-left: 0; border-top: 1px solid var(--rule); }
 }
+
+/* ---------- missions + coverage */
+.missions { display: grid; gap: 16px; }
+.mission { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 18px; display: grid; gap: 10px; }
+.mission .mhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.mission .mhead b { font-family: var(--display); font-size: 17px; }
+.mission .path { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.mission .path span { padding: 2px 7px; border-radius: 6px; border: 1px solid var(--rule); font: 500 11px var(--mono); }
+.mission .path span.err { border-color: var(--bad); color: var(--bad); }
+.mission .path span.sur { border-color: var(--warn); color: var(--warn); }
+.mission .path i { color: var(--muted); font-style: normal; font-size: 11px; }
+.heat.cov .hrow { grid-template-columns: 170px repeat(var(--cols), minmax(22px, 30px)); }
+.heat.cov .hname { font-size: 11.5px; }
+.heat.cov .cell { height: 22px; font-size: 12px; }
+.cell.c-achieved { background: var(--good); color: var(--surface); }
+.cell.c-struggled { background: var(--warn); color: var(--surface); }
+.cell.c-failed { background: var(--bad); color: var(--surface); }
+.cell.c-visited { background: var(--rule); color: var(--ink-2); }

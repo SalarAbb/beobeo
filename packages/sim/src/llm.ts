@@ -36,12 +36,18 @@ export async function askStructured<S extends z.ZodType>(o: AskOpts<S>): Promise
   if (!canSpend(spent, o.estimateUsd, DAILY_BUDGET_USD, o.reserveUsd ?? 0)) {
     throw new BudgetExceeded(spent, DAILY_BUDGET_USD);
   }
-  const response = await anthropic().messages.parse({
-    model: PERSONA_MODEL,
-    max_tokens: o.maxTokens ?? 8000,
-    system: [{ type: "text", text: o.system, cache_control: { type: "ephemeral" } }],
-    messages: [{ role: "user", content: o.content }],
-    output_config: { format: zodOutputFormat(o.schema), effort: o.effort ?? "low" },
+  const call = () =>
+    anthropic().messages.parse({
+      model: PERSONA_MODEL,
+      max_tokens: o.maxTokens ?? 8000,
+      system: [{ type: "text", text: o.system, cache_control: { type: "ephemeral" } }],
+      messages: [{ role: "user", content: o.content }],
+      output_config: { format: zodOutputFormat(o.schema), effort: o.effort ?? "low" },
+    });
+  // An output that fails validation (rare) is retried once rather than losing the whole step or debrief.
+  const response = await call().catch((e: Error) => {
+    if (!/Failed to parse structured output/.test(e.message)) throw e;
+    return call();
   });
   o.journal.cost({
     runId: o.runId,

@@ -26,6 +26,7 @@ import { gitInfo } from "../src/run";
 import { DAILY_BUDGET_USD } from "../src/budget";
 import { budgetFor, percentile, rankThemes, scoreParts, type ThemeStats } from "../src/themes";
 import { addDays, todayIso } from "../src/world";
+import { FEATURES } from "../src/features";
 
 const repo = new URL("../../../", import.meta.url).pathname;
 const j = new Journal();
@@ -271,6 +272,19 @@ function dayData(date: string, idx: number) {
     `SELECT persona_id persona, rating, question, rating_note note, first_token_ms firstTokenMs FROM questions WHERE rating IS NOT NULL AND ${w} ORDER BY rating, persona_id`,
   );
   const signups = j.all<{ ok: number; latency_ms: number | null; error: string | null }>(`SELECT ok, latency_ms, error FROM actions WHERE kind = 'signup' AND ${w}`);
+  const missions = j
+    .all<{ id: number; persona: string; feature: string; goal: string; status: string; difficulty: number | null; steps: number; summary: string | null; verdict: string | null; viewport: string }>(
+      "SELECT id, persona_id persona, feature, goal, status, difficulty, steps, summary, verdict, viewport FROM missions WHERE sim_date = ? ORDER BY id",
+      date,
+    )
+    .map((m) => {
+      const v = m.verdict ? (JSON.parse(m.verdict) as { debrief?: { issues?: { title: string; severity: number; expected: string; actual: string }[]; trusted?: boolean; suggestion?: string | null } }) : null;
+      const path = j
+        .all<{ detail: string }>("SELECT detail FROM actions WHERE kind = 'mission_step' AND json_extract(detail, '$.missionId') = ? ORDER BY id", m.id)
+        .map((r) => JSON.parse(r.detail) as { route: string; action: { kind: string; text: string | null }; error: string | null; surprise: string | null });
+      const { verdict: _v, ...rest } = m;
+      return { ...rest, issues: v?.debrief?.issues ?? [], trusted: v?.debrief?.trusted ?? null, suggestion: v?.debrief?.suggestion ?? null, path: path.map((s) => ({ route: s.route, kind: s.action.kind, text: s.action.text, error: !!s.error, surprise: s.surprise })) };
+    });
 
   return {
     date,
@@ -310,6 +324,7 @@ function dayData(date: string, idx: number) {
       .sort((a, b) => b.p95 / (b.budget ?? 1e9) - a.p95 / (a.budget ?? 1e9)),
     answers,
     signups,
+    missions,
     exploration: [...exploration].map(([persona, e]) => ({ persona, ...e, errors: exploreErrors.filter((x) => x.persona === persona) })),
   };
 }
@@ -376,6 +391,19 @@ for (const l of lat7) byTarget.set(l.target, [...(byTarget.get(l.target) ?? []),
 const latency = [...byTarget]
   .map(([target, xs]) => ({ target, n: xs.length, p50: percentile(xs, 50)!, p95: percentile(xs, 95)!, budget: budgetFor(target) ?? null, firstP95: firstLat.get(target)?.p95 ?? null }))
   .sort((a, b) => b.p95 / (b.budget ?? 1e9) - a.p95 / (a.budget ?? 1e9));
+// Coverage map: every flow in the catalog × the last 21 days (best outcome that day).
+const RANK: Record<string, number> = { achieved: 4, struggled: 3, failed: 2, visited: 1 };
+const covRows = j.all<{ feature: string; date: string; outcome: string; source: string }>("SELECT feature, sim_date date, outcome, source FROM coverage");
+const covDates = [...new Set([...dayDates, ...covRows.map((r) => r.date)])].sort().slice(-21);
+const coverage = {
+  dates: covDates,
+  features: FEATURES.map((f) => {
+    const mine = covRows.filter((r) => r.feature === f.id);
+    const cells = covDates.map((d) => mine.filter((r) => r.date === d).reduce<string | null>((best, r) => ((RANK[r.outcome] ?? 0) > (best ? (RANK[best] ?? 0) : 0) ? r.outcome : best), null));
+    const tried = mine.filter((r) => r.source !== "explore");
+    return { id: f.id, does: f.does, route: f.route, cells, attempts: tried.filter((r) => r.source === "mission").length, last: tried.map((r) => r.date).sort().at(-1) ?? null };
+  }),
+};
 const daily = pages.map((p) => ({ date: p.date, feedback: p.feedbackCount, answers: p.delta.answers, spend: p.spend, trades: p.trades.length }));
 
 const site = {
@@ -416,6 +444,7 @@ const progress = fill(asset("progress.html"), {
   artifacts,
   praise,
   latency,
+  coverage,
   plan: planData,
 });
 

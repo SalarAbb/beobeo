@@ -104,8 +104,9 @@ export const transactionsRouter = router({
             eq(schema.transactions.userId, ctx.userId),
             inArray(schema.transactions.accountId, accountIds),
             inArray(schema.transactions.assetId, [...new Set(input.transactions.map((t) => t.assetId))]),
-            gte(schema.transactions.tradedAt, new Date(Math.min(...times) - 60_000)),
-            lte(schema.transactions.tradedAt, new Date(Math.max(...times) + 60_000)),
+            // ±36h: splitDuplicates matches date-only exports to the same trade stored with its time.
+            gte(schema.transactions.tradedAt, new Date(Math.min(...times) - 36 * 3_600_000)),
+            lte(schema.transactions.tradedAt, new Date(Math.max(...times) + 36 * 3_600_000)),
           ),
         );
       const { fresh, duplicates } = splitDuplicates(input.transactions, existing);

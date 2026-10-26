@@ -35,6 +35,8 @@ running — ask the user to `pnpm dev` if it isn't) then `pnpm sim:digest`.
   Latency 🔴 rows over budget and any `would not keep using` come first. Persona pain must not
   starve behind a long request.
 - A shipped theme that's ❌ raised again means the fix didn't land — understand why before redoing it.
+- **Mission-found issues come with repro steps** (quote tagged `[Mission n, feature. Steps…]`, details in `~/beobeo-sim/screenshots/<date>/mission-<n>.json`). After fixing one, re-run it to verify: `pnpm sim:mission --persona <id> --feature <feature>` (restart nothing: the :3100 server reloads app code, but restart it if you changed a `packages/*` module). The digest's Coverage line lists flows no mission has tried: never treat a never-tried flow as fine.
+- **If you add or change a user-facing flow, add/update its entry in `packages/sim/src/features.ts`** (`FEATURES`), or missions will never test it.
 - An item can be big (e.g. "chat answers fast, verdict first"); size is not a reason to skip it.
   Split it into a shippable first slice if the whole won't fit before the deadline.
 - Skip anything needing a product decision only the user can make (new paid data source, legal
