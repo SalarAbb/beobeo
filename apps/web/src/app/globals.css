@@ -132,7 +132,7 @@
   --color-warn-soft: var(--warn-soft);
   --color-bad-soft: var(--bad-soft);
   --font-sans: var(--font-body);
-  --font-mono: var(--font-data);
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace; /* code only (chat code spans) */
   --font-display: var(--font-heading);
 }
 
@@ -150,16 +150,17 @@
 }
 
 @layer components {
-  /* Type roles (R-001) — every figure in the app takes exactly one of these; never pick a face ad hoc.
-     .figure  a standalone number read on its own: stat tiles, metric cells, a page's headline stat → body sans,
-              semibold — the same face as the text around it (user's call: serif numbers didn't match the page)
-     .data    a number inside a table, list, legend, tooltip, sub-line or delta → mono, tabular
-     Words (labels, names, prose) are always the body sans. Charts draw axes/labels in the mono face (chartFont()). */
+  /* Type roles (R-001). ONE face for everything read on a page: Hanken Grotesk, words and numbers
+     alike (the user asked for consistency twice; serif numbers and mono numbers were both rejected).
+     Serif is for page/section titles only. Numbers always get tabular digits so columns align.
+     .figure  a standalone number read on its own: stat tiles, metric cells, a page's headline stat
+     .data    a number inside a table, list, legend, tooltip, sub-line or delta
+     Charts use the same face (chartFont()). */
   .figure {
     @apply font-sans font-semibold tabular-nums tracking-tight;
   }
   .data {
-    @apply font-mono tabular-nums;
+    @apply font-sans tabular-nums;
   }
   /* Small uppercase section label, as on the evolution page. */
   .eyebrow {

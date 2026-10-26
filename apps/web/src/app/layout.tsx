@@ -1,17 +1,13 @@
 import type { Metadata } from "next";
-import { Hanken_Grotesk, JetBrains_Mono, Shippori_Mincho } from "next/font/google";
+import { Hanken_Grotesk, Shippori_Mincho } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
-// The evolution page's type system (R-001): Hanken Grotesk for body text,
-// JetBrains Mono for data, Shippori Mincho for titles and hero numbers.
+// One face for everything you read, words and numbers alike: Hanken Grotesk.
+// Shippori Mincho only for page and section titles. (A mono face for numbers was
+// tried and removed: the user saw it as "a different font" mixed into the pages.)
 const body = Hanken_Grotesk({
   variable: "--font-body",
-  subsets: ["latin"],
-});
-
-const data = JetBrains_Mono({
-  variable: "--font-data",
   subsets: ["latin"],
 });
 
@@ -35,7 +31,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${body.variable} ${data.variable} ${heading.variable} h-full antialiased`}
+      className={`${body.variable} ${heading.variable} h-full antialiased`}
     >
       <head>
         {/* Apply .dark from the system preference before paint (no flash). */}

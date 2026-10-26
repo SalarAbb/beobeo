@@ -88,9 +88,9 @@ export function useVizTheme(): VizTheme {
   return usePrefersDark() ? VIZ.dark : VIZ.light;
 }
 
-/** The mono face for canvas charts (lightweight-charts can't resolve CSS variables). Client-only: call in effects. */
+/** The app's one text face, for canvas charts (lightweight-charts can't resolve CSS variables). Client-only: call in effects. */
 export const chartFont = () =>
-  `${getComputedStyle(document.documentElement).getPropertyValue("--font-data").trim() || "ui-monospace"}, ui-monospace, monospace`;
+  `${getComputedStyle(document.documentElement).getPropertyValue("--font-body").trim() || "ui-sans-serif"}, ui-sans-serif, system-ui, sans-serif`;
 
 export const fmtUsd = (v: number | null | undefined, digits = 2) =>
   v === null || v === undefined

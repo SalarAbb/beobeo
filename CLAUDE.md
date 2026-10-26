@@ -44,7 +44,7 @@ scripts/install-launchd.sh [--remove]   # arm/disarm the daily 08:00 cycle (Laun
 
 - **Runtime/tooling:** Node 26, pnpm 11 (workspace + Turborepo 2), TypeScript 5.9 strict (`noUncheckedIndexedAccess`, `verbatimModuleSyntax`)
 - **Web:** Next.js 16.2 (App Router, React 19.2), Tailwind CSS v4 (CSS-first config in `globals.css`), shadcn/ui (new-york, components vendored in `src/components/ui`)
-- **Type (R-001, via `next/font/google` in root `layout.tsx`):** Hanken Grotesk = `font-sans` (body), JetBrains Mono = `font-mono` (data/numerals), Shippori Mincho = `font-display` (h1s automatically via a base rule, section titles, hero numbers — sparingly)
+- **Type (R-001, via `next/font/google` in root `layout.tsx`):** Hanken Grotesk = `font-sans` for all text and numbers; Shippori Mincho = `font-display` for the logo, h1s (base rule) and section titles only. No mono web font (`font-mono` = system stack, code only). See "Type system".
 - **API:** tRPC v11 + superjson + TanStack Query v5 (`@trpc/tanstack-react-query` — `useTRPC()` hook pattern, NOT the older `api.x.useQuery` codegen style)
 - **Auth:** Better Auth 1.6 (email/password + optional Google), Drizzle adapter
 - **DB:** Postgres 18 on Neon (serverless HTTP driver `@neondatabase/serverless` 1.x), Drizzle ORM 0.45
@@ -184,13 +184,11 @@ Pure TS, zero framework/DB deps. Exhaustive Vitest fixtures in `packages/core/te
 
 ## Type system (don't freelance fonts) — R-001, user-enforced
 
-Three faces from the evolution page (`next/font` in `app/layout.tsx`), each with ONE job. The user called out mixed fonts on one screen ("all over the place"), so this is a hard rule:
-- **Display serif (Shippori Mincho)**: page titles (`h1`, always `text-3xl`) and section titles (`PageSection` h2, `CardTitle`, which is serif by default). **Never numbers**: the user rejected serif headline figures twice ("doesn't match the font of the other text").
-- **Headline figures** (stat tiles, metric cells, a page's headline stat) use `.figure` = the body sans, semibold, tabular — the same face as the labels around them.
-- **Mono (JetBrains Mono)**: **every number inside a table, list, legend, tooltip, sub-line or delta**, via the `.data` class. Charts too: lightweight-charts gets `fontFamily: chartFont()` (from `lib/viz.ts`, since canvas can't resolve CSS vars), and Recharts containers get `className="data"` (SVG text inherits).
-- **Sans (Hanken Grotesk)**: all words — labels, names, prose, buttons. When a line mixes words and a number, only the number gets `.data` (`waiting saves <span className="data">~$20</span>`), and a sans subtitle inside a serif title needs `font-sans`.
-- Never use bare `font-mono`/`tabular-nums`/`font-display` for numbers; use `.figure`/`.data` (defined in `globals.css`, `@layer components`). `font-mono` stays only for code (chat code spans, CSV column names).
-- Verify type changes with a fresh dev server: Turbopack's `.next` cache once served a stale `globals.css` after a merge, making a correct fix look broken. When CSS changes don't show, stop the server, `rm -rf apps/web/.next`, restart.
+**One face for everything you read: Hanken Grotesk** (`next/font`, `--font-body`), words and numbers alike. The user asked three times for consistency ("all the fonts consistent… I want consistency throughout"): serif headline numbers were rejected, then a JetBrains Mono "data" face was rejected as "a different font" mixed into the pages, so the mono font is no longer loaded at all.
+- **Serif (Shippori Mincho)** only for the logo, page titles (`h1`, always `text-3xl`) and section titles (`PageSection` h2, `CardTitle`). Never numbers, never body text.
+- Numbers use the sans with tabular digits via two classes in `globals.css` (`@layer components`): `.figure` (standalone headline numbers: stat tiles, metric cells; semibold) and `.data` (numbers in tables, lists, legends, tooltips, sub-lines). Never bare `tabular-nums`/`font-mono`/`font-display` for numbers. Charts use the same face: lightweight-charts gets `fontFamily: chartFont()` (`lib/viz.ts`; canvas can't resolve CSS vars), Recharts containers get `className="data"`.
+- `font-mono` is a system monospace stack for code only (chat code spans).
+- Verify with the browser, not by eye: list each page's computed `font-family` over visible text (expect only Hanken Grotesk plus Shippori Mincho on titles). Turbopack's `.next` cache has twice served a stale `globals.css` after merges; when CSS changes don't show, stop the dev server, `rm -rf apps/web/.next`, restart. (Running `pnpm build` while `pnpm dev` is up also touches `.next`.)
 
 ## Visualization system (don't freelance colors)
 
