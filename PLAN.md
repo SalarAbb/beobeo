@@ -152,12 +152,12 @@ format: Status is `built`, `partial` or `missing`.
 
 | Area | Capability | Status | Note |
 |---|---|---|---|
-| Product | Lot-level portfolio tracking (FIFO, splits, realized by year) | built | core engine, 96 golden tests |
+| Product | Lot-level portfolio tracking (FIFO, splits, realized by year) | built | core engine, 120 golden tests |
 | Product | Tax Center: raise cash, harvest losses, wash-sale radar | built | deterministic, no LLM |
 | Product | DCA counterfactual vs. benchmarks | built | compare page, up to 4 benchmarks |
 | Product | Chat companion grounded in your data | partial | rated 3.0/5 before the snapshot + verdict-first prompt (2026-10-25); first word still 5–15s when a tool is needed (backlog #1) |
-| Product | Crypto wash-sale exemption | missing | part of R-003 |
-| Product | Proactive tax moves (free-money alerts) | partial | Now tab shows ripening lots; no alerts yet (R-003) |
+| Product | Crypto wash-sale exemption | built | engine default, configurable, golden tests (2026-10-26) |
+| Product | Proactive tax moves (free-money alerts) | partial | "Moves available now" on the Now tab lists crypto sell-and-buy-back locks in dollars (2026-10-26); unused $3,000, 0% LT room, year-end and wash-sale traps not in the list yet, chat can't see it (R-003) |
 | Product | "I have $n" picks one of your candidates | missing | R-004 |
 | Product | Tax setup during sign-up | missing | R-005 |
 | Product | Expert metrics discoverable, not front-facing | partial | Behind a closed "Performance details" disclosure on the dashboard (R-002); waiting for the personas to confirm |
@@ -192,6 +192,8 @@ format: Status is `built`, `partial` or `missing`.
 
 One entry per cycle, newest first: date · branch · what shipped · theme ids
 answered · before/after signal.
+
+- **2026-10-26 · Crypto has no wash-sale rule; "Moves available now" starts with sell-and-buy-back.** The tax engine now treats crypto as exempt from the wash-sale rule (configurable default `["crypto"]`, so a recent ETH buy no longer puts an ETH loss on hold). New tested core `lossLocks` runs the harvest engine on crypto loss lots only and groups them per coin. The Tax Center's Now tab opens a "Moves available now" section: "Sell and buy back 0.053 BTC · books an $887 loss · saves ~$240", with a standing note that buying back resets the cost lower, so the tax is deferred rather than erased. Moves worth under $5 are hidden (the spread costs more). Those coins leave the plain "Losses you could take" list so nothing shows twice, and "Hold a little longer" now lists only lots where waiting actually saves tax; before, Fred's BTC loss lots appeared there too, contradicting the sell advice. Seven new golden tests (cross-netting, the $3,000 cap and carryforward hand-computed). · R-003 · expected signal: fred/arya mention booking crypto losses; no "on hold" notes for crypto.
 
 - **2026-10-26 · Missions + coverage (simulator).** Personas now pursue real goals in real flows, chosen from a catalog of every flow in the app by staleness × fit, and drive the browser step by step on a disposable copy of their account, stating expectations before each action. First runs, unprompted: Raise Cash forgets its amount on tab switch and shows no per-lot rows; an overlapping date-only CSV imported every trade twice (dedupe fixed: 36h window when prices match, cent-tolerant prices); the import preview doesn't flag duplicates; rows shift under the cursor after a delete. Expected signal: coverage map fills within a week; mission-found themes rank alongside persona complaints.
 - **2026-10-25 · Chat and sign-in in the evolution look (every page converted).** Chat reads as a transcript instead of bubbles: the question is a quiet indigo pill, the answer is prose on the page, and turns are split by hairlines. Tool use shows as one eyebrow line ("Looked at · position details"). The page has a serif header with New chat. Conversations carry their date, because the same question asked twice gave identical titles. On phones, where there's no conversations column, a "Past chats" menu reopens them; before this, phones couldn't reach old chats at all. Suggestions and the composer are pills. In chat tables only numeric cells are mono, so words stay in sans. Sign-in and sign-up share an `AuthShell`: serif wordmark and title, the form on a hairline surface, the switch link below, and a password hint. · R-001 · expected signal: chat look scores hold or rise; no persona notes about lost chats on phones; registration probes note nothing about the form.

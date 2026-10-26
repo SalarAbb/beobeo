@@ -8,6 +8,7 @@ import {
   ripeningSoon,
   summarizeHarvest,
   taxOwedSoFar,
+  lossLocks,
   type TaxLot,
   type TaxProfile,
 } from "../src/tax-optimizer";
@@ -451,5 +452,73 @@ describe("taxOwedSoFar", () => {
 
   it("owes nothing with no sales", () => {
     expect(taxOwedSoFar(baseProfile).toNumber()).toBe(0);
+  });
+});
+
+describe("lossLocks (sell-and-buy-back crypto losses)", () => {
+  // $2,000 short-term gain already realized; 32% ordinary / 15% LT / 0.7 carryforward.
+  const profile: TaxProfile = { ...baseProfile, ytdShortTermGain: D(2000) };
+  const eth = lot({
+    lotId: "eth",
+    assetId: "asset-eth",
+    symbol: "ETH",
+    assetClass: "crypto",
+    quantity: D(2),
+    costBasis: D(6000),
+    price: D(2000), // proceeds 4,000 -> loss 2,000, short-term
+    openedAt: daysAgo(100),
+  });
+  const btc = lot({
+    lotId: "btc",
+    assetId: "asset-btc",
+    symbol: "BTC",
+    assetClass: "crypto",
+    quantity: D("0.1"),
+    costBasis: D(10000),
+    price: D(60000), // proceeds 6,000 -> loss 4,000, long-term
+    openedAt: daysAgo(400),
+  });
+  const btcGain = lot({
+    lotId: "btc-gain",
+    assetId: "asset-btc",
+    symbol: "BTC",
+    assetClass: "crypto",
+    quantity: D("0.1"),
+    costBasis: D(3000),
+    price: D(60000),
+    openedAt: daysAgo(800),
+  });
+  const stockLoss = lot({ lotId: "xyz", costBasis: D(5000), price: D(100) });
+
+  it("golden: books crypto losses only, honoring cross-netting, the $3,000 cap and carryforward", () => {
+    // Baseline: ST +2,000 -> tax 640.
+    // BTC first (better per dollar: -1,280/6,000 vs ETH -640/4,000):
+    //   ST +2,000, LT -4,000 -> cross-net to LT -2,000 -> deduction 2,000 x .32 = -640.
+    //   delta = -640 - 640 = -1,280.
+    // Then ETH: ST 0, LT -4,000 -> 3,000 x .32 = -960, 1,000 x .32 x .7 = -224 -> -1,184.
+    //   delta = -1,184 - (-640) = -544.
+    // Total saved 1,824 (= 640 - (-1,184)). Stock loss and BTC gain lot ignored.
+    const { locks, totalTaxSavedUsd } = lossLocks([eth, btc, btcGain, stockLoss], profile, asOf);
+    expect(totalTaxSavedUsd.toNumber()).toBeCloseTo(1824, 6);
+    expect(locks.map((l) => l.symbol)).toEqual(["BTC", "ETH"]);
+    expect(locks[0]!.taxSavedUsd.toNumber()).toBeCloseTo(1280, 6);
+    expect(locks[0]!.lossUsd.toNumber()).toBeCloseTo(4000, 6);
+    expect(locks[0]!.proceeds.toNumber()).toBeCloseTo(6000, 6);
+    expect(locks[0]!.quantity.toNumber()).toBeCloseTo(0.1, 10);
+    expect(locks[0]!.sales.map((s) => s.lot.lotId)).toEqual(["btc"]);
+    expect(locks[1]!.taxSavedUsd.toNumber()).toBeCloseTo(544, 6);
+    expect(locks[1]!.lossUsd.toNumber()).toBeCloseTo(2000, 6);
+  });
+
+  it("finds nothing when the exemption is switched off", () => {
+    const { locks, totalTaxSavedUsd } = lossLocks([eth, btc], profile, asOf, {
+      exemptAssetClasses: [],
+    });
+    expect(locks).toHaveLength(0);
+    expect(totalTaxSavedUsd.toNumber()).toBe(0);
+  });
+
+  it("finds nothing when no crypto is below cost", () => {
+    expect(lossLocks([btcGain, stockLoss], profile, asOf).locks).toHaveLength(0);
   });
 });

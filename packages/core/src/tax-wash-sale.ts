@@ -5,6 +5,27 @@ const WASH_SALE_WINDOW_DAYS = 30;
 const DAY_MS = 86_400_000;
 
 /**
+ * Asset classes the wash-sale rule doesn't reach. Under current US law
+ * §1091 covers "stock or securities"; the IRS treats crypto as property,
+ * so selling crypto at a loss and buying it straight back still books the
+ * loss. Configurable because Congress has proposed closing this: pass
+ * `exemptAssetClasses: []` to treat every asset as covered.
+ */
+export const DEFAULT_WASH_SALE_EXEMPT_CLASSES: readonly string[] = ["crypto"];
+
+export interface WashSaleOpts {
+  exemptAssetClasses?: readonly string[];
+}
+
+export function isWashSaleExempt(
+  assetClass: string | undefined,
+  opts: WashSaleOpts = {},
+): boolean {
+  if (assetClass === undefined) return false;
+  return (opts.exemptAssetClasses ?? DEFAULT_WASH_SALE_EXEMPT_CLASSES).includes(assetClass);
+}
+
+/**
  * A buy-side transaction that could trigger a wash sale, from ANY account
  * within the current tax-entity scope (taxable or tax-advantaged) — cross-
  * account detection is the whole point; brokers only see their own account.
@@ -29,6 +50,9 @@ export interface LossLotCandidate {
   lotId: string;
   assetId: string;
   symbol: string;
+  /** Lots of an exempt class (crypto by default) are never blocked; a
+   *  candidate without a class is always checked (the conservative side). */
+  assetClass?: string;
   /** Positive magnitude of the lot's unrealized loss. */
   lossUsd: Decimal;
 }
@@ -63,17 +87,20 @@ export interface WashSaleBlock {
  * needs per-buy share accounting this planning tool doesn't attempt; this
  * errs conservative, which is the safe direction for a "how much can I
  * actually deduct" estimate). Gain lots are never checked — wash sale only
- * disallows losses.
+ * disallows losses. Lots of an exempt asset class (see
+ * `DEFAULT_WASH_SALE_EXEMPT_CLASSES`) are never checked either.
  */
 export function detectWashSaleBlocks(
   lossLots: LossLotCandidate[],
   recentBuys: RecentBuyTxn[],
   asOf: Date,
+  opts: WashSaleOpts = {},
 ): WashSaleBlock[] {
   const blocks: WashSaleBlock[] = [];
   const windowStart = asOf.getTime() - WASH_SALE_WINDOW_DAYS * DAY_MS;
 
   for (const lot of lossLots) {
+    if (isWashSaleExempt(lot.assetClass, opts)) continue;
     const qualifying = recentBuys
       .filter(
         (b) =>

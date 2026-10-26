@@ -31,7 +31,7 @@ export const FEATURES: Feature[] = [
   { id: "transactions.add", route: "/transactions", does: "Record a trade you just made at your broker (search the asset, amount, price, date, account)" },
   { id: "transactions.fix", route: "/transactions", does: "Fix a trade you entered wrongly (wrong quantity, price or date), or remove a duplicate and undo if you slip" },
   { id: "transactions.import", route: "/transactions", does: "Import trades from your broker's CSV export (a file is provided to you)", fits: ["expert", "multi-account"] },
-  { id: "tax.now", route: "/tax-center", does: "See what your sales this year mean for taxes, and any moves available right now", fits: ["tax"] },
+  { id: "tax.now", route: "/tax-center", does: "See what your sales this year mean for taxes, and any moves available right now (e.g. selling crypto at a loss and buying it straight back)", fits: ["tax", "crypto"] },
   { id: "tax.raise-cash", route: "/tax-center", does: "You need a specific amount of cash: find which shares to sell to pay the least tax, and check the plan makes sense", fits: ["tax", "seller"] },
   { id: "tax.harvest", route: "/tax-center", does: "Find losses you could take to lower your tax bill, and understand what the savings depend on", fits: ["tax", "crypto"] },
   { id: "tax.lots", route: "/tax-center", does: "Browse every tax lot: when you bought it, what you paid, short or long term", fits: ["tax", "expert"] },

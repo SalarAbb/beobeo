@@ -1,7 +1,7 @@
 import { D, Decimal, ZERO } from "./types";
 import { isLongTerm } from "./lots";
 import { explainNetting, totalTax, type TaxRates } from "./tax-netting";
-import type { WashSaleBlock } from "./tax-wash-sale";
+import { isWashSaleExempt, type WashSaleBlock, type WashSaleOpts } from "./tax-wash-sale";
 
 const DAY_MS = 86_400_000;
 
@@ -480,4 +480,71 @@ function improveBySwapping(opts: PlanSaleOpts, plan: TaxPlan): TaxPlan {
     plan.blocked,
     plan.excluded,
   );
+}
+
+/** One wash-sale-exempt asset (crypto by default) you could sell at a loss
+ *  and buy straight back: same holdings, loss booked now. */
+export interface LossLock {
+  assetId: string;
+  symbol: string;
+  assetClass: string;
+  /** The loss lots, as the harvest engine would sell them. */
+  sales: PlannedSale[];
+  quantity: Decimal;
+  proceeds: Decimal;
+  /** Positive magnitude of the loss booked. */
+  lossUsd: Decimal;
+  /** Positive = tax this lock saves, attributed in the harvest engine's
+   *  order, so the locks' savings sum exactly to `totalTaxSavedUsd`. */
+  taxSavedUsd: Decimal;
+}
+
+/**
+ * "Sell and buy back" opportunities: every loss lot of an asset the
+ * wash-sale rule doesn't cover, run through the same harvest engine as
+ * Harvest Losses (so the $3,000 cap, cross-netting and carryforward discount
+ * are all honored), grouped per asset, biggest saving first. Rebuying resets
+ * the basis lower, so the tax is deferred rather than erased; callers must
+ * say so.
+ */
+export function lossLocks(
+  lots: TaxLot[],
+  profile: TaxProfile,
+  asOf: Date,
+  opts: WashSaleOpts = {},
+): { locks: LossLock[]; totalTaxSavedUsd: Decimal } {
+  const plan = planSale({
+    objective: "harvest_losses",
+    targetProceeds: ZERO,
+    lots: lots.filter((l) => isWashSaleExempt(l.assetClass, opts)),
+    blocked: [],
+    profile,
+    asOf,
+  });
+
+  const byAsset = new Map<string, LossLock>();
+  for (const s of plan.sales) {
+    let lock = byAsset.get(s.lot.assetId);
+    if (!lock) {
+      lock = {
+        assetId: s.lot.assetId,
+        symbol: s.lot.symbol,
+        assetClass: s.lot.assetClass,
+        sales: [],
+        quantity: ZERO,
+        proceeds: ZERO,
+        lossUsd: ZERO,
+        taxSavedUsd: ZERO,
+      };
+      byAsset.set(s.lot.assetId, lock);
+    }
+    lock.sales.push(s);
+    lock.quantity = lock.quantity.add(s.sellQuantity);
+    lock.proceeds = lock.proceeds.add(s.proceeds);
+    lock.lossUsd = lock.lossUsd.sub(s.realizedGain);
+    lock.taxSavedUsd = lock.taxSavedUsd.sub(s.taxCost);
+  }
+
+  const locks = [...byAsset.values()].sort((a, b) => b.taxSavedUsd.cmp(a.taxSavedUsd));
+  return { locks, totalTaxSavedUsd: ZERO.sub(plan.totalTaxCost) };
 }

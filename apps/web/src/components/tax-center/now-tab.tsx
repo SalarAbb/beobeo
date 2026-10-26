@@ -8,7 +8,7 @@ import { usePortfolio } from "@/components/portfolio-context";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTRPC } from "@/lib/trpc";
-import { fmtUsd, gainClass } from "@/lib/viz";
+import { fmtQty, fmtUsd, gainClass } from "@/lib/viz";
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
@@ -37,6 +37,10 @@ export function NowTab({
   const hasSales = Math.abs(d.ytdShortTermGain) >= 0.5 || Math.abs(d.ytdLongTermGain) >= 0.5;
   const owes = d.taxOwedSoFarUsd >= 0.5;
   const canHarvest = d.harvestOpportunityCount > 0 && d.harvestEstTaxSavedUsd >= 0.5;
+  // A few dollars of tax is less than the spread on a sell-and-rebuy.
+  const locks = d.lossLocks.filter((l) => l.taxSavedUsd >= 5);
+  // A lot that's down gains nothing by waiting (and may be a move above).
+  const ripening = d.ripeningSoon.filter((r) => r.estSavingsIfWaited >= 0.5);
 
   return (
     <div className="grid gap-10">
@@ -92,6 +96,7 @@ export function NowTab({
               label="Days left this year"
               value={String(d.daysLeftInTaxYear)}
               sub="sales count through Dec 31"
+              className="col-span-2 sm:col-span-1"
             />
           </StatStrip>
         )}
@@ -110,7 +115,43 @@ export function NowTab({
         </p>
       </div>
 
-      {canHarvest ? (
+      {locks.length > 0 && (
+        <Section title="Moves available now">
+          <p className="-mt-2 text-sm text-muted-foreground">
+            Crypto has no wash-sale rule under current US law. Sell these at a loss and buy
+            them straight back: you keep the same coins and book the loss now.
+          </p>
+          <ul className="grid divide-y border-y">
+            {locks.map((l) => (
+              <li key={l.assetId} className="flex items-center gap-3 py-2.5 text-sm">
+                <AssetLogo symbol={l.symbol} assetClass={l.assetClass} size={22} />
+                <div className="min-w-0">
+                  <div>
+                    Sell and buy back{" "}
+                    <span className="data">{fmtQty(l.quantity)}</span>{" "}
+                    <Link href={`/positions/${l.assetId}`} className="font-medium hover:underline">
+                      {l.symbol}
+                    </Link>
+                  </div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    books a <span className="data">{fmtUsd(l.lossUsd, 0)}</span> loss ·{" "}
+                    {l.accounts.join(", ")}
+                  </div>
+                </div>
+                <span className="ml-auto shrink-0 text-right text-gain">
+                  saves <span className="data">~{fmtUsd(l.taxSavedUsd, 0)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-muted-foreground">
+            Buying back resets your cost lower, so this moves tax to a later sale rather than
+            erasing it. Savings use your Tax Profile rates and assume today&apos;s prices.
+          </p>
+        </Section>
+      )}
+
+      {canHarvest && d.harvestPreviewCount > 0 ? (
         <Section
           title="Losses you could take"
           aside={
@@ -168,14 +209,14 @@ export function NowTab({
         )
       )}
 
-      {d.ripeningSoon.length > 0 && (
+      {ripening.length > 0 && (
         <Section title="Hold a little longer">
           <p className="-mt-2 text-sm text-muted-foreground">
             After a year, a gain is taxed at the lower long-term rate. These cross that line
             soon, so selling them now would cost more.
           </p>
           <ul className="grid divide-y border-y">
-            {d.ripeningSoon.map((r, i) => (
+            {ripening.map((r, i) => (
               <li key={i} className="flex items-center gap-3 py-2.5 text-sm">
                 <AssetLogo symbol={r.lot.symbol} assetClass={r.lot.assetClass} size={22} />
                 <Link href={`/positions/${r.lot.assetId}`} className="font-medium hover:underline">
@@ -185,11 +226,9 @@ export function NowTab({
                   in <span className="data">{r.daysUntilLongTerm}</span>{" "}
                   {r.daysUntilLongTerm === 1 ? "day" : "days"}
                 </span>
-                {r.estSavingsIfWaited > 0.5 && (
-                  <span className="ml-auto text-right text-gain">
-                    waiting saves <span className="data">~{fmtUsd(r.estSavingsIfWaited)}</span>
-                  </span>
-                )}
+                <span className="ml-auto text-right text-gain">
+                  waiting saves <span className="data">~{fmtUsd(r.estSavingsIfWaited)}</span>
+                </span>
               </li>
             ))}
           </ul>

@@ -58,6 +58,9 @@ export {
 } from "./tax-netting";
 export {
   detectWashSaleBlocks,
+  isWashSaleExempt,
+  DEFAULT_WASH_SALE_EXEMPT_CLASSES,
+  type WashSaleOpts,
   type RecentBuyTxn,
   type LossLotCandidate,
   type WashSaleBlock,
@@ -69,6 +72,8 @@ export {
   ripeningSoon,
   summarizeHarvest,
   taxOwedSoFar,
+  lossLocks,
+  type LossLock,
   type TaxLot,
   type TaxProfile,
   type RipeningInfo,

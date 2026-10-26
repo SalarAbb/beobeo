@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { D } from "../src/types";
 import {
   detectWashSaleBlocks,
+  isWashSaleExempt,
   type LossLotCandidate,
   type RecentBuyTxn,
 } from "../src/tax-wash-sale";
@@ -85,5 +86,35 @@ describe("detectWashSaleBlocks", () => {
     const close = buy({ tradedAt: new Date("2026-06-10T00:00:00Z"), accountName: "Close" });
     const blocks = detectWashSaleBlocks([lossLot()], [far, close], asOf);
     expect(blocks[0]!.triggerAccountName).toBe("Close");
+  });
+});
+
+describe("crypto wash-sale exemption", () => {
+  it("never blocks a crypto loss lot, even with a same-asset buy 12 days prior (IRA too)", () => {
+    const crypto = lossLot({ assetClass: "crypto" });
+    expect(detectWashSaleBlocks([crypto], [buy()], asOf)).toHaveLength(0);
+    expect(
+      detectWashSaleBlocks([crypto], [buy({ isTaxAdvantaged: true })], asOf),
+    ).toHaveLength(0);
+  });
+
+  it("still blocks stocks and ETFs", () => {
+    const stock = lossLot({ assetClass: "stock", assetId: "asset-eth" });
+    const etf = lossLot({ lotId: "lot-2", assetClass: "etf" });
+    expect(detectWashSaleBlocks([stock, etf], [buy()], asOf)).toHaveLength(2);
+  });
+
+  it("is configurable: an empty exempt list treats crypto as covered", () => {
+    const crypto = lossLot({ assetClass: "crypto" });
+    const blocks = detectWashSaleBlocks([crypto], [buy()], asOf, { exemptAssetClasses: [] });
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]!.reason).toContain("12 days before this sale");
+  });
+
+  it("checks a candidate with no class (the conservative side)", () => {
+    expect(isWashSaleExempt(undefined)).toBe(false);
+    expect(isWashSaleExempt("crypto")).toBe(true);
+    expect(isWashSaleExempt("etf")).toBe(false);
+    expect(isWashSaleExempt("crypto", { exemptAssetClasses: ["fund"] })).toBe(false);
   });
 });

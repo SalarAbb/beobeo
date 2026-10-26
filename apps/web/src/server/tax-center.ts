@@ -8,6 +8,8 @@ import {
   taxOwedSoFar,
   detectWashSaleBlocks,
   isLongTerm,
+  isWashSaleExempt,
+  lossLocks,
   type LossLotCandidate,
   type PlannedSale,
   type TaxLot,
@@ -29,6 +31,7 @@ function lossCandidates(lots: TaxLot[]): LossLotCandidate[] {
       lotId: l.lotId,
       assetId: l.assetId,
       symbol: l.symbol,
+      assetClass: l.assetClass,
       lossUsd: l.costBasis.sub(l.quantity.mul(l.price)),
     }));
 }
@@ -149,7 +152,7 @@ export function computeTaxLotsList(userId: string, portfolioId?: string) {
 
 export function computeTaxNow(userId: string, portfolioId?: string) {
   const scope = portfolioKey(portfolioId);
-  return cached(userCacheKey(userId, "tax-now", scope), TTL.now, async () => {
+  return cached(userCacheKey(userId, "tax-now2", scope), TTL.now, async () => {
     const asOf = new Date();
     const { lots, profile, blocked } = await assembleScope(userId, scope, asOf);
 
@@ -174,6 +177,11 @@ export function computeTaxNow(userId: string, portfolioId?: string) {
       Math.ceil((yearEnd.getTime() - asOf.getTime()) / 86_400_000),
     );
 
+    // Sell-and-buy-back moves (crypto: no wash-sale rule). Those assets are
+    // listed there, so the plain-sell preview below leaves them out.
+    const locks = lossLocks(lots, profile, asOf);
+    const plainHarvest = harvest.sales.filter((s) => !isWashSaleExempt(s.lot.assetClass));
+
     return {
       daysLeftInTaxYear,
       // The effective (override-aware) YTD position — this is what actually
@@ -183,7 +191,19 @@ export function computeTaxNow(userId: string, portfolioId?: string) {
       ytdLongTermGain: profile.ytdLongTermGain.toNumber(),
       taxOwedSoFarUsd: taxOwedSoFar(profile).toNumber(),
       ripeningSoon: soon,
-      harvestPreview: harvest.sales.slice(0, 5).map((s) => serializeSale(s, asOf)),
+      lossLocks: locks.locks.map((l) => ({
+        assetId: l.assetId,
+        symbol: l.symbol,
+        assetClass: l.assetClass,
+        quantity: l.quantity.toNumber(),
+        proceeds: l.proceeds.toNumber(),
+        lossUsd: l.lossUsd.toNumber(),
+        taxSavedUsd: l.taxSavedUsd.toNumber(),
+        accounts: [...new Set(l.sales.map((s) => s.lot.accountName))],
+      })),
+      lossLocksTaxSavedUsd: locks.totalTaxSavedUsd.toNumber(),
+      harvestPreview: plainHarvest.slice(0, 5).map((s) => serializeSale(s, asOf)),
+      harvestPreviewCount: plainHarvest.length,
       harvestOpportunityCount: harvest.sales.length,
       harvestTotalLossUsd: harvest.sales.reduce((s, x) => s + x.realizedGain.toNumber(), 0),
       harvestEstTaxSavedUsd: -harvest.totalTaxCost.toNumber(),
