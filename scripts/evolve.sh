@@ -180,7 +180,9 @@ wait_for_limit() {
   if (( until - now > ${EVOLVE_MAX_WAIT_HOURS:-6} * 3600 )); then echo "Session limit resets too late ($(date -r "$until" +%H:%M)) — stopping."; return 1; fi
   echo "Session limit hit — waiting until $(date -r "$until" +%H:%M) and resuming."
   notify "Beobeo evolve paused" "Claude session limit; resuming at $(date -r "$until" +%H:%M)."
-  sleep $(( until - now ))
+  # Poll the wall clock: a single long `sleep` doesn't advance while the Mac sleeps, so a
+  # 4h wait once stretched past 7h. Checking every minute resumes on time after a wake.
+  while (( $(date +%s) < until )); do sleep 60; done
   DEADLINE=$(( DEADLINE + until - now ))
   return 0
 }
