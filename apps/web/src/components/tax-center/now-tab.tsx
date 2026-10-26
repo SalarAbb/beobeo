@@ -172,7 +172,7 @@ export function NowTab({
         </p>
 
         {hasSales && (
-          <StatStrip cols="grid-cols-2 sm:grid-cols-3">
+          <StatStrip cols="grid-cols-1 sm:grid-cols-3">
             <StatTile
               hero={false}
               label="Short-term gains"
@@ -194,7 +194,6 @@ export function NowTab({
               label="Days left this year"
               value={String(d.daysLeftInTaxYear)}
               sub="sales count through Dec 31"
-              className="col-span-2 sm:col-span-1"
             />
           </StatStrip>
         )}
