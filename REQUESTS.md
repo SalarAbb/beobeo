@@ -15,7 +15,7 @@
 - **Shipped on:** —
 - **In your words:** "Keep similar aesthetics for the website btw, in terms of font/coloring." "Use similar aesthetics of this html file (font/colors/visualization) in the actual website's UI."
 - **Done means:**
-  - ✓ One body face everywhere, words and numbers (Hanken Grotesk, tabular digits); Shippori Mincho only for page and section titles; loaded with `next/font`. (Mono and serif numbers were tried and rejected as inconsistent, 2026-10-25.)
+  - ✓ One font for the whole app, Hanken Grotesk (logo, titles, text, numbers with tabular digits), loaded with `next/font`. Serif titles/numbers and mono numbers were tried and rejected as inconsistent (2026-10-25).
   - ✓ Light and dark tokens from `packages/sim/report/style.css` (cool indigo-biased neutrals, one ai-iro indigo accent, semantic good/warn/bad) live in `apps/web/src/app/globals.css`
   - ✓ Hairline rules and quiet surfaces replace stacked shadows and cards; generous spacing
   - ✓ Charts keep the validated `viz.ts` palette; chips, pills and tooltips match the page's style

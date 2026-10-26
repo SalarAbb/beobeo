@@ -133,7 +133,7 @@
   --color-bad-soft: var(--bad-soft);
   --font-sans: var(--font-body);
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace; /* code only (chat code spans) */
-  --font-display: var(--font-heading);
+  --font-display: var(--font-body); /* titles use the one app face too (size/weight set them apart) */
 }
 
 @layer base {
@@ -143,9 +143,9 @@
   body {
     @apply bg-background text-foreground;
   }
-  /* Display serif: page titles and hero numbers only — sparingly. */
+  /* Page titles: the app face, set apart by size and weight. */
   h1 {
-    @apply font-display font-bold tracking-[0.01em];
+    @apply font-display font-semibold tracking-tight;
   }
 }
 

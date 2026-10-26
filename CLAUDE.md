@@ -44,7 +44,7 @@ scripts/install-launchd.sh [--remove]   # arm/disarm the daily 08:00 cycle (Laun
 
 - **Runtime/tooling:** Node 26, pnpm 11 (workspace + Turborepo 2), TypeScript 5.9 strict (`noUncheckedIndexedAccess`, `verbatimModuleSyntax`)
 - **Web:** Next.js 16.2 (App Router, React 19.2), Tailwind CSS v4 (CSS-first config in `globals.css`), shadcn/ui (new-york, components vendored in `src/components/ui`)
-- **Type (R-001, via `next/font/google` in root `layout.tsx`):** Hanken Grotesk = `font-sans` for all text and numbers; Shippori Mincho = `font-display` for the logo, h1s (base rule) and section titles only. No mono web font (`font-mono` = system stack, code only). See "Type system".
+- **Type (R-001, via `next/font/google` in root `layout.tsx`):** Hanken Grotesk only, for everything (`font-sans`, and `font-display` maps to it too). No other web font. See "Type system".
 - **API:** tRPC v11 + superjson + TanStack Query v5 (`@trpc/tanstack-react-query` — `useTRPC()` hook pattern, NOT the older `api.x.useQuery` codegen style)
 - **Auth:** Better Auth 1.6 (email/password + optional Google), Drizzle adapter
 - **DB:** Postgres 18 on Neon (serverless HTTP driver `@neondatabase/serverless` 1.x), Drizzle ORM 0.45
@@ -184,11 +184,11 @@ Pure TS, zero framework/DB deps. Exhaustive Vitest fixtures in `packages/core/te
 
 ## Type system (don't freelance fonts) — R-001, user-enforced
 
-**One face for everything you read: Hanken Grotesk** (`next/font`, `--font-body`), words and numbers alike. The user asked three times for consistency ("all the fonts consistent… I want consistency throughout"): serif headline numbers were rejected, then a JetBrains Mono "data" face was rejected as "a different font" mixed into the pages, so the mono font is no longer loaded at all.
-- **Serif (Shippori Mincho)** only for the logo, page titles (`h1`, always `text-3xl`) and section titles (`PageSection` h2, `CardTitle`). Never numbers, never body text.
-- Numbers use the sans with tabular digits via two classes in `globals.css` (`@layer components`): `.figure` (standalone headline numbers: stat tiles, metric cells; semibold) and `.data` (numbers in tables, lists, legends, tooltips, sub-lines). Never bare `tabular-nums`/`font-mono`/`font-display` for numbers. Charts use the same face: lightweight-charts gets `fontFamily: chartFont()` (`lib/viz.ts`; canvas can't resolve CSS vars), Recharts containers get `className="data"`.
+**One font for the entire app: Hanken Grotesk** (`next/font`, `--font-body`) — logo, page and section titles, text and numbers. The user asked for this four times ("unify the fonts", "consistency throughout"); a serif (Shippori Mincho) for titles/numbers and a mono (JetBrains Mono) for numbers were both tried and removed as "a different font". **Only one web font is loaded. Don't add another.** Titles stand apart by size and weight (`h1` = `text-3xl font-semibold`, section titles bold), never by face. `font-display` still exists as a class but maps to the same font.
+- Numbers use tabular digits via `.figure` (standalone headline numbers: stat tiles, metric cells; semibold) and `.data` (numbers in tables, lists, legends, tooltips, sub-lines), both in `globals.css`. Charts use the same font: lightweight-charts gets `fontFamily: chartFont()` (`lib/viz.ts`; canvas can't resolve CSS vars), Recharts containers get `className="data"`.
 - `font-mono` is a system monospace stack for code only (chat code spans).
-- Verify with the browser, not by eye: list each page's computed `font-family` over visible text (expect only Hanken Grotesk plus Shippori Mincho on titles). Turbopack's `.next` cache has twice served a stale `globals.css` after merges; when CSS changes don't show, stop the dev server, `rm -rf apps/web/.next`, restart. (Running `pnpm build` while `pnpm dev` is up also touches `.next`.)
+- Verify in a browser, not by eye: list each page's computed `font-family` over visible text; expect Hanken Grotesk only. Turbopack's `.next` cache has twice served a stale `globals.css` after merges; when CSS changes don't show, stop the dev server, `rm -rf apps/web/.next` and restart. (Running `pnpm build` while `pnpm dev` is up also touches `.next`.)
+- The evolution report site (`packages/sim/report/`) keeps its own serif/mono styling; it's a separate artifact.
 
 ## Visualization system (don't freelance colors)
 

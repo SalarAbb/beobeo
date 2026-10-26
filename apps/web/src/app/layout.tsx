@@ -1,20 +1,14 @@
 import type { Metadata } from "next";
-import { Hanken_Grotesk, Shippori_Mincho } from "next/font/google";
+import { Hanken_Grotesk } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
-// One face for everything you read, words and numbers alike: Hanken Grotesk.
-// Shippori Mincho only for page and section titles. (A mono face for numbers was
-// tried and removed: the user saw it as "a different font" mixed into the pages.)
+// One face for the whole app — logo, titles, text and numbers: Hanken Grotesk.
+// The user asked for this explicitly; a serif for titles and a mono for numbers were
+// both tried and removed as "a different font". Titles differ by size and weight only.
 const body = Hanken_Grotesk({
   variable: "--font-body",
   subsets: ["latin"],
-});
-
-const heading = Shippori_Mincho({
-  variable: "--font-heading",
-  subsets: ["latin"],
-  weight: ["600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -31,7 +25,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${body.variable} ${heading.variable} h-full antialiased`}
+      className={`${body.variable} h-full antialiased`}
     >
       <head>
         {/* Apply .dark from the system preference before paint (no flash). */}
