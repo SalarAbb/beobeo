@@ -27,16 +27,32 @@ export async function POST(req: Request) {
   if (!parsed.success) return new Response("Bad request", { status: 400 });
   const { message } = parsed.data;
 
-  // Find or create the thread (scoped to this user).
+  // The snapshot is the model's first input; start it now so it loads while
+  // the thread is found and the question saved, not after.
+  const api = makePortfolioApi(userId, parsed.data.portfolioId);
+  void api.getContextSnapshot().catch(() => {});
+
+  // Find or create the thread (scoped to this user), reading prior turns in
+  // the same breath when it already exists.
   let threadId = parsed.data.threadId ?? null;
+  let history: (typeof schema.chatMessages.$inferSelect)[] = [];
   if (threadId) {
-    const rows = await db
-      .select({ id: schema.chatThreads.id })
-      .from(schema.chatThreads)
-      .where(
-        and(eq(schema.chatThreads.id, threadId), eq(schema.chatThreads.userId, userId)),
-      );
+    const [rows, prior] = await Promise.all([
+      db
+        .select({ id: schema.chatThreads.id })
+        .from(schema.chatThreads)
+        .where(
+          and(eq(schema.chatThreads.id, threadId), eq(schema.chatThreads.userId, userId)),
+        ),
+      // Text-only persistence keeps replay simple and cacheable.
+      db
+        .select()
+        .from(schema.chatMessages)
+        .where(eq(schema.chatMessages.threadId, threadId))
+        .orderBy(asc(schema.chatMessages.createdAt)),
+    ]);
     if (rows.length === 0) return new Response("Not found", { status: 404 });
+    history = prior;
   } else {
     const [thread] = await db
       .insert(schema.chatThreads)
@@ -44,13 +60,6 @@ export async function POST(req: Request) {
       .returning();
     threadId = thread!.id;
   }
-
-  // Prior turns (text-only persistence keeps replay simple and cacheable).
-  const history = await db
-    .select()
-    .from(schema.chatMessages)
-    .where(eq(schema.chatMessages.threadId, threadId))
-    .orderBy(asc(schema.chatMessages.createdAt));
 
   await db.insert(schema.chatMessages).values({
     threadId,
@@ -78,7 +87,7 @@ export async function POST(req: Request) {
 
       try {
         const { finalText } = await runPortfolioAgentTurn({
-          api: makePortfolioApi(userId, parsed.data.portfolioId),
+          api,
           messages,
           onEvent: (event) => send(event),
           // Where the time went; latency is a principle, so every turn says.

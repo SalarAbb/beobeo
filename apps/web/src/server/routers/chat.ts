@@ -1,6 +1,7 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { schema } from "@beobeo/db";
+import { warmContextSnapshot } from "../agent-api";
 import { protectedProcedure, router } from "../trpc";
 
 export const chatRouter = router({
@@ -31,6 +32,14 @@ export const chatRouter = router({
         .from(schema.chatMessages)
         .where(eq(schema.chatMessages.threadId, input.threadId))
         .orderBy(asc(schema.chatMessages.createdAt));
+    }),
+
+  /** Preload what the next question's snapshot reads (see warmContextSnapshot). */
+  warm: protectedProcedure
+    .input(z.object({ portfolioId: z.uuid().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      await warmContextSnapshot(ctx.userId, input.portfolioId).catch(() => {});
+      return null;
     }),
 
   removeThread: protectedProcedure

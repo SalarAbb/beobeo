@@ -1,8 +1,8 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { History, MessageSquarePlus, Send } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatMarkdown } from "@/components/chat-markdown";
 import { PageHeader } from "@/components/page-section";
 import { usePortfolio } from "@/components/portfolio-context";
@@ -107,6 +107,21 @@ export default function ChatPage() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages]);
+
+  // Every answer starts from a snapshot of the portfolio that took 1–2.5s to
+  // build cold. Building it while the user opens the page and types means
+  // Send goes straight to the model. The server cache holds it ~60s, so
+  // re-warm at most every 30s.
+  const { mutate: warm } = useMutation(trpc.chat.warm.mutationOptions());
+  const warmedRef = useRef<{ key: string; at: number } | null>(null);
+  const warmSnapshot = useCallback(() => {
+    const key = portfolioId ?? "all";
+    const last = warmedRef.current;
+    if (last && last.key === key && Date.now() - last.at < 30_000) return;
+    warmedRef.current = { key, at: Date.now() };
+    warm({ portfolioId: portfolioId ?? undefined });
+  }, [portfolioId, warm]);
+  useEffect(() => warmSnapshot(), [warmSnapshot]);
 
   async function send(text: string) {
     if (!text.trim() || streaming) return;
@@ -340,7 +355,11 @@ export default function ChatPage() {
           >
             <Input
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onFocus={warmSnapshot}
+              onChange={(e) => {
+                setInput(e.target.value);
+                warmSnapshot();
+              }}
               placeholder="Ask about your portfolio…"
               disabled={streaming || opening}
               className="h-10 rounded-full px-4"

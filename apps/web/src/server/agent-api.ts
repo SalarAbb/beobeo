@@ -35,96 +35,116 @@ async function findUserAsset(userId: string, symbol: string) {
   return rows[0]?.asset ?? null;
 }
 
+/** What the agent reads before its first step (holdings, totals, accounts, tax rates and moves). */
+async function loadContextSnapshot(userId: string, portfolioId?: string) {
+  const accountFilter = [eq(schema.accounts.userId, userId)];
+  if (portfolioId) accountFilter.push(eq(schema.accounts.portfolioId, portfolioId));
+  const [overview, series, tax, taxLots, taxNow, accounts] = await Promise.all([
+    computeOverview(userId, portfolioId),
+    computeTimeseries(userId, undefined, portfolioId).catch(() => []),
+    computeTaxProfile(userId, portfolioId).catch(() => null),
+    computeTaxLotsList(userId, portfolioId).catch(() => []),
+    computeTaxNow(userId, portfolioId).catch(() => null),
+    db
+      .select({ name: schema.accounts.name, type: schema.accounts.accountType })
+      .from(schema.accounts)
+      .where(and(...accountFilter)),
+  ]);
+  const { value } = overview.totals;
+  // "Am I on track?" needs the saving pace; without it the agent spent a
+  // slow round trip paging through transactions to estimate it.
+  const first = series[0];
+  const last = series[series.length - 1];
+  const yearAgo = toIsoDate(new Date(Date.now() - 365 * 86_400_000));
+  const atYearAgo = series.findLast((p) => p.date <= yearAgo);
+  const contributions = first && last && {
+    firstTradeDate: first.date,
+    netInvestedAllTime: last.invested,
+    netInvestedLast12Months: last.invested - (atYearAgo?.invested ?? 0),
+  };
+  // "What would I owe if I sold X?" needs each holding's short/long-term
+  // split; without it the agent fetched lots one symbol per round trip.
+  const taxable = new Map<string, { shortTerm: number; longTerm: number }>();
+  for (const l of taxLots) {
+    const t = taxable.get(l.symbol) ?? { shortTerm: 0, longTerm: 0 };
+    if (l.isLongTerm) t.longTerm += l.unrealizedGain;
+    else t.shortTerm += l.unrealizedGain;
+    taxable.set(l.symbol, t);
+  }
+  return {
+    contributions,
+    totals: {
+      value,
+      costBasis: overview.totals.cost,
+      unrealized: overview.totals.unrealized,
+      unrealizedPct: overview.totals.unrealizedPct,
+      realizedAllTime: overview.totals.realized,
+      realizedThisYear: round2(overview.totals.realizedThisYear),
+      dividendsAllTime: overview.totals.dividends,
+    },
+    holdings: overview.holdings.map((h) => ({
+      symbol: h.symbol,
+      name: h.name,
+      class: h.class,
+      quantity: h.quantity,
+      avgCost: h.avgCost,
+      costBasis: h.costBasis,
+      price: h.price,
+      priceDate: h.priceDate,
+      marketValue: h.marketValue,
+      weightPct: value > 0 && h.marketValue !== null ? (h.marketValue / value) * 100 : null,
+      unrealized: h.unrealizedGain,
+      unrealizedPct: h.unrealizedGainPct,
+      ...(taxable.has(h.symbol) && {
+        taxableGainIfSoldNow: {
+          shortTerm: round2(taxable.get(h.symbol)!.shortTerm),
+          longTerm: round2(taxable.get(h.symbol)!.longTerm),
+        },
+      }),
+    })),
+    dataIssues: overview.dataIssues,
+    accounts,
+    taxProfile: tax && {
+      // Federal + state, the same combination the Tax Center uses.
+      shortTermRatePct: tax.federalOrdinaryRatePct + tax.stateOrdinaryRatePct,
+      longTermRatePct: tax.federalLtcgRatePct + tax.stateLtcgRatePct,
+      ytdShortTermGain: tax.ytdShortTermOverride ?? tax.ytdShortTermComputed,
+      ytdLongTermGain: tax.ytdLongTermOverride ?? tax.ytdLongTermComputed,
+      carryforwardShortTerm: tax.carryforwardShortTerm,
+      carryforwardLongTerm: tax.carryforwardLongTerm,
+    },
+    // The Tax Center's "Moves available now" list, so "any tax moves I
+    // should make?" gets the same lines and dollars as the page.
+    taxMovesNow: taxNow && {
+      moves: taxNow.moves,
+      sellMovesTaxSavedUsd: round2(taxNow.movesTaxSavedUsd),
+      sellMovesLossBreakdown: taxNow.movesBreakdown,
+      incomeDeductionRoomUsd: round2(taxNow.deductionRoomUsd),
+      daysLeftInTaxYear: taxNow.daysLeftInTaxYear,
+    },
+  };
+}
+
+/**
+ * Fill the computation cache the snapshot reads, so a question asked soon
+ * after costs no snapshot wait. The chat page calls this on open and while
+ * the user types.
+ */
+export async function warmContextSnapshot(userId: string, portfolioId?: string) {
+  await loadContextSnapshot(userId, portfolioId);
+}
+
 /** Read-only PortfolioApi bound to one authenticated user. */
 export function makePortfolioApi(userId: string, portfolioId?: string): PortfolioApi {
+  // Memoized per api instance: the chat route starts the snapshot as soon as
+  // the request arrives, alongside its thread writes, and the turn picks up
+  // the same promise.
+  let snapshot: Promise<unknown> | undefined;
   return {
-    async getContextSnapshot() {
-      const accountFilter = [eq(schema.accounts.userId, userId)];
-      if (portfolioId) accountFilter.push(eq(schema.accounts.portfolioId, portfolioId));
-      const [overview, series, tax, taxLots, taxNow, accounts] = await Promise.all([
-        computeOverview(userId, portfolioId),
-        computeTimeseries(userId, undefined, portfolioId).catch(() => []),
-        computeTaxProfile(userId, portfolioId).catch(() => null),
-        computeTaxLotsList(userId, portfolioId).catch(() => []),
-        computeTaxNow(userId, portfolioId).catch(() => null),
-        db
-          .select({ name: schema.accounts.name, type: schema.accounts.accountType })
-          .from(schema.accounts)
-          .where(and(...accountFilter)),
-      ]);
-      const { value } = overview.totals;
-      // "Am I on track?" needs the saving pace; without it the agent spent a
-      // slow round trip paging through transactions to estimate it.
-      const first = series[0];
-      const last = series[series.length - 1];
-      const yearAgo = toIsoDate(new Date(Date.now() - 365 * 86_400_000));
-      const atYearAgo = series.findLast((p) => p.date <= yearAgo);
-      const contributions = first && last && {
-        firstTradeDate: first.date,
-        netInvestedAllTime: last.invested,
-        netInvestedLast12Months: last.invested - (atYearAgo?.invested ?? 0),
-      };
-      // "What would I owe if I sold X?" needs each holding's short/long-term
-      // split; without it the agent fetched lots one symbol per round trip.
-      const taxable = new Map<string, { shortTerm: number; longTerm: number }>();
-      for (const l of taxLots) {
-        const t = taxable.get(l.symbol) ?? { shortTerm: 0, longTerm: 0 };
-        if (l.isLongTerm) t.longTerm += l.unrealizedGain;
-        else t.shortTerm += l.unrealizedGain;
-        taxable.set(l.symbol, t);
-      }
-      return {
-        contributions,
-        totals: {
-          value,
-          costBasis: overview.totals.cost,
-          unrealized: overview.totals.unrealized,
-          unrealizedPct: overview.totals.unrealizedPct,
-          realizedAllTime: overview.totals.realized,
-          realizedThisYear: round2(overview.totals.realizedThisYear),
-          dividendsAllTime: overview.totals.dividends,
-        },
-        holdings: overview.holdings.map((h) => ({
-          symbol: h.symbol,
-          name: h.name,
-          class: h.class,
-          quantity: h.quantity,
-          avgCost: h.avgCost,
-          costBasis: h.costBasis,
-          price: h.price,
-          priceDate: h.priceDate,
-          marketValue: h.marketValue,
-          weightPct: value > 0 && h.marketValue !== null ? (h.marketValue / value) * 100 : null,
-          unrealized: h.unrealizedGain,
-          unrealizedPct: h.unrealizedGainPct,
-          ...(taxable.has(h.symbol) && {
-            taxableGainIfSoldNow: {
-              shortTerm: round2(taxable.get(h.symbol)!.shortTerm),
-              longTerm: round2(taxable.get(h.symbol)!.longTerm),
-            },
-          }),
-        })),
-        dataIssues: overview.dataIssues,
-        accounts,
-        taxProfile: tax && {
-          // Federal + state, the same combination the Tax Center uses.
-          shortTermRatePct: tax.federalOrdinaryRatePct + tax.stateOrdinaryRatePct,
-          longTermRatePct: tax.federalLtcgRatePct + tax.stateLtcgRatePct,
-          ytdShortTermGain: tax.ytdShortTermOverride ?? tax.ytdShortTermComputed,
-          ytdLongTermGain: tax.ytdLongTermOverride ?? tax.ytdLongTermComputed,
-          carryforwardShortTerm: tax.carryforwardShortTerm,
-          carryforwardLongTerm: tax.carryforwardLongTerm,
-        },
-        // The Tax Center's "Moves available now" list, so "any tax moves I
-        // should make?" gets the same lines and dollars as the page.
-        taxMovesNow: taxNow && {
-          moves: taxNow.moves,
-          sellMovesTaxSavedUsd: round2(taxNow.movesTaxSavedUsd),
-          sellMovesLossBreakdown: taxNow.movesBreakdown,
-          incomeDeductionRoomUsd: round2(taxNow.deductionRoomUsd),
-          daysLeftInTaxYear: taxNow.daysLeftInTaxYear,
-        },
-      };
+    getContextSnapshot() {
+      snapshot ??= loadContextSnapshot(userId, portfolioId);
+      snapshot.catch(() => (snapshot = undefined));
+      return snapshot;
     },
 
     async getPortfolioSummary() {

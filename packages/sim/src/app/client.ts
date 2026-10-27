@@ -106,6 +106,19 @@ export class AppClient {
     return { data: superjson.deserialize<T>(body.result.data), ms };
   }
 
+  /**
+   * What opening /chat does: the page warms the portfolio snapshot while the
+   * user types. A persona "types" instantly, so callers await this (untimed,
+   * standing in for typing) before `chat`. Failures are ignored, like the page.
+   */
+  async openChat(): Promise<number | null> {
+    try {
+      return (await this.mutate("chat.warm", {})).ms;
+    } catch {
+      return null;
+    }
+  }
+
   /** One chat turn over SSE; times first text token and the whole answer. */
   async chat(message: string, threadId?: string): Promise<ChatResult & { threadId?: string }> {
     const t0 = performance.now();
