@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTRPC } from "@/lib/trpc";
+import { cn } from "@/lib/utils";
 import { fmtUsd } from "@/lib/viz";
 
 const MAX_OPTIONS = 5;
@@ -68,6 +69,8 @@ export function NextBuySection({
   const picks = query.data?.picks ?? [];
   const pick = picks.length > 0 ? picks[index % picks.length]! : null;
   const ready = amountUsd > 0 && options.length > 0;
+  // The pick on screen is for an older amount or list until the new one lands.
+  const stale = amountUsd !== debouncedAmount || query.isPlaceholderData;
 
   const remove = (id: string) => setPicked(options.filter((o) => o.id !== id));
 
@@ -155,7 +158,14 @@ export function NextBuySection({
           <Skeleton className="h-16 w-full max-w-md" />
         )
       ) : (
-        <div className="grid gap-1.5" aria-live="polite">
+        <div
+          className={cn("grid gap-1.5 transition-opacity", stale && "opacity-50")}
+          aria-live="polite"
+          aria-busy={stale}
+        >
+          {stale && (
+            <p className="text-xs text-muted-foreground">Weighing {fmtUsd(amountUsd)}…</p>
+          )}
           <p className="flex flex-wrap items-center gap-x-1.5 text-lg">
             Put <span className="data font-semibold">{fmtUsd(debouncedAmount)}</span> into
             <AssetLogo symbol={pick.key} assetClass={pick.assetClass} size={20} />

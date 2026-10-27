@@ -77,7 +77,7 @@ export function StatTile({
 }: {
   label: ReactNode;
   value: string;
-  sub?: string;
+  sub?: ReactNode;
   tone?: string;
   /** Defaults to `tone` (a delta under a value); set it when the sub-line is a description. */
   subTone?: string;

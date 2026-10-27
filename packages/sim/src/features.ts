@@ -30,6 +30,7 @@ export const FEATURES: Feature[] = [
   { id: "position.detail", route: "/dashboard", does: "Open one holding and check its price history, your buys and sells, your cost, and gains from past sales" },
   { id: "transactions.browse", route: "/transactions", does: "Find a specific past trade in your transaction history and open it to see its amount and, for a sale, the purchases it used and the gain" },
   { id: "transactions.add", route: "/transactions", does: "Record a trade you just made at your broker (search the asset, amount, price, date, account)" },
+  { id: "transactions.dividend", route: "/dashboard", does: "Record a dividend payout you just received (start from the dashboard's Dividends tile), then check the dashboard's dividend total and the Transactions list show it", fits: ["income"] },
   { id: "transactions.fix", route: "/transactions", does: "Fix a trade you entered wrongly (wrong quantity, price or date), or remove a duplicate (open the trade, delete, confirm) and undo if you slip" },
   { id: "transactions.import", route: "/transactions", does: "Import trades from your broker's CSV export (a file is provided to you)", fits: ["expert", "multi-account"] },
   { id: "tax.now", route: "/tax-center", does: "See what your sales this year mean for taxes, and the ranked list of moves available right now (sell crypto at a loss and buy it straight back, sell a losing fund, wait for a lot to turn long-term, losses on hold under the wash-sale rule), with the dollars each saves", fits: ["tax", "crypto"] },

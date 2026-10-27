@@ -158,10 +158,25 @@ export function pickNextBuy(input: {
     return pick;
   });
 
-  return picks.sort(
+  picks.sort(
     (a, b) =>
       b.score - a.score || a.weightAfter - b.weightAfter || a.key.localeCompare(b.key),
   );
+  // "Already 67% of your portfolio" alone reads as a reason against a pick;
+  // with other options, compare: the top pick spreads money more than the
+  // runner-up, every other pick less than the top.
+  const [top, second] = picks;
+  if (top && second) {
+    picks.forEach((p, i) => {
+      if (!p.reason.includes("; this buy takes it to")) return;
+      const share = `${p.key} is ${pctOf(p.weightNow)} of your portfolio (${pctOf(p.weightAfter)} after this buy)`;
+      p.reason =
+        i === 0
+          ? `${share}, so it keeps your money more spread out than ${second.key} would.`
+          : `${share}, so it spreads your money less than ${top.key}.`;
+    });
+  }
+  return picks;
 }
 
 /** The larger weighted part of the score speaks. */
