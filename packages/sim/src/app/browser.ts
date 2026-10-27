@@ -84,13 +84,19 @@ export async function walkthrough(
   routes: string[],
   outDir: string,
   tag: string,
+  /** CSS selector clicked (first match) after each route loads, e.g. to open a dialog. */
+  click?: string,
 ): Promise<Shot[]> {
   const page = await ctx.newPage();
   const shots: Shot[] = [];
   const vp = page.viewportSize()?.width === VIEWPORTS.mobile.width ? "mobile" : "desktop";
   for (const route of routes) {
     const ms = await visit(page, route);
-    const file = join(outDir, `${tag}-${route.replaceAll("/", "_") || "_root"}.png`);
+    if (click) {
+      await page.locator(click).first().click({ timeout: 10_000 });
+      await page.waitForTimeout(1_500);
+    }
+    const file = join(outDir, `${tag}-${route.replaceAll("/", "_") || "_root"}${click ? "-click" : ""}.png`);
     await page.screenshot({ path: file, fullPage: true });
     shots.push({ route, file, ms, viewport: vp, scheme: tag.includes("dark") ? "dark" : "light", finalUrl: page.url() });
   }

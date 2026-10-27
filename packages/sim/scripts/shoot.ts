@@ -3,6 +3,7 @@
  * so /evolve (or a human) can see a change the way personas will.
  *
  * Run: pnpm --filter @beobeo/sim shoot --persona samwell --routes /dashboard,/tax-center [--out DIR]
+ *      [--click '<css selector>']   (clicked after each route loads, e.g. to open a dialog)
  */
 import "../src/env";
 import { AppClient } from "../src/app/client";
@@ -19,6 +20,7 @@ const opt = (n: string) => {
 const persona = opt("persona") ?? "samwell";
 const routes = (opt("routes") ?? "/dashboard").split(",");
 const out = opt("out") ?? simDir("screenshots", todayIso(), "evolve");
+const click = opt("click");
 
 const p = loadPersonas().find((x) => x.id === persona);
 if (!p) throw new Error(`unknown persona ${persona}`);
@@ -29,7 +31,7 @@ for (const [viewport, scheme] of [["desktop", "light"], ["desktop", "dark"], ["m
   const ctx = await newContext(browser, {
     viewport, scheme, cookies: client.cookieList, storage: deviceStorage(p, client.userId),
   });
-  for (const s of await walkthrough(ctx, routes, out, `${persona}-${viewport}-${scheme}`)) {
+  for (const s of await walkthrough(ctx, routes, out, `${persona}-${viewport}-${scheme}`, click)) {
     console.log(`${s.file}  (${Math.round(s.ms)}ms${s.finalUrl.includes("/signin") ? ", NOT SIGNED IN" : ""})`);
   }
   await ctx.close();

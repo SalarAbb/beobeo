@@ -765,6 +765,8 @@ async function computePositionUncached(
       costBasis: g.costBasis.toNumber(),
       gain: g.gain.toNumber(),
       longTerm: g.longTerm,
+      /** The sell transaction, so a sale on /transactions can show its own lots. */
+      sourceTxnId: g.sourceTxnId,
     })),
     priceSeries: [...displayPrices.entries()]
       .sort(([a], [b]) => (a < b ? -1 : 1))
