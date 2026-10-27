@@ -1,16 +1,17 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, FileUp, PenLine, ArrowRight } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Check, FileUp, PenLine, ArrowRight, Loader2 } from "lucide-react";
 import {
   bracketOptions,
   type BracketOption,
   type FilingStatus,
 } from "@beobeo/core/tax-brackets";
 import { AuthShell } from "@/components/auth/auth-shell";
+import { AddTransactionDialog } from "@/components/transactions/add-transaction-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,13 +58,68 @@ const choice = (on: boolean) =>
     on ? "border-primary/40 bg-accent text-primary" : "hover:bg-muted"
   }`;
 
+/** What step 1 writes to the tax profile (nothing when skipped). */
+type TaxAnswers = {
+  federalOrdinaryRatePct?: number;
+  federalLtcgRatePct?: number;
+  stateOrdinaryRatePct?: number;
+  stateLtcgRatePct?: number;
+  stateTreatsLtcgAsOrdinary?: boolean;
+};
+
+type AccountPreset = (typeof ACCOUNT_PRESETS)[number];
+
 export function WelcomeFlow({ name }: { name: string }) {
+  const trpc = useTRPC();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const first = name.trim().split(/\s+/)[0] ?? "";
+  // Each step's answers save in the background while the next step shows: a
+  // Continue stuck on "Saving…" read as a broken sign-up (hermione, missions
+  // 18 and 21). Step 1's failure is reported on step 2; step 3 waits for the
+  // accounts before its add form can use them.
+  const saveTax = useMutation(trpc.tax.updateProfile.mutationOptions());
+  // Step 2 needs the account list; fetch it while step 1 is being read.
+  useQuery(trpc.accounts.list.queryOptions({}));
+  const createAccount = useMutation(trpc.accounts.create.mutationOptions());
+  const [accounts, setAccounts] = useState<{ saving: boolean; error: string | null }>({
+    saving: false,
+    error: null,
+  });
 
-  if (step === 1) return <TaxStep first={first} onDone={() => setStep(2)} />;
-  if (step === 2) return <AccountsStep onDone={() => setStep(3)} />;
-  return <FirstHoldingStep />;
+  async function createAccounts(presets: AccountPreset[]) {
+    setStep(3);
+    if (presets.length === 0) return;
+    setAccounts({ saving: true, error: null });
+    try {
+      // One at a time: the first create also makes the "Main" portfolio.
+      for (const p of presets) await createAccount.mutateAsync({ name: p.name, accountType: p.type });
+      // The add form lists accounts; a stale empty list would make it create "Default".
+      await queryClient.invalidateQueries({ queryKey: trpc.accounts.list.queryKey() });
+      setAccounts({ saving: false, error: null });
+    } catch (e) {
+      setAccounts({ saving: false, error: (e as Error).message });
+    }
+  }
+
+  if (step === 1)
+    return (
+      <TaxStep
+        first={first}
+        onDone={(answers) => {
+          if (answers) saveTax.mutate(answers);
+          setStep(2);
+        }}
+      />
+    );
+  if (step === 2)
+    return (
+      <AccountsStep
+        taxError={saveTax.error?.message ?? null}
+        onDone={(presets) => void createAccounts(presets)}
+      />
+    );
+  return <FirstHoldingStep accountsSaving={accounts.saving} accountsError={accounts.error} />;
 }
 
 function StepFooter({ onSkip, label = "Skip this step" }: { onSkip: () => void; label?: string }) {
@@ -81,20 +137,24 @@ function StepFooter({ onSkip, label = "Skip this step" }: { onSkip: () => void; 
   );
 }
 
-function TaxStep({ first, onDone }: { first: string; onDone: () => void }) {
-  const trpc = useTRPC();
+function TaxStep({
+  first,
+  onDone,
+}: {
+  first: string;
+  onDone: (answers: TaxAnswers | null) => void;
+}) {
   const [status, setStatus] = useState<FilingStatus>("single");
   const [band, setBand] = useState<number | null>(null);
   const [stateRate, setStateRate] = useState("");
-  const save = useMutation(trpc.tax.updateProfile.mutationOptions({ onSuccess: onDone }));
   const bands = bracketOptions(status);
   const picked = band === null ? null : bands[band];
   const statePct = Number(stateRate);
   const stateOk = stateRate.trim() === "" || (Number.isFinite(statePct) && statePct >= 0 && statePct <= 20);
 
   function onContinue() {
-    if (!picked && stateRate.trim() === "") return onDone();
-    save.mutate({
+    if (!picked && stateRate.trim() === "") return onDone(null);
+    onDone({
       ...(picked && {
         federalOrdinaryRatePct: picked.ordinaryRatePct,
         federalLtcgRatePct: picked.ltcgRatePct,
@@ -113,7 +173,7 @@ function TaxStep({ first, onDone }: { first: string; onDone: () => void }) {
       tagline="Step 1 of 3 · Taxes"
       title={first ? `Welcome, ${first}` : "Welcome"}
       subtitle="Roughly what you earn sets what a sale costs you in tax. A ballpark is enough; we never ask for exact income."
-      footer={<StepFooter onSkip={onDone} />}
+      footer={<StepFooter onSkip={() => onDone(null)} />}
     >
       <div className="grid gap-2">
         <Label>How you file</Label>
@@ -125,6 +185,10 @@ function TaxStep({ first, onDone }: { first: string; onDone: () => void }) {
       </div>
       <div className="grid gap-2">
         <Label id="band-label">Taxable income this year, roughly</Label>
+        <p className="-mt-1 text-xs text-muted-foreground">
+          2026 federal brackets. Taxable income is what&apos;s left after deductions, so it&apos;s
+          usually well below your pay.
+        </p>
         <div role="radiogroup" aria-labelledby="band-label" className="grid gap-1.5">
           {bands.map((b, i) => (
             <button
@@ -160,24 +224,36 @@ function TaxStep({ first, onDone }: { first: string; onDone: () => void }) {
         />
         {!stateOk && <p className="text-xs text-destructive">Enter a rate between 0 and 20.</p>}
       </div>
-      {save.error && <p className="text-sm text-destructive">Couldn&apos;t save: {save.error.message}</p>}
-      <Button onClick={onContinue} disabled={save.isPending || !stateOk}>
-        {save.isPending ? "Saving…" : "Continue"}
+      <Button onClick={onContinue} disabled={!stateOk}>
+        Continue
       </Button>
     </AuthShell>
   );
 }
 
-function AccountsStep({ onDone }: { onDone: () => void }) {
+function AccountsStep({
+  onDone,
+  taxError,
+}: {
+  onDone: (presets: AccountPreset[]) => void;
+  taxError: string | null;
+}) {
   const trpc = useTRPC();
   const existing = useQuery(trpc.accounts.list.queryOptions({}));
-  const create = useMutation(trpc.accounts.create.mutationOptions());
   const have = new Set((existing.data ?? []).map((a) => a.name.toLowerCase()));
+  // An account already set up under another name ("IBKR", "401k") covers the
+  // preset of its type: offering it again, unticked, read as "will this make a
+  // duplicate?" (hermione, missions 18 and 21). The crypto exchange is only
+  // covered by name, since a brokerage doesn't stand in for it.
+  const haveTypes = new Set<string>((existing.data ?? []).map((a) => a.accountType));
+  const offered = ACCOUNT_PRESETS.filter(
+    (p) =>
+      !have.has(p.name.toLowerCase()) && !(p.name !== "Crypto exchange" && haveTypes.has(p.type)),
+  );
   // Brokerage is preselected only for someone with no accounts at all.
   const [picked, setPicked] = useState<ReadonlySet<string> | null>(null);
   const selected =
     picked ?? (existing.data && existing.data.length === 0 ? new Set(["Brokerage"]) : new Set<string>());
-  const [error, setError] = useState<string | null>(null);
 
   function toggle(name: string) {
     const next = new Set(selected);
@@ -186,35 +262,35 @@ function AccountsStep({ onDone }: { onDone: () => void }) {
     setPicked(next);
   }
 
-  async function onContinue() {
-    setError(null);
-    try {
-      // One at a time: the first create also makes the "Main" portfolio.
-      for (const p of ACCOUNT_PRESETS) {
-        if (selected.has(p.name) && !have.has(p.name.toLowerCase()))
-          await create.mutateAsync({ name: p.name, accountType: p.type });
-      }
-      onDone();
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-
   return (
     <AuthShell
       tagline="Step 2 of 3 · Accounts"
       title="Where do you invest?"
       subtitle="Tap each kind you have. Tax moves come from taxable accounts; retirement accounts are checked so a rebuy there doesn't cancel a loss."
-      footer={<StepFooter onSkip={onDone} />}
+      footer={<StepFooter onSkip={() => onDone([])} />}
     >
+      {taxError && (
+        <p className="text-sm text-destructive">
+          Your tax answers didn&apos;t save ({taxError}). Set them any time in Tax Center → Tax
+          Profile.
+        </p>
+      )}
       {existing.data && existing.data.length > 0 && (
         <p className="text-sm text-muted-foreground">
           Already set up:{" "}
-          {existing.data.map((a) => `${a.name} (${TYPE_LABEL[a.accountType]})`).join(", ")}
+          {existing.data.map((a) => `${a.name} (${TYPE_LABEL[a.accountType]})`).join(", ")}.
+          {offered.length > 0 && " Tap any others you have; nothing is added twice."}
+        </p>
+      )}
+      {/* Nothing until the list is known: rendering every kind and then
+          dropping the covered ones moved the rows under a click (mission 22). */}
+      {existing.isLoading && (
+        <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Loader2 className="size-3.5 animate-spin" aria-hidden /> Checking your accounts…
         </p>
       )}
       <div role="group" aria-label="Account kinds" className="grid gap-1.5">
-        {ACCOUNT_PRESETS.filter((p) => !have.has(p.name.toLowerCase())).map((p) => {
+        {existing.data && offered.map((p) => {
           const on = selected.has(p.name);
           return (
             <button
@@ -241,30 +317,47 @@ function AccountsStep({ onDone }: { onDone: () => void }) {
       <p className="text-xs text-muted-foreground">
         Rename or retype them any time on the Accounts page.
       </p>
-      {error && <p className="text-sm text-destructive">Couldn&apos;t save: {error}</p>}
-      <Button onClick={() => void onContinue()} disabled={create.isPending || existing.isLoading}>
-        {create.isPending ? "Saving…" : "Continue"}
+      <Button
+        onClick={() => onDone(offered.filter((p) => selected.has(p.name)))}
+        disabled={existing.isLoading}
+      >
+        Continue
       </Button>
     </AuthShell>
   );
 }
 
-function FirstHoldingStep() {
+/** The arrow turns into "Opening…" while the next page loads: a click that
+ *  showed nothing for seconds got clicked again as if it were dead. */
+function LinkProgress() {
+  const { pending } = useLinkStatus();
+  return pending ? (
+    <span className="mt-0.5 ml-auto flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+      <Loader2 className="size-3.5 animate-spin" aria-hidden /> Opening…
+    </span>
+  ) : (
+    <ArrowRight className="mt-0.5 ml-auto size-4 shrink-0 text-muted-foreground" aria-hidden />
+  );
+}
+
+function OptionText({ title, body }: { title: string; body: string }) {
+  return (
+    <span className="grid gap-0.5">
+      <span className="font-medium">{title}</span>
+      <span className="text-xs text-muted-foreground">{body}</span>
+    </span>
+  );
+}
+
+function FirstHoldingStep({
+  accountsSaving,
+  accountsError,
+}: {
+  accountsSaving: boolean;
+  accountsError: string | null;
+}) {
   const router = useRouter();
-  const options = [
-    {
-      href: "/transactions?add=1",
-      Icon: PenLine,
-      title: "Type in a holding",
-      body: "A ticker, how many and what you paid. Today's price fills in.",
-    },
-    {
-      href: "/transactions?import=1",
-      Icon: FileUp,
-      title: "Import from your broker",
-      body: "Robinhood, Coinbase, Delta or any CSV export.",
-    },
-  ];
+  const card = `${choice(false)} flex w-full items-start gap-3 py-3 disabled:pointer-events-none disabled:opacity-60`;
   return (
     <AuthShell
       tagline="Step 3 of 3 · Your first holding"
@@ -274,17 +367,45 @@ function FirstHoldingStep() {
         <StepFooter label="Skip, show me the app" onSkip={() => router.push("/dashboard")} />
       }
     >
+      {accountsSaving && (
+        <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Loader2 className="size-3.5 animate-spin" aria-hidden /> Adding your accounts…
+        </p>
+      )}
+      {accountsError && (
+        <p className="text-sm text-destructive">
+          Your accounts didn&apos;t save ({accountsError}). Add them any time on the Accounts
+          page.
+        </p>
+      )}
       <div className="grid gap-1.5">
-        {options.map(({ href, Icon, title, body }) => (
-          <Link key={href} href={href} className={`${choice(false)} flex items-start gap-3 py-3`}>
-            <Icon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
-            <span className="grid gap-0.5">
-              <span className="font-medium">{title}</span>
-              <span className="text-xs text-muted-foreground">{body}</span>
-            </span>
-            <ArrowRight className="mt-0.5 ml-auto size-4 shrink-0 text-muted-foreground" aria-hidden />
-          </Link>
-        ))}
+        {/* The form opens right here (it used to send you to /transactions,
+            which read as being dropped out of setup), then lands on the dashboard. */}
+        <AddTransactionDialog
+          onCreated={() => router.push("/dashboard")}
+          trigger={
+            <button type="button" className={card} disabled={accountsSaving}>
+              <PenLine className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+              <OptionText
+                title="Type in a holding"
+                body="A ticker, how many and what you paid. Today's price fills in."
+              />
+              <ArrowRight className="mt-0.5 ml-auto size-4 shrink-0 text-muted-foreground" aria-hidden />
+            </button>
+          }
+        />
+        <Link
+          href="/transactions?import=1"
+          aria-disabled={accountsSaving}
+          className={`${card} ${accountsSaving ? "pointer-events-none opacity-60" : ""}`}
+        >
+          <FileUp className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+          <OptionText
+            title="Import from your broker"
+            body="Robinhood, Coinbase, Delta or any CSV export."
+          />
+          <LinkProgress />
+        </Link>
       </div>
     </AuthShell>
   );

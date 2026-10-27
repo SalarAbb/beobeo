@@ -95,6 +95,14 @@ export function AssetPicker({
   });
 
   const ensure = useMutation(trpc.assets.ensure.mutationOptions());
+  // A popular/market pick needs a server round trip (find-or-create) before it
+  // has an id. The list closes at once and the trigger shows the pick while it
+  // lands: keeping the list open with every row disabled read as a broken
+  // picker, and more clicks in it flipped the selection (hermione, mission 18).
+  const [adding, setAdding] = useState<{ symbol: string; name: string; class: string } | null>(
+    null,
+  );
+  const [failed, setFailed] = useState<string | null>(null);
 
   async function pickRemote(r: {
     symbol: string;
@@ -102,10 +110,21 @@ export function AssetPicker({
     class: "stock" | "etf" | "fund" | "crypto" | "cash";
     providerRef?: string;
   }) {
-    const asset = await ensure.mutateAsync(r);
-    onChange({ id: asset.id, symbol: asset.symbol, name: asset.name, class: asset.class });
+    if (adding) return;
     setOpen(false);
+    setFailed(null);
+    setAdding(r);
+    try {
+      const asset = await ensure.mutateAsync(r);
+      onChange({ id: asset.id, symbol: asset.symbol, name: asset.name, class: asset.class });
+    } catch {
+      setFailed(r.symbol);
+    } finally {
+      setAdding(null);
+    }
   }
+
+  const shown = adding ?? value;
 
   const searching = search.isFetching || query.trim() !== debouncedQuery;
 
@@ -128,11 +147,19 @@ export function AssetPicker({
           aria-expanded={open}
           className="h-11 w-full justify-between font-normal"
         >
-          {value ? (
+          {failed && !adding ? (
+            <span className="text-destructive">Couldn&apos;t add {failed}. Try again</span>
+          ) : shown ? (
             <span className="flex min-w-0 items-center gap-2.5">
-              <AssetLogo symbol={value.symbol} assetClass={value.class} size={22} />
-              <span className="font-semibold">{value.symbol}</span>
-              <span className="truncate text-muted-foreground">{value.name}</span>
+              <AssetLogo symbol={shown.symbol} assetClass={shown.class} size={22} />
+              <span className="font-semibold">{shown.symbol}</span>
+              <span className="truncate text-muted-foreground">{shown.name}</span>
+              {adding && (
+                <Loader2
+                  className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+                  aria-label="Adding"
+                />
+              )}
             </span>
           ) : (
             <span className="text-muted-foreground">Search symbol or name…</span>
@@ -172,7 +199,6 @@ export function AssetPicker({
                         key={`pop-${r.symbol}:${r.class}`}
                         value={`pop-${r.symbol}-${r.class}`}
                         className="gap-2.5 py-2"
-                        disabled={ensure.isPending}
                         onSelect={() => void pickRemote(r)}
                       >
                         <AssetRow symbol={r.symbol} name={r.name} assetClass={r.class} />
@@ -188,6 +214,7 @@ export function AssetPicker({
                         value={`local-${a.id}`}
                         className="gap-2.5 py-2"
                         onSelect={() => {
+                          setFailed(null);
                           onChange({
                             id: a.id,
                             symbol: a.symbol,
@@ -214,7 +241,6 @@ export function AssetPicker({
                         key={`${r.symbol}:${r.class}:${i}`}
                         value={`remote-${r.symbol}-${r.class}-${i}`}
                         className="gap-2.5 py-2"
-                        disabled={ensure.isPending}
                         onSelect={() => void pickRemote(r)}
                       >
                         <AssetRow symbol={r.symbol} name={r.name} assetClass={r.class} />

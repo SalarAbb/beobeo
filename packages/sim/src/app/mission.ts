@@ -49,7 +49,9 @@ export async function observe(page: Page): Promise<Observation> {
     document.querySelectorAll("[data-mref]").forEach((el) => el.removeAttribute("data-mref"));
     // What's in front of the person: an open dropdown/menu (rendered in its own layer), else a dialog, else the page.
     const visible = (e: Element | null) => !!e && (e as HTMLElement).getBoundingClientRect().height > 0;
-    const popup = [...document.querySelectorAll<HTMLElement>("[role=listbox], [role=menu]")].find(visible) ?? null;
+    const list = [...document.querySelectorAll<HTMLElement>("[role=listbox], [role=menu]")].find(visible) ?? null;
+    // The whole popover layer, so a combobox's search box beside its list is reachable too.
+    const popup = list?.closest<HTMLElement>("[data-radix-popper-content-wrapper]") ?? list;
     const dialog = document.querySelector<HTMLElement>("[role=dialog], [role=alertdialog]");
     const scope: ParentNode = popup ?? dialog ?? document;
     const sel = [

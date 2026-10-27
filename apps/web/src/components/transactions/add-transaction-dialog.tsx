@@ -54,8 +54,11 @@ export function AddTransactionDialog({
   onCreated,
   defaultOpen = false,
   defaultType = "buy",
+  trigger,
 }: {
   onCreated?: () => void;
+  /** What opens the dialog (default: the "Add transaction" button). */
+  trigger?: React.ReactNode;
   /** Open on mount (the welcome flow links to /transactions?add=1). */
   defaultOpen?: boolean;
   /** Preselected type (the dashboard's Dividends tile links to ?add=dividend). */
@@ -175,9 +178,11 @@ export function AddTransactionDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>
-          <Plus className="mr-1 size-4" /> Add transaction
-        </Button>
+        {trigger ?? (
+          <Button>
+            <Plus className="mr-1 size-4" /> Add transaction
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent
         className="sm:max-w-lg"
