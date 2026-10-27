@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ChevronDown, Gauge, Ruler } from "lucide-react";
+import { ChevronDown, Gauge } from "lucide-react";
 import Link from "next/link";
 import { AssetLogo } from "@/components/asset-logo";
 import { usePortfolio } from "@/components/portfolio-context";
@@ -22,12 +22,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { METRIC_LABEL_CLASS, MetricHover } from "@/components/metric-hover";
 import { useTRPC } from "@/lib/trpc";
 import { fmtPct, fmtQty, fmtUsd, gainClass } from "@/lib/viz";
 
@@ -215,34 +211,21 @@ function MetricCell({
   detail: { meaning: string; yardstick: string };
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div className="flex min-w-0 cursor-help flex-col gap-1.5">
-          <span className="self-start text-xs font-medium text-muted-foreground underline decoration-muted-foreground/40 decoration-dotted underline-offset-4">
-            {label}
-          </span>
-          <span className={`figure text-xl ${tone ?? ""}`}>
-            {value}
-          </span>
-        </div>
-      </TooltipTrigger>
-      <TooltipContent side="bottom" align="start" className="w-64 p-0">
-        <div className="px-3.5 pt-3">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            {label}
-            {term && <span className="opacity-60"> · {term}</span>}
-          </p>
-          <p className="mt-1 text-sm font-semibold leading-snug">{insight}</p>
-          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-            {detail.meaning}
-          </p>
-        </div>
-        <div className="mt-2.5 flex items-center gap-1.5 border-t px-3.5 py-2 text-[11px] text-muted-foreground">
-          <Ruler aria-hidden className="size-3 shrink-0 opacity-60" />
-          {detail.yardstick}
-        </div>
-      </TooltipContent>
-    </Tooltip>
+    <MetricHover
+      label={label}
+      term={term}
+      insight={insight}
+      meaning={detail.meaning}
+      yardstick={detail.yardstick}
+      className="flex min-w-0 flex-col gap-1.5"
+    >
+      <span className={`self-start text-xs font-medium text-muted-foreground ${METRIC_LABEL_CLASS}`}>
+        {label}
+      </span>
+      <span className={`figure text-xl ${tone ?? ""}`}>
+        {value}
+      </span>
+    </MetricHover>
   );
 }
 
@@ -534,8 +517,8 @@ export default function DashboardPage() {
               Three ways to measure the same growth
               {windowed && <> over {windowLabel}</>}: the yearly rate counts when
               each dollar went in, the growth of your picks ignores that timing,
-              and the timing effect is the gap between the two. Hover any number
-              for what it means.
+              and the timing effect is the gap between the two. Hover or tap any
+              number for what it means.
             </p>
             {metrics.isLoading ? (
               <Skeleton className="h-24 w-full" />

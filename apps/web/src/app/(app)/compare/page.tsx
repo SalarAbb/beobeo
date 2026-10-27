@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { PageHeader, Section, StatStrip, StatTile } from "@/components/page-section";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { METRIC_LABEL_CLASS, MetricHover } from "@/components/metric-hover";
 import { TabError } from "@/components/tax-center/tab-state";
 import { useTRPC } from "@/lib/trpc";
 import { useStoredState } from "@/lib/use-stored-state";
@@ -97,6 +99,7 @@ const fmtRatio = (v: number | null) => (v === null ? "—" : v.toFixed(2));
 
 /** Metric bundle each series carries (see seriesMetrics on the server). */
 interface SeriesMetrics {
+  spanDays: number;
   twr: number | null;
   twrAnnualized: number | null;
   volatility: number | null;
@@ -110,135 +113,232 @@ interface MetricColumn {
   color: string;
   xirr: number | null; // fraction, as elsewhere on this page
   metrics: SeriesMetrics;
+  /** Last point of the series: what the dollars are worth vs. what went in. */
+  last: { value: number; invested: number } | undefined;
 }
 
-/** Row spec: plain-English name first, technical term + one-line layman
- *  explainer beside/under it — jargon never stands alone. */
-const METRIC_ROWS: {
+/** A yearly pace needs a year of history: annualizing two months turned a $5
+ *  dip into "−7.62% a year" next to "+1.28%" growth (luna, 2026-10-26). */
+const YEAR_DAYS = 365;
+
+/**
+ * Row spec (R-002, the dashboard's layman-first convention): the row shows only
+ * a plain name; the technical term, a reading of the user's own number against
+ * each benchmark, one sentence of meaning and a yardstick live in the hover card.
+ */
+interface MetricRow {
   name: string;
-  term: string;
-  explainer: string;
+  term?: string;
+  meaning: string;
+  yardstick: string;
   value: (c: MetricColumn) => number | null;
   format: (v: number | null) => string;
   /** Which direction wins the subtle per-row emphasis. */
   better: "high" | "low";
   signed: boolean;
-}[] = [
+  /** Takeaway sentence parts: "<subject> <win> SPY, <lose> QQQ." */
+  subject: string;
+  win: string;
+  lose: string;
+  /** Differences smaller than this read as "about the same". */
+  tie: number;
+}
+
+const METRIC_ROWS: MetricRow[] = [
+  {
+    name: "Gain on your money",
+    meaning: "What every dollar you put in is worth now, the same dollars the totals above count.",
+    yardstick: "+10% means each $100 you put in is now $110",
+    value: (c) =>
+      c.last && c.last.invested > 0 ? (c.last.value / c.last.invested - 1) * 100 : null,
+    format: fmtSignedPct,
+    better: "high",
+    signed: true,
+    subject: "Your money did",
+    win: "better than it would have in",
+    lose: "worse than it would have in",
+    tie: 0.05,
+  },
   {
     name: "Yearly rate",
     term: "XIRR",
-    explainer: "what the same money earns per year",
+    meaning: "Average yearly growth of your money, counting every deposit and when you made it.",
+    yardstick: "savings ~4% · stock market ~10%/yr",
     value: (c) => (c.xirr === null ? null : c.xirr * 100),
     format: fmtSignedPct,
     better: "high",
     signed: true,
+    subject: "Your money earned",
+    win: "more per year than in",
+    lose: "less per year than in",
+    tie: 0.05,
   },
   {
-    name: "Total growth",
+    name: "Growth of your picks",
     term: "TWR",
-    explainer: "overall growth, ignoring deposit timing",
+    meaning: "Growth of $1 left untouched from the first day, so when you added money doesn't count.",
+    yardstick: "the fair number to compare with an index fund",
     value: (c) => c.metrics.twr,
     format: fmtSignedPct,
     better: "high",
     signed: true,
+    subject: "Your picks grew",
+    win: "more than",
+    lose: "less than",
+    tie: 0.05,
   },
   {
     name: "Swings",
     term: "volatility",
-    explainer: "bumpiness of the ride — lower is calmer",
+    meaning: "Typical size of the yearly ups and downs.",
+    yardstick: "the stock market swings ~15%",
     value: (c) => c.metrics.volatility,
     format: fmtAbsPct,
     better: "low",
     signed: false,
+    subject: "Your ride was",
+    win: "calmer than",
+    lose: "bumpier than",
+    tie: 0.05,
   },
   {
     name: "Biggest drop",
     term: "max drawdown",
-    explainer: "deepest market fall from a peak once most of your money was in; selling doesn't count",
+    meaning: "The deepest fall from a high once most of your money was in; selling doesn't count.",
+    yardstick: "a 10% fall is common · 20%+ is a bear market",
     value: (c) => c.metrics.maxDrawdown,
     format: fmtAbsPct,
     better: "high", // less negative = shallower fall = better
     signed: false,
+    subject: "Your worst fall was",
+    win: "shallower than",
+    lose: "deeper than",
+    tie: 0.05,
   },
   {
     name: "Reward for risk",
     term: "Sharpe",
-    explainer: "reward per unit of risk — above 1 is good",
+    meaning: "Reward earned for every unit of ups-and-downs you sat through.",
+    yardstick: "0.5 low · 1 solid · 2+ excellent",
     value: (c) => c.metrics.sharpe,
     format: fmtRatio,
     better: "high",
     signed: false,
+    subject: "You earned",
+    win: "more for the risk than",
+    lose: "less for the risk than",
+    tie: 0.01,
   },
 ];
 
+const joinNames = (names: string[]) =>
+  names.length < 2 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+
+/** The hover card's takeaway: your column read against each benchmark. */
+function readRow(row: MetricRow, columns: MetricColumn[], values: (number | null)[]): string {
+  const you = values[0];
+  const wins: string[] = [];
+  const losses: string[] = [];
+  const ties: string[] = [];
+  columns.slice(1).forEach((c, i) => {
+    const v = values[i + 1];
+    if (you === null || you === undefined || v === null || v === undefined) return;
+    const d = row.better === "high" ? you - v : v - you;
+    (Math.abs(d) < row.tie ? ties : d > 0 ? wins : losses).push(c.label);
+  });
+  const clauses = [
+    wins.length > 0 && `${row.win} ${joinNames(wins)}`,
+    losses.length > 0 && `${row.lose} ${joinNames(losses)}`,
+    ties.length > 0 && `about the same as ${joinNames(ties)}`,
+  ].filter(Boolean);
+  if (clauses.length === 0) return row.meaning;
+  return `${row.subject} ${clauses.join(", ")}.`;
+}
+
 function MetricsTable({ columns }: { columns: MetricColumn[] }) {
+  const shortHistory = (columns[0]?.metrics.spanDays ?? 0) < YEAR_DAYS;
+  const rows = shortHistory ? METRIC_ROWS.filter((r) => r.term !== "XIRR") : METRIC_ROWS;
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left">
-            <th className="eyebrow py-2 pr-4 font-normal">Measure</th>
-            {columns.map((c) => (
-              <th key={c.key} className="whitespace-nowrap px-3 py-2 text-right font-medium">
-                <span className="inline-flex items-center gap-1.5">
-                  <span
-                    className="inline-block size-2 rounded-full"
-                    style={{ background: c.color }}
-                  />
-                  {c.label}
-                </span>
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {METRIC_ROWS.map((row) => {
-            const values = columns.map(row.value);
-            const present = values.filter((v): v is number => v !== null);
-            const best =
-              present.length > 1
-                ? row.better === "high"
-                  ? Math.max(...present)
-                  : Math.min(...present)
-                : null;
-            return (
-              <tr key={row.name} className="border-b last:border-0">
-                <td className="max-w-56 py-2.5 pr-4">
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-sm font-medium">{row.name}</span>
-                    {row.term && (
-                      <span className="eyebrow text-[10px]">
-                        {row.term}
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
-                    {row.explainer}
-                  </p>
-                </td>
-                {columns.map((c, i) => {
-                  const v = values[i]!;
-                  return (
-                    <td
-                      key={c.key}
-                      className={cn(
-                        "data px-3 py-2.5 text-right text-[13px]",
-                        row.signed && gainClass(v),
-                        // Subtle emphasis on the best value — weight, never
-                        // color (color follows the entity, not its rank).
-                        v !== null && v === best && "font-semibold",
-                      )}
-                    >
-                      {row.format(v)}
-                    </td>
-                  );
-                })}
+    <TooltipProvider delayDuration={150}>
+      <div className="grid gap-4">
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          Gain on your money counts when each dollar went in; growth of your picks
+          ignores that timing, so the two can disagree. Hover or tap a measure for
+          what it means.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-left">
+                <th className="eyebrow py-2 pr-4 font-normal">Measure</th>
+                {columns.map((c) => (
+                  <th key={c.key} className="whitespace-nowrap px-3 py-2 text-right font-medium">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span
+                        className="inline-block size-2 rounded-full"
+                        style={{ background: c.color }}
+                      />
+                      {c.label}
+                    </span>
+                  </th>
+                ))}
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const values = columns.map(row.value);
+                const present = values.filter((v): v is number => v !== null);
+                const best =
+                  present.length > 1
+                    ? row.better === "high"
+                      ? Math.max(...present)
+                      : Math.min(...present)
+                    : null;
+                return (
+                  <tr key={row.name} className="border-b last:border-0">
+                    <td className="py-2.5 pr-4">
+                      <MetricHover
+                        label={row.name}
+                        term={row.term}
+                        insight={readRow(row, columns, values)}
+                        meaning={row.meaning}
+                        yardstick={row.yardstick}
+                        className={cn("text-sm font-medium", METRIC_LABEL_CLASS)}
+                      >
+                        {row.name}
+                      </MetricHover>
+                    </td>
+                    {columns.map((c, i) => {
+                      const v = values[i]!;
+                      return (
+                        <td
+                          key={c.key}
+                          className={cn(
+                            "data px-3 py-2.5 text-right text-[13px]",
+                            row.signed && gainClass(v),
+                            // Subtle emphasis on the best value — weight, never
+                            // color (color follows the entity, not its rank).
+                            v !== null && v === best && "font-semibold",
+                          )}
+                        >
+                          {row.format(v)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {shortHistory && (
+          <p className="text-xs text-muted-foreground">
+            A yearly rate appears once your history is a year long; a few months
+            stretched to a yearly pace blows small moves up.
+          </p>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }
 
@@ -536,6 +636,7 @@ export default function ComparePage() {
                   color: theme.series[0]!,
                   xirr: data.portfolioXirr,
                   metrics: data.portfolioMetrics,
+                  last: lastP,
                 },
                 ...data.benchmarks.map((b, i) => ({
                   key: b.assetId,
@@ -543,6 +644,7 @@ export default function ComparePage() {
                   color: benchColor(theme, i),
                   xirr: b.xirr,
                   metrics: b.metrics,
+                  last: b.series[b.series.length - 1],
                 })),
               ]}
             />

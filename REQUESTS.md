@@ -31,7 +31,7 @@
   - ✓ The dashboard's first screen shows value, gain or loss, the chart and holdings, and nothing a beginner has to decode
   - ✓ Sharpe, volatility, TWR, XIRR and the behavior gap sit one deliberate tap away ("Performance details"), with exact values on hover for experts
   - Luna, Augusta and Olenna stop raising jargon themes; Hermione can still reach every number
-- **Notes:** 2026-10-25 (`evolve/2026-10-25`): the metrics grid is folded behind a closed "Performance details" pill under the chart, with plain labels (technical terms only in the hover card) and one sentence on why the three return numbers differ. Tiles say "Gain on holdings" / "Gain from sales" instead of "Unrealized/Realized P/L". The last line waits on the personas' next days.
+- **Notes:** 2026-10-25 (`evolve/2026-10-25`): the metrics grid is folded behind a closed "Performance details" pill under the chart, with plain labels (technical terms only in the hover card) and one sentence on why the three return numbers differ. Tiles say "Gain on holdings" / "Gain from sales" instead of "Unrealized/Realized P/L". The last line waits on the personas' next days. 2026-10-27 round 3 (`evolve/2026-10-27`): the jargon complaints moved to Compare (luna: "Yearly rate XIRR, TWR, Sharpe… feels like homework", and "−7.62% a year" next to "+1.28%" while down $5). Compare's head-to-head now follows the same rule: plain names only, with the term and explanation in a card that opens on hover or tap and compares your number with each benchmark. A new "Gain on your money" row matches the dollars above, and the yearly rate is hidden until there's a year of history. The dashboard's cards now open on a phone tap too.
 
 ## R-003 · Proactive tax moves ("free money" alerts)
 - **Asked:** 2026-10-23

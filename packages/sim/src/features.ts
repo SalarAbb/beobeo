@@ -38,7 +38,7 @@ export const FEATURES: Feature[] = [
   { id: "tax.harvest", route: "/tax-center", does: "Find losses you could take to lower your tax bill, and understand what the savings depend on", fits: ["tax", "crypto"] },
   { id: "tax.lots", route: "/tax-center", does: "Browse every tax lot: when you bought it, what you paid, short or long term", fits: ["tax", "expert"] },
   { id: "tax.profile", route: "/tax-center", does: "Tell the app your tax rates, gains you made outside the app and any loss carried forward, then see the numbers change", fits: ["tax"] },
-  { id: "compare.benchmark", route: "/compare", does: "See whether the same deposits into an index fund would have done better than your picks" },
+  { id: "compare.benchmark", route: "/compare", does: "See whether the same deposits into an index fund would have done better than your picks, and understand what the head-to-head measures say about you" },
   { id: "compare.custom", route: "/compare", does: "Compare yourself against an asset of your choosing that isn't offered by default", fits: ["expert", "crypto"] },
   { id: "compare.scope", route: "/compare", does: "Compare only part of your portfolio (a few holdings) against a benchmark", fits: ["expert"] },
   { id: "chat.ask", route: "/chat", does: "Ask the assistant a real question about your own money and judge whether the answer is right and useful" },
