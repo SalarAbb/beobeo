@@ -18,10 +18,10 @@ export function HarvestTab() {
   const { portfolioId } = usePortfolio();
   const scope = { portfolioId: portfolioId ?? undefined };
 
-  // Kept per portfolio on the device: tabs unmount on switch, so a cap held in useState
-  // vanished on the way back from All Lots (same as Raise Cash's amount).
+  // Kept on the device for every portfolio: tabs unmount on switch, so a cap held in
+  // useState vanished on the way back from All Lots (same as Raise Cash's amount).
   const [{ capInput, cap }, setState] = useStoredState<{ capInput: string; cap: number | null }>(
-    `beobeo.tax.harvest.${portfolioId ?? "all"}`,
+    "beobeo.tax.harvest",
     { capInput: "", cap: null },
   );
 

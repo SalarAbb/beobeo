@@ -27,15 +27,18 @@ export function RaiseCashTab() {
   const { portfolioId } = usePortfolio();
   const scope = { portfolioId: portfolioId ?? undefined };
 
-  // Kept per portfolio on the device: tabs unmount on switch, and petyr's $20,000 kept
-  // snapping back to $10,000 every time he checked All Lots (mission 2).
+  // Kept on the device: tabs unmount on switch, and petyr's $20,000 kept snapping back to
+  // $10,000 every time he checked All Lots (mission 2). One value for every portfolio: the
+  // cash you need doesn't change when you switch scope (a per-portfolio key reset it, mission 15).
   const [{ amountInput, target, doNotSell }, setState] = useStoredState<RaiseCashState>(
-    `beobeo.tax.raise.${portfolioId ?? "all"}`,
+    "beobeo.tax.raise",
     { amountInput: "10000", target: 10000, doNotSell: [] },
   );
 
   const lots = useQuery(trpc.tax.lots.queryOptions(scope));
   const symbols = [...new Set((lots.data ?? []).map((l) => l.symbol))].sort();
+  // The list is shared across portfolios; only count what this one holds.
+  const excludedHere = doNotSell.filter((s) => symbols.includes(s)).length;
 
   // The previous plan stays up (dimmed) while the next one is worked out, instead of
   // flashing an empty grey block.
@@ -92,11 +95,9 @@ export function RaiseCashTab() {
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
-                className={cn(doNotSell.length > 0 && "bg-accent text-primary")}
+                className={cn(excludedHere > 0 && "bg-accent text-primary")}
               >
-                {doNotSell.length === 0
-                  ? "Do-not-sell list"
-                  : `${doNotSell.length} excluded`}
+                {excludedHere === 0 ? "Do-not-sell list" : `${excludedHere} excluded`}
                 <ChevronDown className="ml-1 size-3.5 opacity-60" />
               </Button>
             </PopoverTrigger>
