@@ -2,7 +2,7 @@
 # One self-evolution cycle (PLAN.md → "The loop"). Run by launchd at 08:00 and 20:00,
 # or by hand: `pnpm evolve` / `scripts/evolve.sh [--sim-only | --evolve-only]`.
 #
-# The second cycle of a day (today's digest already exists) doesn't replay the persona
+# The second cycle of a day (the persona day already ran: reports/.<date>.simulated) doesn't replay the persona
 # day (they'd trade twice on one date): it runs $SIM_EVENING_MISSIONS fresh missions
 # against what the morning shipped, rebuilds the digest, and builds more rounds on
 # evolve/<today>, numbered after the morning's.
@@ -133,13 +133,16 @@ curl -sf -o /dev/null "http://localhost:$SIM_PORT/signin" || { echo "Dev server 
 export SIM_APP_URL="http://localhost:$SIM_PORT"
 if [[ $EVOLVE_ONLY == 1 && -f "$SIM_HOME/digests/$DATE.md" ]]; then
   echo "--evolve-only: reusing today's digest."
-elif [[ -f "$SIM_HOME/digests/$DATE.md" ]]; then
+elif [[ -f "$SIM_HOME/reports/.$DATE.simulated" ]]; then
   echo "Second cycle today: missions only (${SIM_EVENING_MISSIONS:-3}), no second persona day."
-  (cd "$WT" && pnpm --silent sim:mission --count "${SIM_EVENING_MISSIONS:-3}") || echo "sim:mission exited non-zero — continuing to digest"
+  (cd "$WT" && pnpm --silent sim:mission --count "${SIM_EVENING_MISSIONS:-3}" --date "$DATE") || echo "sim:mission exited non-zero — continuing to digest"
 else
-  (cd "$WT" && pnpm --silent sim:day) || echo "sim:day exited non-zero (see above) — continuing to digest"
+  (cd "$WT" && pnpm --silent sim:day --date "$DATE") || echo "sim:day exited non-zero (see above) — continuing to digest"
+  touch "$SIM_HOME/reports/.$DATE.simulated"
 fi
-DIGEST="$(cd "$WT" && pnpm --silent sim:digest | tail -1)"
+# Always pass the local date: the sim scripts default to UTC, which is already tomorrow at 20:00 Pacific
+# (the first evening run filed its missions and digest under the next day).
+DIGEST="$(cd "$WT" && pnpm --silent sim:digest --date "$DATE" | tail -1)"
 echo "Digest: $DIGEST"
 # The dev server stays up through step 5 so /evolve can screenshot its own changes (HMR).
 
