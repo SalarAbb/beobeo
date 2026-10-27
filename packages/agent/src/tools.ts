@@ -1,6 +1,6 @@
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
-import type { PortfolioApi, TaxLotFilter } from "./api";
+import type { PortfolioApi, RaiseCashRequest, TaxLotFilter } from "./api";
 
 const json = (v: unknown) => JSON.stringify(v);
 
@@ -56,6 +56,25 @@ export function buildPortfolioTools(
           .describe("ISO date: only short-term lots that turn long-term on or before it"),
       }),
       run: timed("get_tax_lots", async (filter: TaxLotFilter) => json(await api.getTaxLots(filter))),
+    }),
+    betaZodTool({
+      name: "plan_raise_cash",
+      description:
+        "'I need $n, what should I sell for the least tax?' Runs the Tax Center's Raise Cash optimizer over the taxable lots: returns the exact purchases to sell (account, purchase date, units, proceeds, gain, short/long-term, tax), the plan's totals, and how much more the broker's default (oldest first, FIFO) would cost. Use it for any sell-to-raise-cash or 'which lots have the least tax per dollar' question; never rank lots yourself.",
+      inputSchema: z.object({
+        amountUsd: z.number().positive().describe("Cash to raise, in dollars"),
+        symbols: z
+          .array(z.string())
+          .optional()
+          .describe("Only sell these ticker symbols; omit to consider every holding"),
+        account: z
+          .string()
+          .optional()
+          .describe("Only sell from this account (name or part of it)"),
+      }),
+      run: timed("plan_raise_cash", async (request: RaiseCashRequest) =>
+        json(await api.planRaiseCash(request)),
+      ),
     }),
     betaZodTool({
       name: "get_transactions",

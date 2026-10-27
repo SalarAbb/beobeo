@@ -1,4 +1,4 @@
-export type { PortfolioApi, TaxLotFilter } from "./api";
+export type { PortfolioApi, RaiseCashRequest, TaxLotFilter } from "./api";
 export { buildPortfolioTools } from "./tools";
 export {
   runPortfolioAgentTurn,

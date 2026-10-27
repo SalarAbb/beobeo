@@ -10,7 +10,12 @@ import {
   computeTimeseries,
   loadEngineTransactions,
 } from "./portfolio";
-import { computeTaxLotsList, computeTaxNow, computeTaxProfile } from "./tax-center";
+import {
+  computeTaxLotsList,
+  computeTaxNow,
+  computeTaxPlan,
+  computeTaxProfile,
+} from "./tax-center";
 import { computeNextBuy } from "./next-buy";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -262,6 +267,54 @@ export function makePortfolioApi(userId: string, portfolioId?: string): Portfoli
         })),
         ...(notFound.length > 0 ? { notFound } : {}),
         note: "Target mixes are saved on the user's device, so this ranking ignores them.",
+      };
+    },
+
+    async planRaiseCash({ amountUsd, symbols, account }) {
+      // The optimizer's doNotSell takes symbols, asset ids or lot ids: a
+      // symbol or account limit becomes "don't sell" for everything outside it.
+      const lots = await computeTaxLotsList(userId, portfolioId);
+      const wanted = symbols?.map((s) => s.toUpperCase());
+      const accountKey = account
+        ?.toLowerCase()
+        .replace(/\(taxable\)\s*$/, "")
+        .trim();
+      const inScope = (l: (typeof lots)[number]) =>
+        (!wanted || wanted.includes(l.symbol.toUpperCase())) &&
+        (!accountKey || l.accountName.toLowerCase().includes(accountKey));
+      if (!lots.some(inScope)) {
+        return {
+          error: "No taxable lots match that limit.",
+          taxableAccounts: [...new Set(lots.map((l) => l.accountName))],
+          taxableSymbols: [...new Set(lots.map((l) => l.symbol))],
+        };
+      }
+      const doNotSell = lots.filter((l) => !inScope(l)).map((l) => l.lotId);
+      const plan = await computeTaxPlan(userId, portfolioId, amountUsd, doNotSell);
+      const { optimized } = plan;
+      return {
+        amountUsd,
+        cashRaised: round2(optimized.totalProceeds),
+        shortfall: round2(optimized.shortfall),
+        realizedGain: round2(optimized.sales.reduce((s, x) => s + x.realizedGain, 0)),
+        taxCost: round2(optimized.totalTaxCost),
+        keptAfterTax: round2(optimized.totalAfterTax),
+        // The page's headline: the broker's default order on the same lots.
+        fifoWouldCostMoreUsd: round2(plan.headlineSavingsVsFifo),
+        lotsOnHoldForWashSale: optimized.blocked.length,
+        // Columnar, in the order the optimizer sells them.
+        columns: ["symbol", "account", "bought", "sellUnits", "proceeds", "gain", "term", "tax"],
+        sales: optimized.sales.map((s) => [
+          s.lot.symbol,
+          s.lot.accountName,
+          s.lot.openedAt.slice(0, 10),
+          s.sellQuantity,
+          round2(s.proceeds),
+          round2(s.realizedGain),
+          s.isLongTerm ? "long" : "short",
+          round2(s.taxCost),
+        ]),
+        note: "Same plan as Tax Center → Raise Cash, at the saved tax rates. Tax on a loss is negative (it saves tax).",
       };
     },
 

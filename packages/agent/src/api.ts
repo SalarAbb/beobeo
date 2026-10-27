@@ -27,4 +27,16 @@ export interface PortfolioApi {
   /** "I have $n — where should it go?": the same ranked picks as the
    *  dashboard's next-buy section, for 1–5 symbols. */
   pickNextBuy(amountUsd: number, symbols: string[]): Promise<unknown>;
+  /** "Raise $n with the least tax": the Tax Center's Raise Cash plan (the
+   *  exact optimizer, not a model's ranking), optionally limited to some
+   *  symbols or one account. */
+  planRaiseCash(request: RaiseCashRequest): Promise<unknown>;
+}
+
+export interface RaiseCashRequest {
+  amountUsd: number;
+  /** Only sell these ticker symbols. */
+  symbols?: string[];
+  /** Only sell from the account whose name contains this. */
+  account?: string;
 }

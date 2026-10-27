@@ -84,7 +84,12 @@ export async function POST(req: Request) {
           // Where the time went; latency is a principle, so every turn says.
           onTimings: (t) => {
             const tools = t.tools.map((x) => `${x.name} ${x.ms}ms`).join(", ");
-            const calls = t.modelMs.map((ms) => `${ms}ms`).join(" + ");
+            const calls = t.modelMs
+              .map((ms, i) => {
+                const stop = t.modelStops[i];
+                return stop ? `${ms}ms (${stop.stopReason}, ${stop.outputTokens} tok)` : `${ms}ms`;
+              })
+              .join(" + ");
             console.info(
               `[chat] snapshot ${t.snapshotMs ?? "-"}ms · first text ${t.firstTextMs ?? "-"}ms · total ${t.totalMs}ms · model calls ${calls || "none"} · tools: ${tools || "none"}`,
             );
