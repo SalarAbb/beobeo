@@ -1,15 +1,16 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Section, StatStrip, StatTile } from "@/components/page-section";
 import { usePortfolio } from "@/components/portfolio-context";
 import { LossBreakdownBar } from "@/components/tax-center/loss-breakdown-bar";
 import { PlanView } from "@/components/tax-center/plan-view";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
+import { TabError, TabLoading } from "@/components/tax-center/tab-state";
 import { useTRPC } from "@/lib/trpc";
+import { useStoredState } from "@/lib/use-stored-state";
+import { cn } from "@/lib/utils";
 import { fmtUsd } from "@/lib/viz";
 
 export function HarvestTab() {
@@ -17,14 +18,21 @@ export function HarvestTab() {
   const { portfolioId } = usePortfolio();
   const scope = { portfolioId: portfolioId ?? undefined };
 
-  const [capInput, setCapInput] = useState("");
-  const [cap, setCap] = useState<number | undefined>(undefined);
+  // Kept per portfolio on the device: tabs unmount on switch, so a cap held in useState
+  // vanished on the way back from All Lots (same as Raise Cash's amount).
+  const [{ capInput, cap }, setState] = useStoredState<{ capInput: string; cap: number | null }>(
+    `beobeo.tax.harvest.${portfolioId ?? "all"}`,
+    { capInput: "", cap: null },
+  );
 
-  const harvest = useQuery(trpc.tax.harvest.queryOptions({ ...scope, lossCapUsd: cap }));
+  const harvest = useQuery({
+    ...trpc.tax.harvest.queryOptions({ ...scope, lossCapUsd: cap ?? undefined }),
+    placeholderData: keepPreviousData,
+  });
 
   function applyCap() {
     const n = Number(capInput.replace(/[^0-9.]/g, ""));
-    setCap(Number.isFinite(n) && n > 0 ? n : undefined);
+    setState({ capInput, cap: Number.isFinite(n) && n > 0 ? n : null });
   }
 
   const d = harvest.data;
@@ -46,7 +54,10 @@ export function HarvestTab() {
             <Input
               id="harvest-cap"
               value={capInput}
-              onChange={(e) => setCapInput(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setState((s) => ({ ...s, capInput: v }));
+              }}
               onKeyDown={(e) => e.key === "Enter" && applyCap()}
               placeholder="no limit"
               inputMode="decimal"
@@ -55,13 +66,10 @@ export function HarvestTab() {
             <Button variant="outline" onClick={applyCap}>
               Apply
             </Button>
-            {cap !== undefined && (
+            {cap !== null && (
               <Button
                 variant="ghost"
-                onClick={() => {
-                  setCap(undefined);
-                  setCapInput("");
-                }}
+                onClick={() => setState({ capInput: "", cap: null })}
               >
                 Clear
               </Button>
@@ -70,10 +78,17 @@ export function HarvestTab() {
         </div>
       </div>
 
-      {harvest.isLoading || !d ? (
-        <Skeleton className="h-64 w-full" />
+      {harvest.isError && !d ? (
+        <TabError what="your harvest plan" onRetry={() => void harvest.refetch()} />
+      ) : !d ? (
+        <TabLoading label="Looking for losses you could take…" className="h-64" />
       ) : (
-        <>
+        <div
+          className={cn(
+            "grid gap-10 transition-opacity",
+            harvest.isPlaceholderData && "opacity-50",
+          )}
+        >
           {hasPlan ? (
             <>
               <StatStrip cols="grid-cols-1 sm:grid-cols-3">
@@ -119,7 +134,7 @@ export function HarvestTab() {
               startingRealizedGain={d.startingRealizedGain}
             />
           )}
-        </>
+        </div>
       )}
     </div>
   );

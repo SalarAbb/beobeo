@@ -5,7 +5,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { AssetLogo } from "@/components/asset-logo";
 import { usePortfolio } from "@/components/portfolio-context";
-import { Skeleton } from "@/components/ui/skeleton";
+import { TabError, TabLoading } from "@/components/tax-center/tab-state";
 import {
   Table,
   TableBody,
@@ -72,7 +72,9 @@ export function AllLotsTab() {
     );
   }
 
-  if (lots.isLoading || !lots.data) return <Skeleton className="h-96 w-full" />;
+  if (lots.isError && !lots.data)
+    return <TabError what="your purchases" onRetry={() => void lots.refetch()} />;
+  if (!lots.data) return <TabLoading label="Loading your purchases…" className="h-96" />;
 
   const sorted = [...lots.data].sort((a, b) => {
     const av = sort.key === "openedAt" ? Date.parse(a.openedAt) : a[sort.key];
@@ -94,7 +96,12 @@ export function AllLotsTab() {
     <div className="grid gap-3">
       <p className="text-sm text-muted-foreground">
         Every batch of shares you bought, listed separately. Each has its own price paid and
-        holding time, and that is what decides the tax when you sell it.
+        holding time, and that is what decides the tax when you sell it. Shares you already
+        sold are on{" "}
+        <Link href="/transactions" className="text-primary hover:underline">
+          Transactions
+        </Link>
+        : tap a sale to see the purchases it used and its gain.
       </p>
       <div className="min-w-0 border-t">
         <Table>

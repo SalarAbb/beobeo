@@ -1,8 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { ChevronDown } from "lucide-react";
-import { useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { ChevronDown, Loader2 } from "lucide-react";
 import { Section, StatStrip, StatTile } from "@/components/page-section";
 import { usePortfolio } from "@/components/portfolio-context";
 import { LossBreakdownBar } from "@/components/tax-center/loss-breakdown-bar";
@@ -10,40 +9,60 @@ import { PlanView } from "@/components/tax-center/plan-view";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Skeleton } from "@/components/ui/skeleton";
+import { TabError, TabLoading } from "@/components/tax-center/tab-state";
 import { useTRPC } from "@/lib/trpc";
+import { useStoredState } from "@/lib/use-stored-state";
 import { fmtUsd } from "@/lib/viz";
 import { cn } from "@/lib/utils";
+
+type RaiseCashState = { amountInput: string; target: number | null; doNotSell: string[] };
+
+function parseAmount(input: string): number | null {
+  const n = Number(input.replace(/[^0-9.]/g, ""));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
 
 export function RaiseCashTab() {
   const trpc = useTRPC();
   const { portfolioId } = usePortfolio();
   const scope = { portfolioId: portfolioId ?? undefined };
 
-  const [amountInput, setAmountInput] = useState("10000");
-  const [target, setTarget] = useState<number | null>(10000);
-  const [doNotSell, setDoNotSell] = useState<string[]>([]);
+  // Kept per portfolio on the device: tabs unmount on switch, and petyr's $20,000 kept
+  // snapping back to $10,000 every time he checked All Lots (mission 2).
+  const [{ amountInput, target, doNotSell }, setState] = useStoredState<RaiseCashState>(
+    `beobeo.tax.raise.${portfolioId ?? "all"}`,
+    { amountInput: "10000", target: 10000, doNotSell: [] },
+  );
 
   const lots = useQuery(trpc.tax.lots.queryOptions(scope));
   const symbols = [...new Set((lots.data ?? []).map((l) => l.symbol))].sort();
 
+  // The previous plan stays up (dimmed) while the next one is worked out, instead of
+  // flashing an empty grey block.
   const plan = useQuery({
     ...trpc.tax.plan.queryOptions({ ...scope, targetProceeds: target ?? 0, doNotSell }),
     enabled: target !== null && target > 0,
+    placeholderData: keepPreviousData,
   });
 
   function toggleDoNotSell(symbol: string) {
-    setDoNotSell((prev) =>
-      prev.includes(symbol) ? prev.filter((s) => s !== symbol) : [...prev, symbol],
-    );
+    setState((s) => ({
+      ...s,
+      doNotSell: s.doNotSell.includes(symbol)
+        ? s.doNotSell.filter((x) => x !== symbol)
+        : [...s.doNotSell, symbol],
+    }));
   }
 
+  const typed = parseAmount(amountInput);
   function submit() {
-    const n = Number(amountInput.replace(/[^0-9.]/g, ""));
-    setTarget(Number.isFinite(n) && n > 0 ? n : null);
+    setState((s) => ({ ...s, target: typed }));
   }
 
   const d = plan.data;
+  const planning = plan.isPlaceholderData && plan.isFetching;
+  const edited = d !== undefined && typed !== null && typed !== target;
+  const stale = edited || plan.isPlaceholderData;
 
   return (
     <div className="grid gap-10">
@@ -57,7 +76,10 @@ export function RaiseCashTab() {
             <Input
               id="raise-amount"
               value={amountInput}
-              onChange={(e) => setAmountInput(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setState((s) => ({ ...s, amountInput: v }));
+              }}
               onKeyDown={(e) => e.key === "Enter" && submit()}
               inputMode="decimal"
               className="data w-40"
@@ -102,10 +124,28 @@ export function RaiseCashTab() {
         </Popover>
       </div>
 
-      {target === null ? null : plan.isLoading ? (
-        <Skeleton className="h-64 w-full" />
-      ) : d ? (
+      {target === null ? null : plan.isError && !d ? (
+        <TabError what="a plan" onRetry={() => void plan.refetch()} />
+      ) : !d ? (
+        <TabLoading label={`Planning ${fmtUsd(target)}…`} className="h-64" />
+      ) : (
         <>
+          {(planning || edited) && (
+            <p role="status" className="-mb-6 flex items-center gap-2 text-sm text-muted-foreground">
+              {planning ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                  Planning {fmtUsd(target)}…
+                </>
+              ) : (
+                <>
+                  Showing the plan for {fmtUsd(target)}. Press Plan to update it for{" "}
+                  {fmtUsd(typed ?? 0)}.
+                </>
+              )}
+            </p>
+          )}
+          <div className={cn("grid gap-10 transition-opacity", stale && "opacity-50")}>
           <div className="grid gap-4">
             <p className="max-w-2xl text-lg leading-snug">
               {d.headlineSavingsVsFifo >= 0.5 ? (
@@ -155,8 +195,9 @@ export function RaiseCashTab() {
             excluded={d.optimized.excluded}
             startingRealizedGain={d.startingRealizedGain}
           />
+          </div>
         </>
-      ) : null}
+      )}
     </div>
   );
 }

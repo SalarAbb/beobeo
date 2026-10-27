@@ -7,7 +7,7 @@ import { usePortfolio } from "@/components/portfolio-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
+import { TabError, TabLoading } from "@/components/tax-center/tab-state";
 import { Switch } from "@/components/ui/switch";
 import { Section } from "@/components/page-section";
 import { useTRPC } from "@/lib/trpc";
@@ -181,6 +181,8 @@ function ProfileForm({ initial }: { initial: NonNullable<Profile> }) {
 
 export function TaxProfileTab() {
   const profile = useProfileQuery();
-  if (profile.isLoading || !profile.data) return <Skeleton className="h-96 w-full" />;
+  if (profile.isError && !profile.data)
+    return <TabError what="your tax settings" onRetry={() => void profile.refetch()} />;
+  if (!profile.data) return <TabLoading label="Loading your tax settings…" className="h-96" />;
   return <ProfileForm initial={profile.data} />;
 }

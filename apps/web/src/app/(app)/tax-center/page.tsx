@@ -1,6 +1,7 @@
 "use client";
 
-import { use, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { use, useEffect, useState } from "react";
 import { PageHeader } from "@/components/page-section";
 import { usePortfolio } from "@/components/portfolio-context";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -9,6 +10,7 @@ import { HarvestTab } from "@/components/tax-center/harvest-tab";
 import { NowTab } from "@/components/tax-center/now-tab";
 import { RaiseCashTab } from "@/components/tax-center/raise-cash-tab";
 import { TaxProfileTab } from "@/components/tax-center/tax-profile-tab";
+import { useTRPC } from "@/lib/trpc";
 
 type Tab = "now" | "cash" | "harvest" | "lots" | "profile";
 
@@ -29,8 +31,19 @@ export default function TaxCenterPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const requested = use(searchParams).tab;
-  const { activeName } = usePortfolio();
+  const { activeName, portfolioId } = usePortfolio();
   const [tab, setTab] = useState<Tab>(isTab(requested) ? requested : "now");
+
+  // Warm the other tabs while the first one is read, so a tab switch shows content
+  // instead of a loading block (personas kept landing on that block and calling it broken).
+  const trpc = useTRPC();
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    const scope = { portfolioId: portfolioId ?? undefined };
+    void queryClient.prefetchQuery(trpc.tax.now.queryOptions(scope));
+    void queryClient.prefetchQuery(trpc.tax.lots.queryOptions(scope));
+    void queryClient.prefetchQuery(trpc.tax.profile.queryOptions(scope));
+  }, [trpc, queryClient, portfolioId]);
 
   return (
     <div className="mx-auto grid w-full max-w-5xl grid-cols-1 gap-8">
