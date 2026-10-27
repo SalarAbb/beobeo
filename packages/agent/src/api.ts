@@ -24,4 +24,7 @@ export interface PortfolioApi {
   getRealizedGains(year?: number): Promise<unknown>;
   runDcaComparison(benchmarkSymbol: string): Promise<unknown>;
   getPriceHistory(symbol: string, days: number): Promise<unknown>;
+  /** "I have $n — where should it go?": the same ranked picks as the
+   *  dashboard's next-buy section, for 1–5 symbols. */
+  pickNextBuy(amountUsd: number, symbols: string[]): Promise<unknown>;
 }

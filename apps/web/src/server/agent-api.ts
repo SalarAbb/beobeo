@@ -11,6 +11,7 @@ import {
   loadEngineTransactions,
 } from "./portfolio";
 import { computeTaxLotsList, computeTaxNow, computeTaxProfile } from "./tax-center";
+import { computeNextBuy } from "./next-buy";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -230,6 +231,38 @@ export function makePortfolioApi(userId: string, portfolioId?: string): Portfoli
           })),
         }));
       return years;
+    },
+
+    async pickNextBuy(amountUsd, symbols) {
+      const resolved = await Promise.all(
+        symbols.map(async (s) => {
+          const own = await findUserAsset(userId, s);
+          if (own) return own;
+          const rows = await db.select().from(schema.assets).where(ilike(schema.assets.symbol, s));
+          return rows[0] ?? null;
+        }),
+      );
+      const notFound = symbols.filter((_, i) => !resolved[i]);
+      const assetIds = resolved.flatMap((a) => (a ? [a.id] : []));
+      if (assetIds.length === 0) {
+        return { error: `Unknown symbols: ${notFound.join(", ")}. Add them on the dashboard's "Where should my next buy go?" first.` };
+      }
+      const { picks } = await computeNextBuy(userId, { portfolioId, amountUsd, assetIds });
+      return {
+        amountUsd,
+        picks: picks.map((p) => ({
+          symbol: p.key,
+          reason: p.reason,
+          account: p.account ? { name: p.account.name, why: p.account.why } : null,
+          weightNowPct: round2(p.weightNow * 100),
+          weightAfterPct: round2(p.weightAfter * 100),
+          belowOneYearHighPct: p.offHigh === null ? null : round2(-p.offHigh * 100),
+          vsYourAvgCostPct: p.vsCost === null ? null : round2(p.vsCost * 100),
+          score: round2(p.score),
+        })),
+        ...(notFound.length > 0 ? { notFound } : {}),
+        note: "Target mixes are saved on the user's device, so this ranking ignores them.",
+      };
     },
 
     async runDcaComparison(benchmarkSymbol) {

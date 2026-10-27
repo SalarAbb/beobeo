@@ -26,6 +26,7 @@ export const FEATURES: Feature[] = [
   { id: "dashboard.allocation", route: "/dashboard", does: "See how your money is split across holdings and compare it with the mix you want", fits: ["dca"] },
   { id: "dashboard.target-mix", route: "/dashboard", does: "Set or change your target mix (the percentages you want in each holding)", fits: ["dca", "expert"] },
   { id: "dashboard.next-deposit", route: "/dashboard", does: "Find out where your next deposit should go, for an amount you choose", fits: ["dca", "beginner"] },
+  { id: "dashboard.next-buy", route: "/dashboard", does: "You have an amount to invest and a few things in mind: name them under \"Where should my next buy go?\", get one pick with its reason and account, ask for another, and check how it was picked", fits: ["beginner", "dca"] },
   { id: "position.detail", route: "/dashboard", does: "Open one holding and check its price history, your buys and sells, your cost, and gains from past sales" },
   { id: "transactions.browse", route: "/transactions", does: "Find a specific past trade in your transaction history" },
   { id: "transactions.add", route: "/transactions", does: "Record a trade you just made at your broker (search the asset, amount, price, date, account)" },

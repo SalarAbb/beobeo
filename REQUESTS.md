@@ -46,13 +46,14 @@
 
 ## R-004 · "I have $n — where should it go?"
 - **Asked:** 2026-10-23
-- **Status:** open
+- **Status:** in progress
 - **Shipped on:** —
 - **In your words:** "If I want to add $n to my portfolio ... pick the right stock to invest ... focus is on simplicity, I don't want to invest the $n into 10 things." "For now we can start from picking one from user-proposed candidates and over time self-evolve into a better solution."
 - **Done means:**
-  - Enter an amount and 1–5 candidates; the app picks one with one plain reason (fit with what you hold, dip versus its own range and your cost, which account it belongs in), and "Show me another" gives the runner-up
-  - Deterministic scoring in `packages/core` with tests; the assistant uses the same tool
-  - A short persistent note frames it as analysis of your own options
+  - ✓ Enter an amount and 1–5 candidates; the app picks one with one plain reason (fit with what you hold, dip versus its own range and your cost, which account it belongs in), and "Show me another" gives the runner-up
+  - ✓ Deterministic scoring in `packages/core` with tests; the assistant uses the same tool
+  - ✓ A short persistent note frames it as analysis of your own options
+- **Notes:** 2026-10-26 round 7 (`evolve/2026-10-26`): the dashboard ends with "Where should my next buy go?". It starts from your three largest holdings and your last deposit, names one with its reason and account, and has "Show me another" and "How this was picked". Core `pickNextBuy` has 10 golden tests, and chat's `pick_next_buy` uses the same engine. Every line is built; it stays in progress until personas have tried it (mission feature `dashboard.next-buy`) and the chat tool has been probed live (that probe couldn't run this round).
 
 ## R-005 · Tax setup during sign-up
 - **Asked:** 2026-10-23

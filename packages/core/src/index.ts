@@ -85,3 +85,12 @@ export {
   type PlanSaleOpts,
   type HarvestBreakdown,
 } from "./tax-optimizer";
+export {
+  pickNextBuy,
+  placeAccount,
+  NEXT_BUY_WEIGHTS,
+  type NextBuyCandidate,
+  type NextBuyAccount,
+  type NextBuyAccountType,
+  type NextBuyPick,
+} from "./next-buy";
