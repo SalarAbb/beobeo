@@ -41,7 +41,7 @@ export const FEATURES: Feature[] = [
   { id: "compare.custom", route: "/compare", does: "Compare yourself against an asset of your choosing that isn't offered by default", fits: ["expert", "crypto"] },
   { id: "compare.scope", route: "/compare", does: "Compare only part of your portfolio (a few holdings) against a benchmark", fits: ["expert"] },
   { id: "chat.ask", route: "/chat", does: "Ask the assistant a real question about your own money and judge whether the answer is right and useful" },
-  { id: "chat.followup", route: "/chat", does: "Have a short back-and-forth with the assistant, then come back to an earlier conversation" },
+  { id: "chat.followup", route: "/chat", does: "Have a short back-and-forth with the assistant, leave Chat and come back (the conversation should still be open), then reopen an earlier conversation from the list" },
   { id: "accounts.types", route: "/accounts", does: "Make sure each of your accounts is marked correctly (taxable, IRA, Roth, 401k) and see why it matters", fits: ["multi-account", "tax"] },
   { id: "portfolios.manage", route: "/dashboard", does: "Switch between portfolios, or create a separate portfolio (e.g. for a child or a side account) and view it alone", fits: ["multi-account", "expert"] },
   { id: "welcome.setup", route: "/welcome", does: "Go through the first-run setup as if you had just signed up: how you file and your rough income, which kinds of accounts you have, then add a first holding; afterwards check the Tax Center's Tax Profile shows your bracket", fits: ["beginner", "tax"] },
