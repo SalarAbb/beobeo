@@ -184,9 +184,27 @@ export async function loadOrCreateTaxProfile(
       and(eq(schema.taxProfiles.userId, userId), eq(schema.taxProfiles.portfolioKey, portfolioKey)),
     );
   if (existing) return existing;
+  // A new portfolio's profile starts from the rates the user already gave
+  // (sign-up saves them on "all"); carryforwards and YTD stay per-portfolio.
+  const [base] =
+    portfolioKey === "all"
+      ? []
+      : await db
+          .select()
+          .from(schema.taxProfiles)
+          .where(
+            and(eq(schema.taxProfiles.userId, userId), eq(schema.taxProfiles.portfolioKey, "all")),
+          );
+  const rates = base && {
+    federalOrdinaryRatePct: base.federalOrdinaryRatePct,
+    federalLtcgRatePct: base.federalLtcgRatePct,
+    stateOrdinaryRatePct: base.stateOrdinaryRatePct,
+    stateLtcgRatePct: base.stateLtcgRatePct,
+    stateTreatsLtcgAsOrdinary: base.stateTreatsLtcgAsOrdinary,
+  };
   const [created] = await db
     .insert(schema.taxProfiles)
-    .values({ userId, portfolioKey })
+    .values({ userId, portfolioKey, ...rates })
     .onConflictDoNothing({ target: [schema.taxProfiles.userId, schema.taxProfiles.portfolioKey] })
     .returning();
   if (created) return created;

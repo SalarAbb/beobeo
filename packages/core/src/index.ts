@@ -86,6 +86,13 @@ export {
   type HarvestBreakdown,
 } from "./tax-optimizer";
 export {
+  bracketOptions,
+  ltcgRateAt,
+  FILING_STATUS_LABEL,
+  type FilingStatus,
+  type BracketOption,
+} from "./tax-brackets";
+export {
   pickNextBuy,
   placeAccount,
   NEXT_BUY_WEIGHTS,

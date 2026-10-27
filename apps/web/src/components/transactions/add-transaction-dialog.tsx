@@ -50,10 +50,17 @@ const TOTAL_LABEL: Partial<Record<TxnType, string>> = {
   transfer_out: "Value",
 };
 
-export function AddTransactionDialog({ onCreated }: { onCreated?: () => void }) {
+export function AddTransactionDialog({
+  onCreated,
+  defaultOpen = false,
+}: {
+  onCreated?: () => void;
+  /** Open on mount (the welcome flow links to /transactions?add=1). */
+  defaultOpen?: boolean;
+}) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
 
   const { portfolioId } = usePortfolio();
   const accounts = useQuery(

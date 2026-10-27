@@ -56,6 +56,8 @@ export function SocialButtons({ providers }: { providers: SocialProvider[] }) {
       await authClient.signIn.social({
         provider,
         callbackURL: "/dashboard",
+        // First OAuth sign-in creates the user: same setup steps as email sign-up.
+        newUserCallbackURL: "/welcome",
         errorCallbackURL: "/signin?error=oauth",
       });
     } finally {

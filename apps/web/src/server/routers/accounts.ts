@@ -4,6 +4,14 @@ import { schema } from "@beobeo/db";
 import { invalidateUserComputations } from "../cache";
 import { protectedProcedure, router } from "../trpc";
 
+const accountTypeSchema = z.enum([
+  "taxable",
+  "traditional_ira",
+  "roth_ira",
+  "401k",
+  "other_tax_advantaged",
+]);
+
 export const accountsRouter = router({
   list: protectedProcedure
     .input(z.object({ portfolioId: z.uuid().optional() }).default({}))
@@ -25,6 +33,7 @@ export const accountsRouter = router({
         institution: z.string().max(100).optional(),
         currency: z.string().length(3).default("USD"),
         portfolioId: z.uuid().optional(),
+        accountType: accountTypeSchema.optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -63,6 +72,8 @@ export const accountsRouter = router({
         .insert(schema.accounts)
         .values({ ...input, portfolioId, userId: ctx.userId })
         .returning();
+      // Cached tax/next-buy views read the account list.
+      await invalidateUserComputations(ctx.userId);
       return account!;
     }),
 
@@ -84,13 +95,7 @@ export const accountsRouter = router({
     .input(
       z.object({
         id: z.uuid(),
-        accountType: z.enum([
-          "taxable",
-          "traditional_ira",
-          "roth_ira",
-          "401k",
-          "other_tax_advantaged",
-        ]),
+        accountType: accountTypeSchema,
       }),
     )
     .mutation(async ({ ctx, input }) => {

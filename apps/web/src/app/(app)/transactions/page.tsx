@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AssetLogo } from "@/components/asset-logo";
@@ -53,7 +53,13 @@ const fmtQty = (v: string) => {
   return n.toLocaleString("en-US", { maximumFractionDigits: 8 });
 };
 
-export default function TransactionsPage() {
+export default function TransactionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ add?: string; import?: string }>;
+}) {
+  // ?add=1 / ?import=1 open a dialog straight away (welcome flow's last step).
+  const params = use(searchParams);
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const { portfolioId } = usePortfolio();
@@ -123,8 +129,8 @@ export default function TransactionsPage() {
         subtitle="The source of truth — everything else is derived from these."
         actions={
           <>
-            <CsvImportDialog onImported={refresh} />
-            <AddTransactionDialog onCreated={refresh} />
+            <CsvImportDialog onImported={refresh} defaultOpen={params.import === "1"} />
+            <AddTransactionDialog onCreated={refresh} defaultOpen={params.add === "1"} />
           </>
         }
       />

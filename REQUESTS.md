@@ -57,10 +57,11 @@
 
 ## R-005 · Tax setup during sign-up
 - **Asked:** 2026-10-23
-- **Status:** open
+- **Status:** in progress
 - **Shipped on:** —
 - **In your words:** "Tax angle type of thing should also be set in the beginning in registry ... think about SEAMLESS app design that users with minimalist backgrounds love."
 - **Done means:**
-  - After sign-up, three calm, skippable steps: filing status and rough bracket (pre-fills the tax profile), accounts and their types, first holding (manual, CSV or skip)
-  - Sensible defaults when skipped; everything editable later
+  - ✓ After sign-up, three calm, skippable steps: filing status and rough bracket (pre-fills the tax profile), accounts and their types, first holding (manual, CSV or skip)
+  - ✓ Sensible defaults when skipped; everything editable later
   - Fresh-registration probes complete it without friction notes
+- **Notes:** 2026-10-26 round 9 (`evolve/2026-10-26`): sign-up now opens `/welcome`. Step 1 is how you file plus a rough income band, which sets the tax profile's rates (2026 IRS brackets, core `bracketOptions`), and an optional state rate. Step 2 is tapping the kinds of account you have, each created with its type. Step 3 is typing in or importing a first holding, or skipping. Each step can be skipped (default 24%/15%, "Default" account on first save), and all of it is editable in Tax Profile and Accounts. The sim's registration probe now walks all three steps. Filing status itself isn't saved yet: storing it needs a new column and a `db:push`. R-003's 0% long-term room will need it.

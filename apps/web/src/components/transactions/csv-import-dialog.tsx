@@ -41,10 +41,17 @@ import { useTRPC } from "@/lib/trpc";
 
 type Step = "upload" | "map" | "preview";
 
-export function CsvImportDialog({ onImported }: { onImported?: () => void }) {
+export function CsvImportDialog({
+  onImported,
+  defaultOpen = false,
+}: {
+  onImported?: () => void;
+  /** Open on mount (the welcome flow links to /transactions?import=1). */
+  defaultOpen?: boolean;
+}) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [step, setStep] = useState<Step>("upload");
 
   const [csvText, setCsvText] = useState("");

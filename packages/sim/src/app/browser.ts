@@ -139,6 +139,21 @@ export async function signUpViaUi(
     await page.getByRole("button", { name: /create account/i }).click();
     await page.waitForURL((u) => !u.pathname.startsWith("/signup"), { timeout: 30_000 });
     await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => undefined);
+    // Setup steps after sign-up (R-005): a ballpark bracket, the default
+    // account, then skip to the app — the path a hurried new user takes.
+    if (new URL(page.url()).pathname === "/welcome") {
+      await shot("welcome-taxes", performance.now() - t0);
+      await page.getByRole("radio").nth(1).click();
+      await page.getByRole("button", { name: /^continue$/i }).click();
+      await page.getByText(/where do you invest/i).waitFor({ timeout: 20_000 });
+      await shot("welcome-accounts", performance.now() - t0);
+      await page.getByRole("button", { name: /^continue$/i }).click();
+      await page.getByText(/add what you own/i).waitFor({ timeout: 20_000 });
+      await shot("welcome-holding", performance.now() - t0);
+      await page.getByRole("button", { name: /skip, show me the app/i }).click();
+      await page.waitForURL((u) => u.pathname === "/dashboard", { timeout: 30_000 });
+      await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => undefined);
+    }
     const ms = performance.now() - t0;
     await shot("landing", ms);
     return { ok: true, ms, shots, landedOn: new URL(page.url()).pathname };
