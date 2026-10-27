@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Arm (or disarm) the daily 08:00 evolve cycle as a macOS LaunchAgent.
+# Arm (or disarm) the twice-daily evolve cycle (08:00 and 20:00) as a macOS LaunchAgent.
 #   scripts/install-launchd.sh            # install / update
 #   scripts/install-launchd.sh --remove   # uninstall
-# If the Mac is asleep at 08:00, launchd runs the job when it wakes.
+# If the Mac is asleep at a run time, launchd runs the job when it wakes. A cycle that's
+# still running when the next one fires makes the new one exit (evolve.lock).
 set -euo pipefail
 LABEL="dev.beobeo.evolve"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
@@ -23,7 +24,10 @@ cat > "$PLIST" <<PL
   <key>ProgramArguments</key>
   <array><string>/bin/bash</string><string>$REPO/scripts/evolve.sh</string></array>
   <key>StartCalendarInterval</key>
-  <dict><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+  <array>
+    <dict><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>20</integer><key>Minute</key><integer>0</integer></dict>
+  </array>
   <key>StandardOutPath</key><string>$HOME/beobeo-sim/logs/launchd.out.log</string>
   <key>StandardErrorPath</key><string>$HOME/beobeo-sim/logs/launchd.err.log</string>
   <key>EnvironmentVariables</key>
@@ -33,4 +37,4 @@ cat > "$PLIST" <<PL
 PL
 launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$PLIST"
-echo "Armed $LABEL — daily 08:00. Check: launchctl print gui/$(id -u)/$LABEL | head"
+echo "Armed $LABEL — 08:00 and 20:00 daily. Check: launchctl print gui/$(id -u)/$LABEL | head"

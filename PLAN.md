@@ -58,7 +58,7 @@ the earlier one wins.
 ## The loop
 
 ```
-          ┌──────────────── 08:00 launchd (or `pnpm evolve` / /evolve) ────────────────┐
+          ┌────────── 08:00 + 20:00 launchd (or `pnpm evolve` / /evolve) ──────────┐
           ▼                                                                             │
   real market tick ──► personas act on the real app ──► journal (~/beobeo-sim) ──► digest
   (MarketDataService)   policy + LLM mind: trade,         SQLite: actions, questions,   │
@@ -185,7 +185,7 @@ format: Status is `built`, `partial` or `missing`.
 | Loop | Weekly population audit (/evolve-agents) | built | first run 2026-10-25 |
 | Loop | Autonomous merge of passing branches | built | each morning, before the new cycle |
 | Loop | Safety valve (propose-only) | built | 3 unmergeable branches or 2 failed checks |
-| Loop | Daily 08:00 schedule | partial | installer ready, not armed |
+| Loop | Twice-daily schedule (08:00 + 20:00; evening = missions + more rounds) | done | armed via scripts/install-launchd.sh |
 | Loop | Live evolution page | built | regenerated every cycle |
 | Loop | Three-layer site: start page, cumulative progress, daily deltas | built | ~/beobeo-sim/site, published as one artifact |
 | Loop | Your requests tracked apart from persona feedback | built | REQUESTS.md, worked first every cycle |

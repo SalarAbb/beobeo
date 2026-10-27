@@ -20,6 +20,10 @@ running — ask the user to `pnpm dev` if it isn't) then `pnpm sim:digest`.
 ## 1. Read, in this order
 1. Today's report so far, `~/beobeo-sim/reports/<today>.md` (if it exists), and
    `git log --oneline <start-ref>..HEAD`: what earlier rounds already shipped today. Don't redo it.
+   The loop runs twice a day (08:00 and 20:00); rounds are numbered across the day, so an evening
+   round 7 follows the morning's rounds 1–6, whose work is already merged into the start ref
+   (read the report for it, the git log won't show it). The evening digest adds that evening's
+   missions, which tried the morning's changes: check them first.
 2. `REQUESTS.md` — the user's own asks.
 3. `PLAN.md` — **Principles are binding.** When an ask conflicts with a principle, the principle
    wins and the theme gets `wontfix` with a note.
@@ -73,7 +77,7 @@ In mode `propose`: don't create a branch or edit code; write the concrete plan f
 (files, approach, risks), then touch the queue-empty marker (proposals don't need more rounds).
 
 ## 4. Report → `~/beobeo-sim/reports/<today>.md`
-Round 1 creates the file with this header; every round appends its own section below it.
+Round 1 creates the file with this header (only if it doesn't exist yet); every round appends its own section below it.
 ```
 # Evolve report — <date>
 Branch: evolve/<date> (from <start-ref>)   Mode: implement|propose

@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
-# One self-evolution cycle (PLAN.md → "The loop"). Run by launchd at 08:00,
+# One self-evolution cycle (PLAN.md → "The loop"). Run by launchd at 08:00 and 20:00,
 # or by hand: `pnpm evolve` / `scripts/evolve.sh [--sim-only | --evolve-only]`.
+#
+# The second cycle of a day (today's digest already exists) doesn't replay the persona
+# day (they'd trade twice on one date): it runs $SIM_EVENING_MISSIONS fresh missions
+# against what the morning shipped, rebuilds the digest, and builds more rounds on
+# evolve/<today>, numbered after the morning's.
 #
 # The build phase is a LOOP OF ROUNDS: fresh `claude -p /evolve` sessions, one
 # improvement each, until $EVOLVE_HOURS run out, $EVOLVE_MAX_ROUNDS is hit, or a
@@ -128,6 +133,9 @@ curl -sf -o /dev/null "http://localhost:$SIM_PORT/signin" || { echo "Dev server 
 export SIM_APP_URL="http://localhost:$SIM_PORT"
 if [[ $EVOLVE_ONLY == 1 && -f "$SIM_HOME/digests/$DATE.md" ]]; then
   echo "--evolve-only: reusing today's digest."
+elif [[ -f "$SIM_HOME/digests/$DATE.md" ]]; then
+  echo "Second cycle today: missions only (${SIM_EVENING_MISSIONS:-3}), no second persona day."
+  (cd "$WT" && pnpm --silent sim:mission --count "${SIM_EVENING_MISSIONS:-3}") || echo "sim:mission exited non-zero — continuing to digest"
 else
   (cd "$WT" && pnpm --silent sim:day) || echo "sim:day exited non-zero (see above) — continuing to digest"
 fi
@@ -190,13 +198,22 @@ cd "$WT"
 REPORT="$SIM_HOME/reports/$DATE.md"
 EMPTY="$SIM_HOME/reports/.$DATE.queue-empty"
 rm -f "$EMPTY"
+# A later cycle today continues the report: its rounds are numbered after the earlier ones, and the
+# Checks line goes back to PENDING so a run that dies mid-way can't leave a stale PASSED behind
+# (tomorrow's merge step trusts that line).
+PRIOR_ROUNDS=0
+if [[ -f "$REPORT" ]]; then
+  PRIOR_ROUNDS="$(grep -oE '^## Round [0-9]+' "$REPORT" | awk '{print $3}' | sort -n | tail -1)"
+  PRIOR_ROUNDS="${PRIOR_ROUNDS:-0}"
+  sed -i '' 's|^Checks:.*|Checks: PENDING|' "$REPORT"
+fi
 DEADLINE=$(( $(date +%s) + HOURS * 3600 ))
 round=0; stalls=0
 while (( round < MAX_ROUNDS )) && (( $(date +%s) < DEADLINE )); do
   round=$((round + 1))
   before="$(git -C "$WT" rev-parse HEAD)"
-  echo "--- round $round ($(date +%T), deadline $(date -r "$DEADLINE" +%H:%M)) ---"
-  run_claude "/evolve $DIGEST $MODE $START round=$round deadline=$(date -r "$DEADLINE" +%H:%M)"
+  echo "--- round $((PRIOR_ROUNDS + round)) ($(date +%T), deadline $(date -r "$DEADLINE" +%H:%M)) ---"
+  run_claude "/evolve $DIGEST $MODE $START round=$((PRIOR_ROUNDS + round)) deadline=$(date -r "$DEADLINE" +%H:%M)"
   if (( LIMITED )); then
     round=$((round - 1))   # the round never ran; retry it after the reset
     wait_for_limit || break
@@ -210,7 +227,7 @@ while (( round < MAX_ROUNDS )) && (( $(date +%s) < DEADLINE )); do
 done
 ROUNDS=$round
 # Sundays: audit and evolve the persona population itself.
-[[ "$(date +%u)" == "7" ]] && run_claude "/evolve-agents"
+[[ "$(date +%u)" == "7" && $PRIOR_ROUNDS == 0 ]] && run_claude "/evolve-agents"   # once, in the first cycle
 
 # ---------------------------------------------------------------- 6. final checks, then merge the same day
 if [[ $MODE == implement ]] && git -C "$REPO" rev-parse -q --verify "refs/heads/evolve/$DATE" >/dev/null; then
