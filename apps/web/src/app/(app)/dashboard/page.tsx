@@ -485,6 +485,21 @@ export default function DashboardPage() {
         <StatTile
           label={windowed ? `Dividends · ${windowLabel}` : "Dividends"}
           value={fmtUsd(totals.dividends)}
+          // A bare $0 next to dividend payers read as "not tracking them"
+          // (olenna): say none are recorded and where to add one.
+          sub={
+            totals.dividends !== 0 ? undefined : windowed ? (
+              "None recorded in this period"
+            ) : (
+              <>
+                None recorded ·{" "}
+                <Link href="/transactions?add=dividend" className="underline underline-offset-2">
+                  add a payout
+                </Link>
+              </>
+            )
+          }
+          subTone="text-muted-foreground"
         />
       </StatStrip>
 

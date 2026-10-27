@@ -53,10 +53,13 @@ const TOTAL_LABEL: Partial<Record<TxnType, string>> = {
 export function AddTransactionDialog({
   onCreated,
   defaultOpen = false,
+  defaultType = "buy",
 }: {
   onCreated?: () => void;
   /** Open on mount (the welcome flow links to /transactions?add=1). */
   defaultOpen?: boolean;
+  /** Preselected type (the dashboard's Dividends tile links to ?add=dividend). */
+  defaultType?: TxnType;
 }) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
@@ -71,8 +74,9 @@ export function AddTransactionDialog({
 
   const [accountId, setAccountId] = useState<string>("");
   const [asset, setAsset] = useState<PickedAsset | null>(null);
-  const [type, setType] = useState<TxnType>("buy");
-  const [quantity, setQuantity] = useState("");
+  const [type, setType] = useState<TxnType>(defaultType);
+  // A payout opened from the dashboard is one total: 1 × the amount received.
+  const [quantity, setQuantity] = useState(defaultType === "dividend" ? "1" : "");
   const [price, setPrice] = useState("");
   const [priceTouched, setPriceTouched] = useState(false);
   const [fees, setFees] = useState("");

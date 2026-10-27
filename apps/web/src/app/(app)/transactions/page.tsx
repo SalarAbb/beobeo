@@ -59,7 +59,8 @@ export default function TransactionsPage({
 }: {
   searchParams: Promise<{ add?: string; import?: string }>;
 }) {
-  // ?add=1 / ?import=1 open a dialog straight away (welcome flow's last step).
+  // ?add=1 / ?import=1 open a dialog straight away (welcome flow's last step);
+  // ?add=dividend opens it on Dividend (the dashboard's Dividends tile).
   const params = use(searchParams);
   const trpc = useTRPC();
   const queryClient = useQueryClient();
@@ -131,7 +132,11 @@ export default function TransactionsPage({
         actions={
           <>
             <CsvImportDialog onImported={refresh} defaultOpen={params.import === "1"} />
-            <AddTransactionDialog onCreated={refresh} defaultOpen={params.add === "1"} />
+            <AddTransactionDialog
+              onCreated={refresh}
+              defaultOpen={params.add === "1" || params.add === "dividend"}
+              defaultType={params.add === "dividend" ? "dividend" : "buy"}
+            />
           </>
         }
       />
