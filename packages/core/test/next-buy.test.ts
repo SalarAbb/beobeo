@@ -44,7 +44,37 @@ describe("pickNextBuy", () => {
     expect(second!.score).toBeCloseTo(0.418182, 6);
     expect(second!.vsCost).toBeCloseTo(200 / 190 - 1, 12);
     // Fit part 0.218 beats dip part 0.2, so the weight speaks.
-    expect(second!.reason).toBe("VTI is already 60% of your portfolio; this buy takes it to 63.6%.");
+    // Below the top pick it says why it ranks lower.
+    expect(second!.reason).toBe(
+      "VTI is 60% of your portfolio (63.6% after this buy), so it spreads your money less than VXUS.",
+    );
+  });
+
+  it("a held top pick says it spreads money more than the runner-up", () => {
+    // $100 into $445 → 545 after. No price data, so the dip parts tie and fit decides.
+    // VOO: 300 → 400/545 = 73.4%, fit 0.266. NVDA: 145 → 245/545 = 45.0%, fit 0.550.
+    const [top, second] = pickNextBuy({
+      amountUsd: 100,
+      portfolioValue: 445,
+      candidates: [cand({ key: "VOO", heldValue: 300 }), cand({ key: "NVDA", heldValue: 145 })],
+    });
+    expect(top!.key).toBe("NVDA");
+    expect(top!.reason).toBe(
+      "NVDA is 32.6% of your portfolio (45% after this buy), so it keeps your money more spread out than VOO would.",
+    );
+    expect(second!.reason).toBe(
+      "VOO is 67.4% of your portfolio (73.4% after this buy), so it spreads your money less than NVDA.",
+    );
+  });
+
+  it("a lone heavy holding states its weight plainly", () => {
+    // VTI 6,000 of 10,000 = 60%; +1,000 → 7,000/11,000 = 63.6%.
+    const [p] = pickNextBuy({
+      amountUsd: 1000,
+      portfolioValue: 10000,
+      candidates: [cand({ key: "VTI", heldValue: 6000 })],
+    });
+    expect(p!.reason).toBe("VTI is already 60% of your portfolio; this buy takes it to 63.6%.");
   });
 
   it("calls a small holding small", () => {
