@@ -90,7 +90,9 @@ export async function observe(page: Page): Promise<Observation> {
       }
       if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio") && el.checked) states.push("checked");
       const value = el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el.value : el instanceof HTMLSelectElement ? el.selectedOptions[0]?.text : undefined;
-      const ref = `e${n++}`;
+      // Menu/dialog refs get their own prefix: numbering restarts per scope, and an open menu's first
+      // item as "e0" read to the persona as the page's e0 (the logo), so it reported mis-tapping it.
+      const ref = `${popup ? "m" : dialog ? "d" : "e"}${n++}`;
       el.setAttribute("data-mref", ref);
       els.push({ ref, role, name, ...(value ? { value: value.slice(0, 60) } : {}), ...(states.length ? { state: states.join(",") } : {}) });
       if (n >= 160) break;
