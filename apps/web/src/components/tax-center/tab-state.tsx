@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
- * Loading and failure states for Tax Center tabs. A bare grey skeleton read as "broken"
- * (gilderoy, barristan), and a failed query used to leave it up forever, so every tab says
- * what it's doing and offers a retry when it couldn't.
+ * Loading and failure states, born in the Tax Center tabs and now used app-wide. A bare grey
+ * skeleton read as "broken" (gilderoy, barristan), and a failed query used to leave it up
+ * forever (or, on the dashboard, read as "No holdings yet"), so pages say what they're doing
+ * and offer a retry when it couldn't. DB requests time out (`@beobeo/db` fetch-timeout), so a
+ * stalled query now reaches this state instead of hanging.
  */
 export function TabLoading({ label, className }: { label: string; className?: string }) {
   return (

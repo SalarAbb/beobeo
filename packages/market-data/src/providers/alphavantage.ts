@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Throttle } from "../rate-limit";
+import { Throttle, providerSignal } from "../rate-limit";
 import {
   ProviderError,
   type AssetRef,
@@ -29,7 +29,7 @@ export class AlphaVantageProvider implements PriceProvider {
       `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY` +
       `&symbol=${encodeURIComponent(asset.symbol)}&outputsize=full&apikey=${this.apiKey}`;
     const raw = await this.throttle.run(async () => {
-      const res = await this.fetchImpl(url);
+      const res = await this.fetchImpl(url, { signal: providerSignal() });
       if (!res.ok)
         throw new ProviderError(this.name, "UPSTREAM", `HTTP ${res.status}`);
       const body = (await res.json()) as Record<string, unknown>;

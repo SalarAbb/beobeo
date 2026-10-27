@@ -14,6 +14,7 @@ import {
 } from "@/components/transactions/transaction-details-dialog";
 import { PageHeader } from "@/components/page-section";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TabError } from "@/components/tax-center/tab-state";
 import {
   Table,
   TableBody,
@@ -142,6 +143,8 @@ export default function TransactionsPage({
               <Skeleton key={i} className="h-10 w-full" />
             ))}
           </div>
+        ) : list.isError && !list.data ? (
+          <TabError what="your transactions" onRetry={() => void list.refetch()} />
         ) : (list.data?.length ?? 0) === 0 ? (
           <div className="py-12 text-center text-sm text-muted-foreground">
             No transactions yet. Add one manually or import a broker CSV.

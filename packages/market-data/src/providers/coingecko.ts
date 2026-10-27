@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Throttle } from "../rate-limit";
+import { Throttle, providerSignal } from "../rate-limit";
 import {
   ProviderError,
   type AssetRef,
@@ -78,7 +78,7 @@ export class CoinGeckoProvider implements PriceProvider {
     return this.throttle.run(async () => {
       const headers: Record<string, string> = {};
       if (this.apiKey) headers["x-cg-demo-api-key"] = this.apiKey;
-      const res = await this.fetchImpl(url, { headers });
+      const res = await this.fetchImpl(url, { headers, signal: providerSignal() });
       if (res.status === 429)
         throw new ProviderError(this.name, "RATE_LIMITED", "rate limited");
       if (res.status === 404)
