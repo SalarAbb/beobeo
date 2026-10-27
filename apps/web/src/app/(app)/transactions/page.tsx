@@ -1,15 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AssetLogo } from "@/components/asset-logo";
 import { usePortfolio } from "@/components/portfolio-context";
 import { AddTransactionDialog } from "@/components/transactions/add-transaction-dialog";
 import { CsvImportDialog } from "@/components/transactions/csv-import-dialog";
+import {
+  TransactionDetailsDialog,
+  transactionAmount,
+  type TransactionRow,
+} from "@/components/transactions/transaction-details-dialog";
 import { PageHeader } from "@/components/page-section";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -42,12 +45,21 @@ const fmtMoney = (v: string | null) =>
         maximumFractionDigits: 2,
       });
 
+const fmtAmount = (v: number | undefined) =>
+  v === undefined ? "—" : v.toLocaleString("en-US", { style: "currency", currency: "USD" });
+
 const fmtQty = (v: string) => {
   const n = Number(v);
   return n.toLocaleString("en-US", { maximumFractionDigits: 8 });
 };
 
-export default function TransactionsPage() {
+export default function TransactionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ add?: string; import?: string }>;
+}) {
+  // ?add=1 / ?import=1 open a dialog straight away (welcome flow's last step).
+  const params = use(searchParams);
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const { portfolioId } = usePortfolio();
@@ -60,6 +72,8 @@ export default function TransactionsPage() {
   const remove = useMutation(trpc.transactions.remove.mutationOptions());
   // Rows hidden while their delete waits out the undo window.
   const [pendingDelete, setPendingDelete] = useState<ReadonlySet<string>>(new Set());
+  // Rows open their details; deleting happens there, behind a confirm step.
+  const [opened, setOpened] = useState<TransactionRow | null>(null);
 
   const unhide = (id: string) =>
     setPendingDelete((s) => {
@@ -70,7 +84,10 @@ export default function TransactionsPage() {
 
   /** Deletes are undoable: the row disappears at once, but the mutation only
    *  runs when the toast closes without "Undo" being pressed. */
-  function onDelete(id: string, label: string) {
+  function onDelete({ txn, asset }: TransactionRow) {
+    const id = txn.id;
+    const label = `${asset.symbol} ${txn.type.replace("_", " ")}`;
+    setOpened(null);
     setPendingDelete((s) => new Set(s).add(id));
     let settled = false;
     const commit = async () => {
@@ -85,8 +102,11 @@ export default function TransactionsPage() {
         unhide(id);
       }
     };
+    // Name the exact row (several buys of one asset look alike) and leave
+    // time to read it before the delete commits.
     toast(`Deleted ${label}`, {
-      duration: 6000,
+      description: `${fmtQty(txn.quantity)} on ${txn.tradedAt.toISOString().slice(0, 10)}`,
+      duration: 10_000,
       action: {
         label: "Undo",
         onClick: () => {
@@ -109,8 +129,8 @@ export default function TransactionsPage() {
         subtitle="The source of truth — everything else is derived from these."
         actions={
           <>
-            <CsvImportDialog onImported={refresh} />
-            <AddTransactionDialog onCreated={refresh} />
+            <CsvImportDialog onImported={refresh} defaultOpen={params.import === "1"} />
+            <AddTransactionDialog onCreated={refresh} defaultOpen={params.add === "1"} />
           </>
         }
       />
@@ -135,22 +155,42 @@ export default function TransactionsPage() {
                 <TableHead>Type</TableHead>
                 <TableHead className="text-right">Quantity</TableHead>
                 <TableHead className="text-right">Price</TableHead>
-                <TableHead className="hidden text-right sm:table-cell">Fees</TableHead>
+                <TableHead className="hidden text-right sm:table-cell">Amount</TableHead>
                 <TableHead className="hidden md:table-cell">Account</TableHead>
-                <TableHead />
               </TableRow>
             </TableHeader>
             <TableBody>
               {list.data!.filter(({ txn }) => !pendingDelete.has(txn.id)).map(({ txn, asset, account }) => (
-                <TableRow key={txn.id}>
+                <TableRow
+                  key={txn.id}
+                  className="cursor-pointer"
+                  onClick={() => setOpened({ txn, asset, account })}
+                  // A sale's details replay the position; start it on the way to the click.
+                  onPointerEnter={
+                    txn.type === "sell"
+                      ? () =>
+                          void queryClient.prefetchQuery(
+                            trpc.portfolio.position.queryOptions({
+                              assetId: asset.id,
+                              portfolioId: portfolioId ?? undefined,
+                            }),
+                          )
+                      : undefined
+                  }
+                >
                   <TableCell className="whitespace-nowrap pl-1 data text-[13px]">
                     {txn.tradedAt.toISOString().slice(0, 10)}
                   </TableCell>
                   <TableCell>
-                    <span className="flex items-center gap-2">
+                    {/* The row's keyboard/screen-reader entry point; the whole row is the mouse target. */}
+                    <button
+                      type="button"
+                      className="flex items-center gap-2 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label={`Open ${asset.symbol} ${txn.type.replace("_", " ")} on ${txn.tradedAt.toISOString().slice(0, 10)}`}
+                    >
                       <AssetLogo symbol={asset.symbol} assetClass={asset.class} size={22} />
                       <span className="font-medium">{asset.symbol}</span>
-                    </span>
+                    </button>
                   </TableCell>
                   <TableCell>
                     <span
@@ -166,22 +206,10 @@ export default function TransactionsPage() {
                     {fmtMoney(txn.pricePerUnit)}
                   </TableCell>
                   <TableCell className="hidden text-right data text-[13px] sm:table-cell">
-                    {Number(txn.fees) > 0 ? fmtMoney(txn.fees) : "—"}
+                    {fmtAmount(transactionAmount(txn)?.value)}
                   </TableCell>
-                  <TableCell className="hidden text-muted-foreground md:table-cell">
+                  <TableCell className="hidden pr-1 text-muted-foreground md:table-cell">
                     {account.name}
-                  </TableCell>
-                  <TableCell className="pr-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-7 text-muted-foreground hover:text-destructive"
-                      aria-label={`Delete ${asset.symbol} ${txn.type.replace("_", " ")} on ${txn.tradedAt.toISOString().slice(0, 10)}`}
-                      title="Delete (you can undo)"
-                      onClick={() => onDelete(txn.id, `${asset.symbol} ${txn.type}`)}
-                    >
-                      <Trash2 aria-hidden className="size-3.5" />
-                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -189,6 +217,13 @@ export default function TransactionsPage() {
           </Table>
         )}
       </div>
+
+      <TransactionDetailsDialog
+        row={opened}
+        portfolioId={portfolioId ?? undefined}
+        onOpenChange={(open) => !open && setOpened(null)}
+        onDelete={onDelete}
+      />
     </div>
   );
 }

@@ -84,13 +84,19 @@ export async function walkthrough(
   routes: string[],
   outDir: string,
   tag: string,
+  /** CSS selector clicked (first match) after each route loads, e.g. to open a dialog. */
+  click?: string,
 ): Promise<Shot[]> {
   const page = await ctx.newPage();
   const shots: Shot[] = [];
   const vp = page.viewportSize()?.width === VIEWPORTS.mobile.width ? "mobile" : "desktop";
   for (const route of routes) {
     const ms = await visit(page, route);
-    const file = join(outDir, `${tag}-${route.replaceAll("/", "_") || "_root"}.png`);
+    if (click) {
+      await page.locator(click).first().click({ timeout: 10_000 });
+      await page.waitForTimeout(1_500);
+    }
+    const file = join(outDir, `${tag}-${route.replaceAll("/", "_") || "_root"}${click ? "-click" : ""}.png`);
     await page.screenshot({ path: file, fullPage: true });
     shots.push({ route, file, ms, viewport: vp, scheme: tag.includes("dark") ? "dark" : "light", finalUrl: page.url() });
   }
@@ -133,6 +139,21 @@ export async function signUpViaUi(
     await page.getByRole("button", { name: /create account/i }).click();
     await page.waitForURL((u) => !u.pathname.startsWith("/signup"), { timeout: 30_000 });
     await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => undefined);
+    // Setup steps after sign-up (R-005): a ballpark bracket, the default
+    // account, then skip to the app — the path a hurried new user takes.
+    if (new URL(page.url()).pathname === "/welcome") {
+      await shot("welcome-taxes", performance.now() - t0);
+      await page.getByRole("radio").nth(1).click();
+      await page.getByRole("button", { name: /^continue$/i }).click();
+      await page.getByText(/where do you invest/i).waitFor({ timeout: 20_000 });
+      await shot("welcome-accounts", performance.now() - t0);
+      await page.getByRole("button", { name: /^continue$/i }).click();
+      await page.getByText(/add what you own/i).waitFor({ timeout: 20_000 });
+      await shot("welcome-holding", performance.now() - t0);
+      await page.getByRole("button", { name: /skip, show me the app/i }).click();
+      await page.waitForURL((u) => u.pathname === "/dashboard", { timeout: 30_000 });
+      await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => undefined);
+    }
     const ms = performance.now() - t0;
     await shot("landing", ms);
     return { ok: true, ms, shots, landedOn: new URL(page.url()).pathname };

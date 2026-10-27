@@ -8,6 +8,7 @@ import { AssetLogo } from "@/components/asset-logo";
 import { usePortfolio } from "@/components/portfolio-context";
 import { Section, StatStrip, StatTile } from "@/components/page-section";
 import { AllocationSection } from "@/components/allocation-section";
+import { NextBuySection } from "@/components/next-buy-section";
 import { ValueChart } from "@/components/charts/value-chart";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -600,6 +601,13 @@ export default function DashboardPage() {
         holdings={data.holdings
           .filter((h) => h.marketValue !== null)
           .map((h) => ({ symbol: h.symbol, value: h.marketValue! }))}
+        lastDeposit={lastDeposit(timeseries.data)}
+      />
+
+      <NextBuySection
+        holdings={data.holdings
+          .filter((h) => (h.marketValue ?? 0) >= 1)
+          .map((h) => ({ id: h.assetId, symbol: h.symbol, name: h.name, class: h.class }))}
         lastDeposit={lastDeposit(timeseries.data)}
       />
     </div>

@@ -29,7 +29,7 @@ export function SignUpForm({ providers }: { providers: SocialProvider[] }) {
       setError(error.message ?? "Sign up failed");
       return;
     }
-    router.push("/dashboard");
+    router.push("/welcome");
   }
 
   return (

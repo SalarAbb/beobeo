@@ -46,20 +46,22 @@
 
 ## R-004 · "I have $n — where should it go?"
 - **Asked:** 2026-10-23
-- **Status:** open
+- **Status:** in progress
 - **Shipped on:** —
 - **In your words:** "If I want to add $n to my portfolio ... pick the right stock to invest ... focus is on simplicity, I don't want to invest the $n into 10 things." "For now we can start from picking one from user-proposed candidates and over time self-evolve into a better solution."
 - **Done means:**
-  - Enter an amount and 1–5 candidates; the app picks one with one plain reason (fit with what you hold, dip versus its own range and your cost, which account it belongs in), and "Show me another" gives the runner-up
-  - Deterministic scoring in `packages/core` with tests; the assistant uses the same tool
-  - A short persistent note frames it as analysis of your own options
+  - ✓ Enter an amount and 1–5 candidates; the app picks one with one plain reason (fit with what you hold, dip versus its own range and your cost, which account it belongs in), and "Show me another" gives the runner-up
+  - ✓ Deterministic scoring in `packages/core` with tests; the assistant uses the same tool
+  - ✓ A short persistent note frames it as analysis of your own options
+- **Notes:** 2026-10-26 round 7 (`evolve/2026-10-26`): the dashboard ends with "Where should my next buy go?". It starts from your three largest holdings and your last deposit, names one with its reason and account, and has "Show me another" and "How this was picked". Core `pickNextBuy` has 10 golden tests, and chat's `pick_next_buy` uses the same engine. Every line is built; it stays in progress until personas have tried it (mission feature `dashboard.next-buy`) and the chat tool has been probed live (that probe couldn't run this round).
 
 ## R-005 · Tax setup during sign-up
 - **Asked:** 2026-10-23
-- **Status:** open
+- **Status:** in progress
 - **Shipped on:** —
 - **In your words:** "Tax angle type of thing should also be set in the beginning in registry ... think about SEAMLESS app design that users with minimalist backgrounds love."
 - **Done means:**
-  - After sign-up, three calm, skippable steps: filing status and rough bracket (pre-fills the tax profile), accounts and their types, first holding (manual, CSV or skip)
-  - Sensible defaults when skipped; everything editable later
+  - ✓ After sign-up, three calm, skippable steps: filing status and rough bracket (pre-fills the tax profile), accounts and their types, first holding (manual, CSV or skip)
+  - ✓ Sensible defaults when skipped; everything editable later
   - Fresh-registration probes complete it without friction notes
+- **Notes:** 2026-10-26 round 9 (`evolve/2026-10-26`): sign-up now opens `/welcome`. Step 1 is how you file plus a rough income band, which sets the tax profile's rates (2026 IRS brackets, core `bracketOptions`), and an optional state rate. Step 2 is tapping the kinds of account you have, each created with its type. Step 3 is typing in or importing a first holding, or skipping. Each step can be skipped (default 24%/15%, "Default" account on first save), and all of it is editable in Tax Profile and Accounts. The sim's registration probe now walks all three steps. Filing status itself isn't saved yet: storing it needs a new column and a `db:push`. R-003's 0% long-term room will need it.

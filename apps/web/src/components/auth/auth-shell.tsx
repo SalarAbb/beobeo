@@ -6,11 +6,14 @@ export function AuthShell({
   title,
   subtitle,
   footer,
+  tagline = "Your investing companion",
   children,
 }: {
   title: string;
   subtitle: string;
   footer: ReactNode;
+  /** Eyebrow under the wordmark (the welcome steps put "Step 1 of 3" here). */
+  tagline?: string;
   children: ReactNode;
 }) {
   return (
@@ -18,7 +21,7 @@ export function AuthShell({
       <div className="grid w-full max-w-sm gap-6">
         <div className="grid gap-1">
           <p className="font-display text-xl font-bold">beobeo</p>
-          <p className="eyebrow">Your investing companion</p>
+          <p className="eyebrow">{tagline}</p>
         </div>
         <div className="grid gap-1.5">
           <h1 className="text-3xl">{title}</h1>

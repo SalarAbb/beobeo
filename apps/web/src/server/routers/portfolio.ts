@@ -5,6 +5,7 @@ import {
   computePosition,
   computeTimeseries,
 } from "@/server/portfolio";
+import { computeNextBuy } from "@/server/next-buy";
 import { protectedProcedure, router } from "../trpc";
 
 const scope = z.object({ portfolioId: z.uuid().optional() }).default({});
@@ -39,4 +40,16 @@ export const portfolioRouter = router({
     .query(({ ctx, input }) =>
       computePosition(ctx.userId, input.assetId, input.portfolioId),
     ),
+
+  /** "I have $n — where should it go?" — ranked picks among the user's candidates. */
+  nextBuy: protectedProcedure
+    .input(
+      z.object({
+        portfolioId: z.uuid().optional(),
+        amountUsd: z.number().positive().max(1e9),
+        assetIds: z.array(z.uuid()).min(1).max(5),
+        targets: z.record(z.string(), z.number().min(0).max(1)).nullish(),
+      }),
+    )
+    .query(({ ctx, input }) => computeNextBuy(ctx.userId, input)),
 });

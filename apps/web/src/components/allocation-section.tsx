@@ -53,6 +53,19 @@ function parsePcts(raw: string | null): Record<string, number> | null {
   }
 }
 
+/** The saved target mix for the current user and portfolio scope, as
+ *  fractions keyed by symbol; null when none is set. */
+export function useTargetMix(): TargetMix | null {
+  const { userId, portfolioId } = usePortfolio();
+  const raw = useSyncExternalStore(
+    targetStore.subscribe,
+    () => targetStore.get(`beobeo.targets.${userId}.${portfolioId ?? "all"}`),
+    () => null,
+  );
+  const pcts = parsePcts(raw);
+  return pcts ? Object.fromEntries(Object.entries(pcts).map(([s, p]) => [s, p / 100])) : null;
+}
+
 /** Whole-number percents that add up to 100 (largest remainder) — the
  *  editor's starting point when no target exists yet. */
 function roundedWeights(holdings: { symbol: string; value: number }[]) {
