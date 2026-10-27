@@ -12,6 +12,7 @@ import { NextBuySection } from "@/components/next-buy-section";
 import { ValueChart } from "@/components/charts/value-chart";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TabError } from "@/components/tax-center/tab-state";
 import {
   Table,
   TableBody,
@@ -407,6 +408,17 @@ export default function DashboardPage() {
   }
 
   const data = overview.data;
+  // A failed load must never read as "No holdings yet": that looks like lost data.
+  if (!data && overview.isError) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <h1 className="text-3xl">Dashboard</h1>
+        <div className="mt-6">
+          <TabError what="your portfolio" onRetry={() => void overview.refetch()} />
+        </div>
+      </div>
+    );
+  }
   if (!data || data.holdings.length === 0) {
     return (
       <div className="mx-auto max-w-5xl">
@@ -479,6 +491,8 @@ export default function DashboardPage() {
       <Section title="Portfolio over time">
         {timeseries.isLoading ? (
           <Skeleton className="h-72 w-full" />
+        ) : timeseries.isError && !timeseries.data ? (
+          <TabError what="the chart" onRetry={() => void timeseries.refetch()} />
         ) : (
           <ValueChart data={timeseries.data ?? []} />
         )}
@@ -510,6 +524,8 @@ export default function DashboardPage() {
             </p>
             {metrics.isLoading ? (
               <Skeleton className="h-24 w-full" />
+            ) : metrics.isError && !metrics.data ? (
+              <TabError what="these numbers" onRetry={() => void metrics.refetch()} />
             ) : (
               <MetricsGrid m={metrics.data} holdings={data.holdings} />
             )}

@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTRPC } from "@/lib/trpc";
+import { useStoredState } from "@/lib/use-stored-state";
 import { cn } from "@/lib/utils";
 
 interface UiMessage {
@@ -34,33 +35,73 @@ const SUGGESTIONS = [
 export default function ChatPage() {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
-  const { portfolioId } = usePortfolio();
+  const { portfolioId, userId } = usePortfolio();
   const threads = useQuery(trpc.chat.threads.queryOptions());
 
-  const [threadId, setThreadId] = useState<string | null>(null);
+  // The open conversation is remembered on this device (per user), so leaving
+  // Chat and coming back reopens it instead of a blank page.
+  const [threadId, setThreadId] = useStoredState<string | null>(
+    `beobeo.chat.thread.${userId}`,
+    null,
+  );
+  // Which thread `messages` holds; differs from `threadId` while a saved
+  // conversation loads.
+  const [loadedId, setLoadedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const opening = threadId !== null && threadId !== loadedId;
 
   // The streamed conversation is the single source of truth while this page
-  // is open. Saved messages are loaded ONCE, imperatively, when a thread is
-  // selected — a reactive sync here caused stale-cache overwrites that made
-  // fresh messages flicker/disappear mid-conversation.
-  async function selectThread(id: string) {
+  // is open. Saved messages are loaded ONCE, imperatively, when the open
+  // thread changes — a reactive useQuery sync here caused stale-cache
+  // overwrites that made fresh messages flicker/disappear mid-conversation.
+  useEffect(() => {
+    if (!threadId || threadId === loadedId || streaming) return;
+    let cancelled = false;
+    const forget = () => {
+      setThreadId(null);
+      setLoadedId(null);
+      setMessages([]);
+    };
+    queryClient
+      .fetchQuery({ ...trpc.chat.messages.queryOptions({ threadId }), staleTime: 30_000 })
+      .then(
+        (saved) => {
+          if (cancelled) return;
+          // A deleted thread (or another user's id on this device) comes back
+          // empty; forget it so the next question starts a new one.
+          if (saved.length === 0) return forget();
+          setMessages(
+            saved.map((m) => ({
+              role: m.role as "user" | "assistant",
+              text: (m.content as { text: string }).text,
+            })),
+          );
+          setLoadedId(threadId);
+        },
+        () => {
+          // Unreachable thread: a fresh chat beats a skeleton that never resolves.
+          if (!cancelled) forget();
+        },
+      );
+    return () => {
+      cancelled = true;
+    };
+  }, [threadId, loadedId, streaming, queryClient, trpc, setThreadId]);
+
+  function selectThread(id: string) {
     if (streaming) return;
     setThreadId(id);
-    setMessages([]); // clear while loading so stale content never shows
-    const saved = await queryClient.fetchQuery({
+  }
+
+  /** Warm a thread's messages when the pointer reaches it, so the click opens it at once. */
+  function prefetchThread(id: string) {
+    void queryClient.prefetchQuery({
       ...trpc.chat.messages.queryOptions({ threadId: id }),
-      staleTime: 0, // always fetch fresh — the thread may have just grown
+      staleTime: 30_000,
     });
-    setMessages(
-      saved.map((m) => ({
-        role: m.role as "user" | "assistant",
-        text: (m.content as { text: string }).text,
-      })),
-    );
   }
 
   useEffect(() => {
@@ -106,6 +147,7 @@ export default function ChatPage() {
             value?: string;
           };
           if (event.type === "thread" && event.value) {
+            setLoadedId(event.value); // these messages ARE the thread; nothing to load
             setThreadId(event.value);
           } else if (event.type === "text" && event.value) {
             setMessages((prev) => {
@@ -150,11 +192,15 @@ export default function ChatPage() {
     } finally {
       setStreaming(false);
       void queryClient.invalidateQueries({ queryKey: trpc.chat.threads.queryKey() });
+      // The thread grew; reopening it later must fetch the new turns.
+      void queryClient.invalidateQueries({ queryKey: trpc.chat.messages.pathKey() });
     }
   }
 
   function newThread() {
+    if (streaming) return;
     setThreadId(null);
+    setLoadedId(null);
     setMessages([]);
   }
 
@@ -181,7 +227,8 @@ export default function ChatPage() {
                   {threads.data.map((t) => (
                     <DropdownMenuItem
                       key={t.id}
-                      onSelect={() => void selectThread(t.id)}
+                      onSelect={() => selectThread(t.id)}
+                      onPointerEnter={() => prefetchThread(t.id)}
                       className="flex items-baseline justify-between gap-3"
                     >
                       <span className="truncate">{t.title ?? "Untitled"}</span>
@@ -210,7 +257,8 @@ export default function ChatPage() {
           {threads.data?.map((t) => (
             <button
               key={t.id}
-              onClick={() => void selectThread(t.id)}
+              onClick={() => selectThread(t.id)}
+              onPointerEnter={() => prefetchThread(t.id)}
               className={cn(
                 "grid rounded-lg px-3 py-1.5 text-left text-sm text-ink-2 hover:bg-secondary",
                 threadId === t.id && "bg-accent text-primary hover:bg-accent",
@@ -228,7 +276,14 @@ export default function ChatPage() {
 
         <div className="flex min-w-0 flex-1 flex-col lg:border-l lg:pl-8">
           <div ref={scrollRef} className="flex-1 overflow-y-auto pb-4">
-            {messages.length === 0 && (
+            {opening && (
+              <div role="status" className="grid gap-3">
+                <p className="text-sm text-muted-foreground">Opening your conversation…</p>
+                <Skeleton className="h-9 w-2/3 justify-self-end rounded-2xl" />
+                <Skeleton className="h-20 w-full" />
+              </div>
+            )}
+            {!opening && messages.length === 0 && (
               <div className="flex h-full flex-col justify-center gap-5">
                 <p className="font-display text-xl font-bold">What would you like to know?</p>
                 <div className="flex flex-wrap gap-2">
@@ -248,7 +303,7 @@ export default function ChatPage() {
             {/* A transcript, not bubbles: the question as a quiet indigo pill,
                 the answer as prose on the page, turns split by hairlines. */}
             <div className="divide-y">
-              {turns.map((turn, i) => (
+              {!opening && turns.map((turn, i) => (
                 <div key={i} className="grid gap-3 py-5 first:pt-0">
                   {turn.user && (
                     <p className="w-fit max-w-[85%] justify-self-end rounded-2xl bg-accent px-3.5 py-2 text-sm whitespace-pre-wrap">
@@ -287,14 +342,14 @@ export default function ChatPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask about your portfolio…"
-              disabled={streaming}
+              disabled={streaming || opening}
               className="h-10 rounded-full px-4"
             />
             <Button
               type="submit"
               size="icon"
               aria-label="Send message"
-              disabled={streaming || !input.trim()}
+              disabled={streaming || opening || !input.trim()}
               className="size-10 shrink-0 rounded-full"
             >
               <Send aria-hidden className="size-4" />

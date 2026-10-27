@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Throttle } from "../rate-limit";
+import { Throttle, providerSignal } from "../rate-limit";
 import {
   ProviderError,
   type AssetRef,
@@ -87,6 +87,7 @@ export class TiingoProvider implements PriceProvider {
     return throttle.run(async () => {
       const res = await this.fetchImpl(url, {
         headers: { "content-type": "application/json" },
+        signal: providerSignal(),
       });
       if (res.status === 429)
         throw new ProviderError(this.name, "RATE_LIMITED", "rate limited");

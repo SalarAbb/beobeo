@@ -8,7 +8,7 @@ import { AssetLogo } from "@/components/asset-logo";
 import { Section, StatStrip, StatTile } from "@/components/page-section";
 import { usePortfolio } from "@/components/portfolio-context";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { TabError, TabLoading } from "@/components/tax-center/tab-state";
 import { useTRPC } from "@/lib/trpc";
 import { fmtQty, fmtUsd, gainClass } from "@/lib/viz";
 import type { AppRouter } from "@/server/routers";
@@ -122,8 +122,11 @@ export function NowTab({
   const scope = { portfolioId: portfolioId ?? undefined };
   const now = useQuery(trpc.tax.now.queryOptions(scope));
 
-  if (now.isLoading || !now.data) {
-    return <Skeleton className="h-72 w-full" />;
+  if (now.isError && !now.data) {
+    return <TabError what="your tax picture" onRetry={() => void now.refetch()} />;
+  }
+  if (!now.data) {
+    return <TabLoading label="Working out your tax picture…" className="h-72" />;
   }
 
   const d = now.data;

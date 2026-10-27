@@ -40,6 +40,14 @@ describe("TiingoProvider", () => {
       provider.getDailyCloses({ symbol: "AAPL", class: "stock" }, "2024-01-01", "2024-01-05"),
     ).rejects.toMatchObject({ kind: "RATE_LIMITED" });
   });
+
+  it("gives every request a deadline, so a hung call can't hold the throttle", async () => {
+    const mockFetch = vi.fn().mockResolvedValue(jsonResponse([]));
+    await new TiingoProvider("key", mockFetch).search("app");
+    const init = mockFetch.mock.calls[0]![1] as RequestInit;
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect(init.signal!.aborted).toBe(false);
+  });
 });
 
 describe("CoinGeckoProvider", () => {

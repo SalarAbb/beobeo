@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { PageHeader, Section, StatStrip, StatTile } from "@/components/page-section";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TabError } from "@/components/tax-center/tab-state";
 import { useTRPC } from "@/lib/trpc";
 import { useStoredState } from "@/lib/use-stored-state";
 import { fmtUsd, gainClass, useVizTheme } from "@/lib/viz";
@@ -455,7 +456,9 @@ export default function ComparePage() {
         </div>
       </div>
 
-      {compare.isLoading || !data ? (
+      {compare.isError && !data ? (
+        <TabError what="the comparison" onRetry={() => void compare.refetch()} />
+      ) : compare.isLoading || !data ? (
         <Skeleton className="h-96 w-full" />
       ) : data.portfolio.length === 0 ? (
         <p className="text-sm text-muted-foreground">

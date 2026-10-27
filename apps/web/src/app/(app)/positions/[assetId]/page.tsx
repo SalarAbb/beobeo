@@ -11,6 +11,7 @@ import { PriceChart } from "@/components/charts/price-chart";
 import { RealizedBars } from "@/components/charts/realized-bars";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TabError } from "@/components/tax-center/tab-state";
 import {
   Table,
   TableBody,
@@ -48,6 +49,13 @@ export default function PositionPage() {
   }
 
   const data = position.data;
+  if (!data && position.isError) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <TabError what="this position" onRetry={() => void position.refetch()} />
+      </div>
+    );
+  }
   if (!data) {
     return (
       <div className="mx-auto max-w-5xl">
