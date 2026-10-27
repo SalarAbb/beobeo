@@ -11,7 +11,6 @@ const fmt = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
   year: "numeric",
-  timeZone: "UTC",
 });
 
 /**
@@ -28,9 +27,13 @@ export function DatePicker({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const selected = /^\d{4}-\d{2}-\d{2}$/.test(value)
-    ? new Date(`${value}T12:00:00Z`)
-    : undefined;
+  // A local date: the calendar works in local time, and noon UTC is already
+  // tomorrow east of UTC+12.
+  const [y, m, d] = value.split("-").map(Number);
+  const selected =
+    /^\d{4}-\d{2}-\d{2}$/.test(value) && y && m && d
+      ? new Date(y, m - 1, d)
+      : undefined;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -48,9 +51,16 @@ export function DatePicker({
           {selected ? fmt.format(selected) : "Pick a date"}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
+      {/* Focus lands on the selected day, not the previous-month button, so
+          arrow keys move the date right away. */}
+      <PopoverContent
+        className="w-auto p-0"
+        align="start"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <Calendar
           mode="single"
+          autoFocus
           captionLayout="dropdown"
           selected={selected}
           defaultMonth={selected}
