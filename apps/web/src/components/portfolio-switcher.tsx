@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Briefcase, Check, ChevronsUpDown, Plus } from "lucide-react";
+import { Briefcase, Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { usePortfolio } from "@/components/portfolio-context";
@@ -23,10 +23,15 @@ export function PortfolioSwitcher() {
 
   async function createPortfolio() {
     const name = newName.trim();
-    if (!name) return;
+    if (!name || create.isPending) return;
     try {
       const portfolio = await create.mutateAsync({ name });
-      await queryClient.invalidateQueries({
+      // Put it in the cached list right away so the switcher can name it;
+      // waiting for the refetch kept the menu open on a disabled Add.
+      queryClient.setQueryData(trpc.portfolios.list.queryKey(), (old) =>
+        old ? [...old, portfolio] : [portfolio],
+      );
+      void queryClient.invalidateQueries({
         queryKey: trpc.portfolios.list.queryKey(),
       });
       setPortfolioId(portfolio.id);
@@ -101,10 +106,23 @@ export function PortfolioSwitcher() {
               placeholder="Portfolio name"
               className="h-7 text-sm"
               value={newName}
+              readOnly={create.isPending}
               onChange={(e) => setNewName(e.target.value)}
             />
-            <Button type="submit" size="sm" className="h-7" disabled={create.isPending}>
-              Add
+            <Button
+              type="submit"
+              size="sm"
+              className="h-7"
+              disabled={create.isPending || !newName.trim()}
+            >
+              {create.isPending ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Adding…
+                </>
+              ) : (
+                "Add"
+              )}
             </Button>
           </form>
         ) : (
