@@ -82,6 +82,8 @@ export function AddTransactionDialog({
   const [quantity, setQuantity] = useState(defaultType === "dividend" ? "1" : "");
   const [price, setPrice] = useState("");
   const [priceTouched, setPriceTouched] = useState(false);
+  const [entry, setEntry] = useState<"price" | "total">("price");
+  const [totalInput, setTotalInput] = useState("");
   const [fees, setFees] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [note, setNote] = useState("");
@@ -105,13 +107,32 @@ export function AddTransactionDialog({
       ? Number(priceSuggestion.data.price).toFixed(2)
       : String(Number(Number(priceSuggestion.data.price).toPrecision(4)))
     : null;
-  const effectivePrice =
-    !priceTouched && suggestPrice && suggestedPrice !== null ? suggestedPrice : price;
+  const qtyNum = Number(quantity);
+  const feesNum = Number(fees) || 0;
+  const outflow = type === "sell" || type === "transfer_out";
+
+  // Buys and sells can be entered by what the broker statement shows in all
+  // (fees included) instead of a per-unit price; the price is derived from it
+  // to 10 decimals (the column's scale), so the cost basis lands on the cent.
+  const byTotal = entry === "total" && needsPrice(type);
+  const totalNum = Number(totalInput);
+  const derivedPriceNum =
+    byTotal && totalInput !== "" && Number.isFinite(totalNum) && qtyNum > 0
+      ? (outflow ? totalNum + feesNum : totalNum - feesNum) / qtyNum
+      : null;
+  const derivedPrice =
+    derivedPriceNum !== null && Number.isFinite(derivedPriceNum) && derivedPriceNum > 0
+      ? String(Number(derivedPriceNum.toFixed(10)))
+      : "";
+
+  const effectivePrice = byTotal
+    ? derivedPrice
+    : !priceTouched && suggestPrice && suggestedPrice !== null
+      ? suggestedPrice
+      : price;
 
   // Live total (display-only float math).
-  const qtyNum = Number(quantity);
   const priceNum = Number(effectivePrice);
-  const feesNum = Number(fees) || 0;
   const totalLabel = TOTAL_LABEL[type];
   const hasTotal =
     totalLabel !== undefined &&
@@ -122,15 +143,18 @@ export function AddTransactionDialog({
     Number.isFinite(priceNum) &&
     priceNum > 0;
   const total = hasTotal
-    ? type === "sell" || type === "transfer_out"
-      ? qtyNum * priceNum - feesNum
-      : qtyNum * priceNum + feesNum
+    ? byTotal
+      ? totalNum
+      : outflow
+        ? qtyNum * priceNum - feesNum
+        : qtyNum * priceNum + feesNum
     : null;
 
   function resetForm() {
     setQuantity("");
     setPrice("");
     setPriceTouched(false);
+    setTotalInput("");
     setFees("");
     setNote("");
   }
@@ -238,18 +262,40 @@ export function AddTransactionDialog({
               />
             </div>
             <div className="grid content-start gap-1.5">
-              <Label>{type === "dividend" ? "Amount" : "Price"}</Label>
-              <Input
-                inputMode="decimal"
-                placeholder={priceSuggestion.isFetching ? "…" : "0.00"}
-                value={effectivePrice}
-                onChange={(e) => {
-                  setPrice(e.target.value);
-                  setPriceTouched(true);
-                }}
-                disabled={type === "split"}
-                required={needsPrice(type)}
-              />
+              <div className="flex items-baseline justify-between gap-1">
+                <Label>{type === "dividend" ? "Amount" : byTotal ? "Total" : "Price"}</Label>
+                {needsPrice(type) && (
+                  <button
+                    type="button"
+                    className="text-xs text-primary hover:underline"
+                    onClick={() => setEntry(byTotal ? "price" : "total")}
+                  >
+                    {byTotal ? "Enter price" : "Enter total"}
+                  </button>
+                )}
+              </div>
+              {byTotal ? (
+                <Input
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  aria-label={totalLabel}
+                  value={totalInput}
+                  onChange={(e) => setTotalInput(e.target.value)}
+                  required
+                />
+              ) : (
+                <Input
+                  inputMode="decimal"
+                  placeholder={priceSuggestion.isFetching ? "…" : "0.00"}
+                  value={effectivePrice}
+                  onChange={(e) => {
+                    setPrice(e.target.value);
+                    setPriceTouched(true);
+                  }}
+                  disabled={type === "split"}
+                  required={needsPrice(type)}
+                />
+              )}
             </div>
             <div className="grid content-start gap-1.5">
               <Label>Fees</Label>
@@ -265,9 +311,13 @@ export function AddTransactionDialog({
 
           {/* Summary strip: price provenance + live total, fixed height so the
               grid above never shifts. */}
-          <div className="flex min-h-12 items-center justify-between rounded-lg bg-secondary/60 px-3.5 py-2.5">
+          <div className="flex min-h-12 items-center justify-between gap-3 rounded-lg bg-secondary/60 px-3.5 py-2.5">
             <span className="text-xs text-muted-foreground">
-              {suggestPrice && priceSuggestion.data && !priceTouched
+              {byTotal
+                ? derivedPrice
+                  ? `Works out to $${Number(derivedPrice).toLocaleString("en-US", { maximumFractionDigits: Number(derivedPrice) >= 1 ? 4 : 8 })} per unit${feesNum ? " (fees counted in the total)" : ""}`
+                  : "Enter quantity and what it came to in all"
+                : suggestPrice && priceSuggestion.data && !priceTouched
                 ? priceSuggestion.data.source === "quote"
                   ? "Using live market price — edit if your fill differed"
                   : `Using close from ${priceSuggestion.data.asOf}`
@@ -276,7 +326,7 @@ export function AddTransactionDialog({
                   : " "}
             </span>
             {totalLabel && (
-              <span className="text-right">
+              <span className="shrink-0 text-right whitespace-nowrap">
                 <span className="mr-2 text-xs text-muted-foreground">{totalLabel}</span>
                 <span className="text-base font-semibold data">
                   {total !== null ? fmtUsd(total) : "—"}
@@ -292,7 +342,7 @@ export function AddTransactionDialog({
               </Label>
               {(accounts.data?.length ?? 0) > 0 ? (
                 <Select value={effectiveAccountId} onValueChange={setAccountId}>
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className="w-full min-w-0 overflow-hidden">
                     <SelectValue placeholder="Default" />
                   </SelectTrigger>
                   <SelectContent>

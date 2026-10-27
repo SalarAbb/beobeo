@@ -84,7 +84,8 @@ export async function walkthrough(
   routes: string[],
   outDir: string,
   tag: string,
-  /** CSS selector clicked (first match) after each route loads, e.g. to open a dialog. */
+  /** CSS selector clicked (first match) after each route loads, e.g. to open a dialog.
+   *  Several selectors joined by " | " are clicked in order (open a dialog, then a toggle in it). */
   click?: string,
 ): Promise<Shot[]> {
   const page = await ctx.newPage();
@@ -92,8 +93,8 @@ export async function walkthrough(
   const vp = page.viewportSize()?.width === VIEWPORTS.mobile.width ? "mobile" : "desktop";
   for (const route of routes) {
     const ms = await visit(page, route);
-    if (click) {
-      await page.locator(click).first().click({ timeout: 10_000 });
+    for (const sel of click ? click.split(" | ") : []) {
+      await page.locator(sel).first().click({ timeout: 10_000 });
       await page.waitForTimeout(1_500);
     }
     const file = join(outDir, `${tag}-${route.replaceAll("/", "_") || "_root"}${click ? "-click" : ""}.png`);

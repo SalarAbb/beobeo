@@ -3,7 +3,7 @@
  * so /evolve (or a human) can see a change the way personas will.
  *
  * Run: pnpm --filter @beobeo/sim shoot --persona samwell --routes /dashboard,/tax-center [--out DIR]
- *      [--click '<css selector>']   (clicked after each route loads, e.g. to open a dialog)
+ *      [--click '<css> | <css>']   (clicked in order after each route loads, e.g. to open a dialog)
  */
 import "../src/env";
 import { AppClient } from "../src/app/client";
