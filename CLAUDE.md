@@ -79,6 +79,7 @@ Root `.env` (gitignored) is the single source; `apps/web/.env` is a **symlink** 
 | `SIM_MISSIONS_PER_DAY` / `SIM_MISSION_MAX_STEPS` | no | daily goal-directed missions (default 3; ~$0.20–0.30 each) / max browser steps per mission (18) |
 | `SIM_EVENING_MISSIONS` | no | missions the day's second (20:00) cycle runs instead of a second persona day (default 3) |
 | `EVOLVE_HOURS` / `EVOLVE_MAX_ROUNDS` | no | evolve.sh build-phase budget: wall-clock hours (default 3) and max rounds (12) |
+| `EVOLVE_MIN_ROUND_MINUTES` | no | no new round starts with less than this left before the deadline (default 10; two rounds that started at 14:10 for a 14:11 deadline shipped nothing) |
 | `EVOLVE_WORKTREE` / `EVOLVE_BASE` / `SIM_PORT` | no | evolve.sh: worktree path (default `../beobeo-evolve`), base branch (default `salarabb/phase_1`), dev port (3100) |
 
 ## Monorepo layout & data flow

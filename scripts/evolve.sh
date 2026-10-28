@@ -212,7 +212,10 @@ if [[ -f "$REPORT" ]]; then
 fi
 DEADLINE=$(( $(date +%s) + HOURS * 3600 ))
 round=0; stalls=0
-while (( round < MAX_ROUNDS )) && (( $(date +%s) < DEADLINE )); do
+# A round needs time to build and check something; one started a minute before the
+# deadline only burns a session and counts as a stall.
+MIN_ROUND=$(( ${EVOLVE_MIN_ROUND_MINUTES:-10} * 60 ))
+while (( round < MAX_ROUNDS )) && (( $(date +%s) + MIN_ROUND < DEADLINE )); do
   round=$((round + 1))
   before="$(git -C "$WT" rev-parse HEAD)"
   echo "--- round $((PRIOR_ROUNDS + round)) ($(date +%T), deadline $(date -r "$DEADLINE" +%H:%M)) ---"
