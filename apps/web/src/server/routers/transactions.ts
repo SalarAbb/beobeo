@@ -120,7 +120,9 @@ export const transactionsRouter = router({
     }),
 
   update: protectedProcedure
-    .input(z.object({ id: z.uuid(), data: transactionInput.partial() }))
+    // No `source`: an edit keeps the row's provenance (its default must never
+    // stamp an imported row "manual").
+    .input(z.object({ id: z.uuid(), data: transactionInput.omit({ source: true }).partial() }))
     .mutation(async ({ ctx, input }) => {
       if (input.data.accountId) await assertOwnAccount(ctx, input.data.accountId);
       const [txn] = await ctx.db
@@ -135,6 +137,18 @@ export const transactionsRouter = router({
         .returning();
       await invalidateUserComputations(ctx.userId);
       return txn ?? null;
+    }),
+
+  /** Undo of a delete: puts the row back under its old id. */
+  restore: protectedProcedure
+    .input(transactionInput.extend({ id: z.uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await assertOwnAccount(ctx, input.accountId);
+      await ctx.db
+        .insert(schema.transactions)
+        .values({ ...input, userId: ctx.userId })
+        .onConflictDoNothing();
+      await invalidateUserComputations(ctx.userId);
     }),
 
   remove: protectedProcedure

@@ -9,7 +9,9 @@ import { AddTransactionDialog } from "@/components/transactions/add-transaction-
 import { CsvImportDialog } from "@/components/transactions/csv-import-dialog";
 import {
   TransactionDetailsDialog,
+  describeEdit,
   transactionAmount,
+  type TransactionEdit,
   type TransactionRow,
 } from "@/components/transactions/transaction-details-dialog";
 import { PageHeader } from "@/components/page-section";
@@ -71,9 +73,11 @@ export default function TransactionsPage({
     }),
   );
   const remove = useMutation(trpc.transactions.remove.mutationOptions());
-  // Rows hidden while their delete waits out the undo window.
+  const restore = useMutation(trpc.transactions.restore.mutationOptions());
+  const update = useMutation(trpc.transactions.update.mutationOptions());
+  // Rows hidden while their delete is on its way to the server.
   const [pendingDelete, setPendingDelete] = useState<ReadonlySet<string>>(new Set());
-  // Rows open their details; deleting happens there, behind a confirm step.
+  // Rows open their details; editing and deleting happen there.
   const [opened, setOpened] = useState<TransactionRow | null>(null);
 
   const unhide = (id: string) =>
@@ -83,45 +87,125 @@ export default function TransactionsPage({
       return next;
     });
 
-  /** Deletes are undoable: the row disappears at once, but the mutation only
-   *  runs when the toast closes without "Undo" being pressed. */
-  function onDelete({ txn, asset }: TransactionRow) {
+  // Everything derived from transactions: the list, holdings, charts, tax.
+  const refreshAll = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: trpc.transactions.list.queryKey() }),
+      queryClient.invalidateQueries({ queryKey: trpc.portfolio.pathKey() }),
+      queryClient.invalidateQueries({ queryKey: trpc.tax.pathKey() }),
+      queryClient.invalidateQueries({ queryKey: trpc.compare.pathKey() }),
+    ]);
+
+  /** Deletes commit at once and "Undo" puts the row back. A delete that waited
+   *  for its toast to close was lost when the page was left before then, and
+   *  the dashboard showed the old numbers meanwhile (fred, mission 36). */
+  async function onDelete({ txn, asset }: TransactionRow) {
     const id = txn.id;
     const label = `${asset.symbol} ${txn.type.replace("_", " ")}`;
+    // Name the exact row: several buys of one asset look alike.
+    const description = `${fmtQty(txn.quantity)} on ${txn.tradedAt.toISOString().slice(0, 10)}`;
     setOpened(null);
     setPendingDelete((s) => new Set(s).add(id));
-    let settled = false;
-    const commit = async () => {
-      if (settled) return;
-      settled = true;
-      try {
-        await remove.mutateAsync({ id });
-        await queryClient.invalidateQueries({ queryKey: trpc.transactions.list.queryKey() });
-      } catch {
-        toast.error(`Couldn't delete ${label}`);
-      } finally {
-        unhide(id);
-      }
-    };
-    // Name the exact row (several buys of one asset look alike) and leave
-    // time to read it before the delete commits.
-    toast(`Deleted ${label}`, {
-      description: `${fmtQty(txn.quantity)} on ${txn.tradedAt.toISOString().slice(0, 10)}`,
-      duration: 10_000,
+    const toastId = toast.loading(`Deleting ${label}…`, { description });
+    try {
+      await remove.mutateAsync({ id });
+    } catch {
+      unhide(id);
+      toast.error(`Couldn't delete ${label}`, { id: toastId, description });
+      return;
+    }
+    // The delete already landed, so a long window costs nothing; 10s ran out
+    // while fred was still reading the list (mission 43).
+    toast.success(`Deleted ${label}`, {
+      id: toastId,
+      description,
+      duration: 30_000,
       action: {
         label: "Undo",
-        onClick: () => {
-          settled = true;
-          unhide(id);
+        onClick: () => void undoDelete(txn, label, description),
+      },
+    });
+    await refreshAll();
+    unhide(id);
+  }
+
+  async function undoDelete(txn: TransactionRow["txn"], label: string, description: string) {
+    const toastId = toast.loading(`Putting back ${label}…`, { description });
+    try {
+      await restore.mutateAsync({
+        id: txn.id,
+        accountId: txn.accountId,
+        assetId: txn.assetId,
+        type: txn.type,
+        quantity: txn.quantity,
+        pricePerUnit: txn.pricePerUnit,
+        fees: txn.fees,
+        tradedAt: txn.tradedAt,
+        note: txn.note ?? undefined,
+        source: txn.source,
+      });
+      toast.success(`${label} is back`, { id: toastId, description });
+    } catch {
+      toast.error(`Couldn't put back ${label}`, { id: toastId, description });
+    }
+    await refreshAll();
+  }
+
+  /** Saves an edit and offers to undo it (the old values go back). */
+  async function onEdit(row: TransactionRow, edit: TransactionEdit) {
+    const { txn, asset } = row;
+    const label = `${asset.symbol} ${txn.type.replace("_", " ")}`;
+    setOpened(null);
+    const toastId = toast.loading(`Saving ${label}…`);
+    try {
+      await update.mutateAsync({ id: txn.id, data: edit });
+    } catch (err) {
+      toast.error(`Couldn't save the ${label}: ${(err as Error).message}`, {
+        id: toastId,
+        duration: 10_000,
+        action: { label: "Open it again", onClick: () => setOpened(row) },
+      });
+      return;
+    }
+    const before: TransactionEdit = {
+      accountId: txn.accountId,
+      quantity: txn.quantity,
+      pricePerUnit: txn.pricePerUnit,
+      fees: txn.fees,
+      tradedAt: txn.tradedAt,
+    };
+    toast.success(`${label} updated`, {
+      id: toastId,
+      description: describeEdit(row, edit),
+      duration: 30_000,
+      action: {
+        label: "Undo",
+        onClick: async () => {
+          await update.mutateAsync({ id: txn.id, data: before }).then(
+            () => toast.success(`${label} is back as it was`),
+            () => toast.error(`Couldn't undo the change to ${label}`),
+          );
+          await refreshAll();
         },
       },
-      onAutoClose: () => void commit(),
-      onDismiss: () => void commit(),
     });
+    await refreshAll();
   }
 
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: trpc.transactions.list.queryKey() });
+
+  // A sell and a buy of the same size, same asset, same day: a swap, tagged so
+  // the pair doesn't read as a double entry.
+  const swapIds = new Set<string>();
+  const byDay = new Map<string, TransactionRow["txn"][]>();
+  for (const { txn } of list.data ?? []) {
+    if (txn.type !== "buy" && txn.type !== "sell") continue;
+    const key = `${txn.assetId}:${txn.tradedAt.toISOString().slice(0, 10)}:${Number(txn.quantity)}`;
+    const same = byDay.get(key) ?? [];
+    for (const o of same) if (o.type !== txn.type) swapIds.add(o.id).add(txn.id);
+    byDay.set(key, [...same, txn]);
+  }
 
   return (
     <div className="mx-auto grid w-full max-w-5xl grid-cols-1 gap-8">
@@ -201,6 +285,14 @@ export default function TransactionsPage({
                     >
                       {txn.type.replace("_", " ")}
                     </span>
+                    {swapIds.has(txn.id) && (
+                      <span
+                        className="ml-1.5 text-xs text-muted-foreground"
+                        title="Sold and bought back the same day"
+                      >
+                        swap
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right data text-[13px]">
                     {txn.type === "split" ? `${fmtQty(txn.quantity)}:1` : fmtQty(txn.quantity)}
@@ -223,9 +315,20 @@ export default function TransactionsPage({
 
       <TransactionDetailsDialog
         row={opened}
+        sameDay={
+          opened
+            ? (list.data ?? []).filter(
+                ({ txn }) =>
+                  txn.id !== opened.txn.id &&
+                  txn.assetId === opened.txn.assetId &&
+                  txn.tradedAt.toISOString().slice(0, 10) === opened.txn.tradedAt.toISOString().slice(0, 10),
+              )
+            : []
+        }
         portfolioId={portfolioId ?? undefined}
         onOpenChange={(open) => !open && setOpened(null)}
-        onDelete={onDelete}
+        onDelete={(row) => void onDelete(row)}
+        onEdit={(row, edit) => void onEdit(row, edit)}
       />
     </div>
   );

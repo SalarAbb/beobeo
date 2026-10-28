@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { DatePicker } from "@/components/date-picker";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/routers";
 import { AssetLogo } from "@/components/asset-logo";
@@ -15,6 +16,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTRPC } from "@/lib/trpc";
 import { fmtQty, fmtUsd, gainClass } from "@/lib/viz";
@@ -36,25 +46,106 @@ export function transactionAmount({ type, quantity, pricePerUnit, fees }: Transa
   return null;
 }
 
+/** The fields an edit can change. Type and asset stay: a buy that should have
+ *  been a sell is a different trade, so it's deleted and entered again. */
+export type TransactionEdit = {
+  accountId: string;
+  quantity: string;
+  pricePerUnit: string | null;
+  fees: string;
+  tradedAt: Date;
+};
+
+/** "Quantity 19.565 → 1.9565 · Price $71.52 → $71.50", for the saved toast. */
+export function describeEdit({ txn, account }: TransactionRow, edit: TransactionEdit) {
+  const changes: string[] = [];
+  const num = (a: string | null, b: string | null) => (a === null ? null : Number(a)) !== (b === null ? null : Number(b));
+  if (isoDay(edit.tradedAt) !== isoDay(txn.tradedAt))
+    changes.push(`Date ${isoDay(txn.tradedAt)} → ${isoDay(edit.tradedAt)}`);
+  if (num(edit.quantity, txn.quantity))
+    changes.push(`Quantity ${fmtQty(Number(txn.quantity))} → ${fmtQty(Number(edit.quantity))}`);
+  if (num(edit.pricePerUnit, txn.pricePerUnit) && edit.pricePerUnit !== null)
+    changes.push(`Price ${txn.pricePerUnit === null ? "—" : fmtUsd(Number(txn.pricePerUnit))} → ${fmtUsd(Number(edit.pricePerUnit))}`);
+  if (num(edit.fees, txn.fees)) changes.push(`Fees ${fmtUsd(Number(txn.fees))} → ${fmtUsd(Number(edit.fees))}`);
+  if (edit.accountId !== txn.accountId) changes.push(`Moved from ${account.name}`);
+  return changes.join(" · ") || "Nothing changed";
+}
+
 /** One transaction, opened from its row: the full record, and for a sale the
- *  purchases it used and the gain. Deleting lives here, behind a confirm step,
- *  so a tap on a row can never remove anything. */
+ *  purchases it used and the gain. Editing and deleting live here (deleting
+ *  behind a confirm step), so a tap on a row can never change anything. */
+/** What the other trades in the same asset that day say about this one: a
+ *  sell and a buy of the same size is a swap (sell and buy back, e.g. to take
+ *  a loss), not a double entry. fred deleted the buy half of his own swap
+ *  thinking it was a duplicate (missions 36 and 43). */
+export function sameDayNote({ txn, asset }: TransactionRow, sameDay: TransactionRow[]) {
+  const qty = Number(txn.quantity);
+  const near = (a: number, b: number) => Math.abs(a - b) <= Math.max(1e-8, Math.abs(b) * 1e-6);
+  const opposite = txn.type === "buy" ? "sell" : txn.type === "sell" ? "buy" : null;
+  const swap = sameDay.find((o) => o.txn.type === opposite && near(Number(o.txn.quantity), qty));
+  if (swap)
+    return {
+      tone: "info" as const,
+      text:
+        txn.type === "buy"
+          ? `Not a duplicate: you sold the same ${fmtQty(qty)} ${asset.symbol} that day and bought it back here (a swap, e.g. to take a loss). Deleting this buy leaves the sale without the shares you bought back.`
+          : `Not a duplicate: you bought the same ${fmtQty(qty)} ${asset.symbol} back that day (a swap, e.g. to take a loss).`,
+    };
+  const twin = sameDay.find(
+    (o) =>
+      o.txn.type === txn.type &&
+      near(Number(o.txn.quantity), qty) &&
+      Number(o.txn.pricePerUnit) === Number(txn.pricePerUnit) &&
+      o.txn.accountId === txn.accountId,
+  );
+  if (twin)
+    return {
+      tone: "warn" as const,
+      text: `Possible duplicate: another ${typeLabel(txn.type)} of the same ${fmtQty(qty)} ${asset.symbol} at the same price, same day, same account.`,
+    };
+  if (sameDay.length > 0)
+    return {
+      tone: "info" as const,
+      text: `Also that day in ${asset.symbol}: ${sameDay
+        .map((o) => `${typeLabel(o.txn.type)} of ${fmtQty(Number(o.txn.quantity))}`)
+        .join(", ")}.`,
+    };
+  return null;
+}
+
 export function TransactionDetailsDialog({
   row,
+  sameDay,
   portfolioId,
   onOpenChange,
   onDelete,
+  onEdit,
 }: {
   row: TransactionRow | null;
+  sameDay: TransactionRow[];
   portfolioId: string | undefined;
   onOpenChange: (open: boolean) => void;
   onDelete: (row: TransactionRow) => void;
+  onEdit: (row: TransactionRow, edit: TransactionEdit) => void;
 }) {
   return (
     <Dialog open={row !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        {/* Keyed so the confirm step resets for every transaction opened. */}
-        {row && <Details key={row.txn.id} row={row} portfolioId={portfolioId} onDelete={onDelete} />}
+      <DialogContent
+        className="sm:max-w-md"
+        // A half-typed edit is precious, same as the add form.
+        onInteractOutside={(e) => e.preventDefault()}
+      >
+        {/* Keyed so the confirm and edit steps reset for every transaction opened. */}
+        {row && (
+          <Details
+            key={row.txn.id}
+            row={row}
+            note={sameDayNote(row, sameDay)}
+            portfolioId={portfolioId}
+            onDelete={onDelete}
+            onEdit={onEdit}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -62,15 +153,29 @@ export function TransactionDetailsDialog({
 
 function Details({
   row,
+  note,
   portfolioId,
   onDelete,
+  onEdit,
 }: {
   row: TransactionRow;
+  note: ReturnType<typeof sameDayNote>;
   portfolioId: string | undefined;
   onDelete: (row: TransactionRow) => void;
+  onEdit: (row: TransactionRow, edit: TransactionEdit) => void;
 }) {
   const { txn, asset, account } = row;
   const [confirming, setConfirming] = useState(false);
+  const [editing, setEditing] = useState(false);
+  if (editing)
+    return (
+      <EditForm
+        row={row}
+        portfolioId={portfolioId}
+        onCancel={() => setEditing(false)}
+        onSave={(edit) => onEdit(row, edit)}
+      />
+    );
   const amount = transactionAmount(txn);
   const day = isoDay(txn.tradedAt);
   const summary = `${typeLabel(txn.type)} of ${fmtQty(Number(txn.quantity))} ${asset.symbol} on ${day}`;
@@ -103,6 +208,12 @@ function Details({
         ))}
       </dl>
 
+      {note && (
+        <p className={`rounded-md p-3 text-sm ${note.tone === "warn" ? "bg-warn-soft" : "bg-accent"}`}>
+          {note.text}
+        </p>
+      )}
+
       {txn.type === "sell" && <SaleLots txnId={txn.id} assetId={asset.id} portfolioId={portfolioId} />}
 
       {confirming ? (
@@ -125,17 +236,179 @@ function Details({
           <Button variant="link" className="px-0" asChild>
             <Link href={`/positions/${asset.id}`}>Open {asset.symbol}</Link>
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground hover:text-destructive"
-            onClick={() => setConfirming(true)}
-          >
-            Delete…
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={() => setConfirming(true)}
+            >
+              Delete…
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+              Edit
+            </Button>
+          </div>
         </DialogFooter>
       )}
     </>
+  );
+}
+
+const decimal = /^\d+(\.\d+)?$/;
+// "71.5200000000" → "71.52": numeric columns come back padded to their scale.
+const trimZeros = (s: string) => (s.includes(".") ? s.replace(/0+$/, "").replace(/\.$/, "") : s);
+
+/** Fix a trade in place: date, quantity, price, fees and account. A dividend
+ *  edits its cash (stored as 1 × amount); a split edits its ratio. */
+function EditForm({
+  row,
+  portfolioId,
+  onCancel,
+  onSave,
+}: {
+  row: TransactionRow;
+  portfolioId: string | undefined;
+  onCancel: () => void;
+  onSave: (edit: TransactionEdit) => void;
+}) {
+  const { txn, asset, account } = row;
+  const trpc = useTRPC();
+  const accounts = useQuery(trpc.accounts.list.queryOptions({ portfolioId }));
+  const kind = txn.type === "dividend" ? "dividend" : txn.type === "split" ? "split" : txn.pricePerUnit === null ? "noPrice" : "priced";
+  const originalAmount = transactionAmount(txn);
+  const [date, setDate] = useState(isoDay(txn.tradedAt));
+  const [quantity, setQuantity] = useState(trimZeros(txn.quantity));
+  const [price, setPrice] = useState(txn.pricePerUnit === null ? "" : trimZeros(txn.pricePerUnit));
+  const [cash, setCash] = useState(
+    kind === "dividend" && originalAmount ? String(Math.round(originalAmount.value * 100) / 100) : "",
+  );
+  const [fees, setFees] = useState(trimZeros(txn.fees));
+  const [accountId, setAccountId] = useState(txn.accountId);
+
+  const options = accounts.data?.some((a) => a.id === account.id)
+    ? accounts.data
+    : [account, ...(accounts.data ?? [])];
+  const feesValue = fees.trim() === "" ? "0" : fees.trim();
+  const error =
+    kind === "dividend"
+      ? !decimal.test(cash) || Number(cash) <= 0
+        ? "Enter the cash you received"
+        : null
+      : !decimal.test(quantity) || Number(quantity) <= 0
+        ? kind === "split" ? "Enter the split ratio, e.g. 4 for 4-for-1" : "Enter a quantity above 0"
+        : kind === "priced" && !decimal.test(price)
+          ? "Enter the price per unit"
+          : !decimal.test(feesValue)
+            ? "Fees must be a number"
+            : null;
+  const amount =
+    kind === "priced" && !error
+      ? transactionAmount({ ...txn, quantity, pricePerUnit: price, fees: feesValue })
+      : null;
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (error) return;
+    onSave({
+      accountId,
+      quantity: kind === "dividend" ? "1" : quantity,
+      pricePerUnit: kind === "dividend" ? cash : kind === "priced" ? price : txn.pricePerUnit,
+      fees: kind === "dividend" || kind === "split" ? txn.fees : feesValue,
+      // Keep the stored time when the day is unchanged; a new day is noon UTC like the add form.
+      tradedAt: date === isoDay(txn.tradedAt) ? txn.tradedAt : new Date(`${date}T12:00:00Z`),
+    });
+  }
+
+  return (
+    <form onSubmit={submit} className="grid gap-4">
+      <DialogHeader className="text-left">
+        <DialogTitle className="flex items-center gap-2">
+          <AssetLogo symbol={asset.symbol} assetClass={asset.class} size={24} />
+          Edit <span className="capitalize">{typeLabel(txn.type)}</span> {asset.symbol}
+        </DialogTitle>
+        <DialogDescription>
+          Holdings, gains and charts are recalculated with the new values. To change the asset or the
+          kind of trade, delete it and add it again.
+        </DialogDescription>
+      </DialogHeader>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="col-span-2 grid gap-1.5">
+          <Label>Date</Label>
+          <DatePicker value={date} onChange={setDate} />
+        </div>
+        {kind === "dividend" ? (
+          <div className="col-span-2 grid gap-1.5">
+            <Label htmlFor="edit-cash">Cash received</Label>
+            <Input id="edit-cash" inputMode="decimal" value={cash} onChange={(e) => setCash(e.target.value.trim())} />
+          </div>
+        ) : (
+          <>
+            <div className={`grid gap-1.5 ${kind === "priced" ? "" : "col-span-2"}`}>
+              <Label htmlFor="edit-qty">{kind === "split" ? "Ratio" : "Quantity"}</Label>
+              <Input id="edit-qty" inputMode="decimal" value={quantity} onChange={(e) => setQuantity(e.target.value.trim())} />
+            </div>
+            {kind === "priced" && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="edit-price">Price per unit</Label>
+                <Input id="edit-price" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value.trim())} />
+              </div>
+            )}
+            {kind !== "split" && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="edit-fees">Fees</Label>
+                <Input id="edit-fees" inputMode="decimal" value={fees} onChange={(e) => setFees(e.target.value.trim())} placeholder="0" />
+              </div>
+            )}
+          </>
+        )}
+        <div className={`grid min-w-0 gap-1.5 ${kind === "priced" || kind === "noPrice" ? "" : "col-span-2"}`}>
+          <Label>Account</Label>
+          <Select value={accountId} onValueChange={setAccountId}>
+            <SelectTrigger className="w-full min-w-0 overflow-hidden">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {options.map((a) => (
+                <SelectItem key={a.id} value={a.id}>
+                  {a.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="flex h-9 items-center justify-between rounded-md bg-muted/50 px-3 text-sm">
+        {error ? (
+          <span className="text-muted-foreground">{error}</span>
+        ) : amount ? (
+          <>
+            <span className="text-muted-foreground">{amount.label}</span>
+            <span className="data font-semibold">
+              {originalAmount && Math.abs(originalAmount.value - amount.value) >= 0.005 && (
+                <span className="mr-2 font-normal text-muted-foreground line-through">
+                  {fmtUsd(originalAmount.value)}
+                </span>
+              )}
+              {fmtUsd(amount.value)}
+            </span>
+          </>
+        ) : (
+          <span className="text-muted-foreground">{fmtQty(Number(txn.quantity))} {asset.symbol} before this edit</span>
+        )}
+      </div>
+
+      <DialogFooter className="flex-row justify-end gap-2">
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={error !== null}>
+          Save changes
+        </Button>
+      </DialogFooter>
+    </form>
   );
 }
 
