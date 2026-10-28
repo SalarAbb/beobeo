@@ -28,6 +28,23 @@ export interface TaxLotBundle {
   recentBuys: RecentBuyTxn[];
   ytdShortTermGain: ReturnType<typeof D>;
   ytdLongTermGain: ReturnType<typeof D>;
+  /** This year's sales in taxable accounts, one per sell transaction, oldest
+   *  first: the rows the two YTD totals above add up from. */
+  ytdSales: YtdSale[];
+  /** This year's realized gain inside IRAs/401(k)s: counted in the
+   *  dashboard's "this year" figure, never taxed. */
+  ytdTaxAdvantagedGain: ReturnType<typeof D>;
+}
+
+export interface YtdSale {
+  txnId: string;
+  soldAt: Date;
+  symbol: string;
+  accountName: string;
+  quantity: ReturnType<typeof D>;
+  proceeds: ReturnType<typeof D>;
+  shortTermGain: ReturnType<typeof D>;
+  longTermGain: ReturnType<typeof D>;
 }
 
 /**
@@ -55,7 +72,14 @@ export async function loadTaxLots(
     .orderBy(asc(schema.transactions.tradedAt), asc(schema.transactions.createdAt));
 
   if (rows.length === 0) {
-    return { lots: [], recentBuys: [], ytdShortTermGain: ZERO, ytdLongTermGain: ZERO };
+    return {
+      lots: [],
+      recentBuys: [],
+      ytdShortTermGain: ZERO,
+      ytdLongTermGain: ZERO,
+      ytdSales: [],
+      ytdTaxAdvantagedGain: ZERO,
+    };
   }
 
   // Group by (account, asset) — lots must carry their account identity so a
@@ -82,6 +106,8 @@ export async function loadTaxLots(
   const lots: TaxLot[] = [];
   let ytdShortTermGain = ZERO;
   let ytdLongTermGain = ZERO;
+  let ytdTaxAdvantagedGain = ZERO;
+  const salesById = new Map<string, YtdSale>();
   const thisYear = asOf.getUTCFullYear();
 
   for (const groupRows of groups.values()) {
@@ -110,12 +136,35 @@ export async function loadTaxLots(
       continue; // inconsistent history for this account+asset — skip, don't crash the page
     }
 
-    if (account.accountType !== "taxable") continue; // IRAs contribute no sellable lots
+    if (account.accountType !== "taxable") {
+      // IRAs contribute no sellable lots and no taxable gain.
+      for (const g of engineResult.realized) {
+        if (g.soldAt.getUTCFullYear() === thisYear) {
+          ytdTaxAdvantagedGain = ytdTaxAdvantagedGain.add(g.gain);
+        }
+      }
+      continue;
+    }
 
     for (const g of engineResult.realized) {
       if (g.soldAt.getUTCFullYear() !== thisYear) continue;
       if (g.longTerm) ytdLongTermGain = ytdLongTermGain.add(g.gain);
       else ytdShortTermGain = ytdShortTermGain.add(g.gain);
+      const sale = salesById.get(g.sourceTxnId) ?? {
+        txnId: g.sourceTxnId,
+        soldAt: g.soldAt,
+        symbol: asset.symbol,
+        accountName: account.name,
+        quantity: ZERO,
+        proceeds: ZERO,
+        shortTermGain: ZERO,
+        longTermGain: ZERO,
+      };
+      sale.quantity = sale.quantity.add(g.quantity);
+      sale.proceeds = sale.proceeds.add(g.proceeds);
+      if (g.longTerm) sale.longTermGain = sale.longTermGain.add(g.gain);
+      else sale.shortTermGain = sale.shortTermGain.add(g.gain);
+      salesById.set(g.sourceTxnId, sale);
     }
 
     const latest = latestByAsset.get(asset.id);
@@ -166,7 +215,17 @@ export async function loadTaxLots(
     });
   }
 
-  return { lots, recentBuys, ytdShortTermGain, ytdLongTermGain };
+  const ytdSales = [...salesById.values()].sort(
+    (a, b) => a.soldAt.getTime() - b.soldAt.getTime() || a.symbol.localeCompare(b.symbol),
+  );
+  return {
+    lots,
+    recentBuys,
+    ytdShortTermGain,
+    ytdLongTermGain,
+    ytdSales,
+    ytdTaxAdvantagedGain,
+  };
 }
 
 type TaxProfileRow = typeof schema.taxProfiles.$inferSelect;

@@ -10,11 +10,13 @@ import { usePortfolio } from "@/components/portfolio-context";
 import { Button } from "@/components/ui/button";
 import { TabError, TabLoading } from "@/components/tax-center/tab-state";
 import { useTRPC } from "@/lib/trpc";
+import { cn } from "@/lib/utils";
 import { fmtQty, fmtUsd, gainClass } from "@/lib/viz";
 import type { AppRouter } from "@/server/routers";
 import { LossBreakdownBar } from "./loss-breakdown-bar";
 
-type Move = inferRouterOutputs<AppRouter>["tax"]["now"]["moves"][number];
+type Now = inferRouterOutputs<AppRouter>["tax"]["now"];
+type Move = Now["moves"][number];
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
@@ -106,6 +108,99 @@ function MoveText({ move: m }: { move: Move }) {
 }
 
 /**
+ * Ties the year's totals to the sales they add up from, and to the
+ * Dashboard's all-time "Gain from sales" tile: personas read that tile as
+ * their tax number and called this page wrong (barristan: "$11,589 here but I
+ * was told $23,857", `tax-center-realized-gains-mismatch`).
+ */
+function SalesBehindTotals({ data: d }: { data: Now }) {
+  const sales = d.ytdSales;
+  const allTime = d.dashboardRealized?.allTime ?? null;
+  const salesSum = sales.reduce((s, x) => s + x.shortTermGain + x.longTermGain, 0);
+  const iraGain = d.ytdTaxAdvantagedGain;
+  const showsAllTime = allTime !== null && Math.abs(allTime - salesSum) >= 1;
+  const showsIra = Math.abs(iraGain) >= 1;
+  if (sales.length === 0 && !showsAllTime) return null;
+
+  return (
+    <div className="grid gap-2 text-sm">
+      <p className="max-w-2xl text-muted-foreground">
+        {sales.length > 0 ? (
+          <>
+            Your {d.taxYear} totals add up{" "}
+            <span className="data">{plural(sales.length, "sale")}</span> from taxable accounts
+            {d.ytdOverridden && ", unless you typed your own totals in Tax Profile"}.
+          </>
+        ) : (
+          <>You haven&apos;t sold anything in a taxable account in {d.taxYear}.</>
+        )}
+        {showsAllTime && (
+          <>
+            {" "}
+            The Dashboard&apos;s Gain from sales,{" "}
+            <span className="data">{fmtUsd(allTime, 0)}</span>, counts every year
+            {showsIra ? (
+              <>
+                , and <span className="data">{fmtUsd(iraGain, 0)}</span> of this year&apos;s
+                gains came from sales inside retirement accounts, which aren&apos;t taxed
+              </>
+            ) : (
+              ", not just this one"
+            )}
+            .
+          </>
+        )}
+      </p>
+      {sales.length > 0 && (
+        <details className="group">
+          <summary className="w-fit cursor-pointer text-primary marker:text-muted-foreground">
+            Show the{" "}
+            {sales.length === 1 ? (
+              "sale"
+            ) : (
+              <>
+                <span className="data">{sales.length}</span> sales
+              </>
+            )}{" "}
+            behind these totals
+          </summary>
+          <ul className="mt-2 grid divide-y border-y">
+            {sales.map((s) => {
+              const gain = s.shortTermGain + s.longTermGain;
+              const mixed = Math.abs(s.shortTermGain) >= 0.005 && Math.abs(s.longTermGain) >= 0.005;
+              return (
+                <li
+                  key={s.txnId}
+                  className="grid grid-cols-[1fr_auto] items-baseline gap-x-4 gap-y-0.5 py-2"
+                >
+                  <span>
+                    <span className="font-medium">{s.symbol}</span>{" "}
+                    <span className="text-muted-foreground">
+                      sold <span className="data">{s.soldAt}</span>
+                    </span>
+                  </span>
+                  <span className={cn("data text-right", gainClass(gain))}>{fmtUsd(gain)}</span>
+                  <span className="data text-xs text-muted-foreground">
+                    {fmtQty(s.quantity)} in {s.accountName} · {fmtUsd(s.proceeds)}
+                  </span>
+                  <span className="data text-right text-xs text-muted-foreground">
+                    {mixed
+                      ? `${fmtUsd(s.shortTermGain, 0)} short · ${fmtUsd(s.longTermGain, 0)} long`
+                      : Math.abs(s.longTermGain) >= 0.005
+                        ? "long-term"
+                        : "short-term"}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
+/**
  * Zero-input view. Leads with the plain answer ("do I owe anything?"), then
  * only the sections that have something in them — a user who has never sold
  * sees one sentence, not a wall of $0.00 boxes (`tax-center-noisy-zero-states`).
@@ -178,7 +273,7 @@ export function NowTab({
           <StatStrip cols="grid-cols-1 sm:grid-cols-3">
             <StatTile
               hero={false}
-              label="Short-term gains"
+              label={`Short-term gains · ${d.taxYear}`}
               value={fmtUsd(d.ytdShortTermGain)}
               tone={gainClass(d.ytdShortTermGain)}
               subTone="text-muted-foreground"
@@ -186,7 +281,7 @@ export function NowTab({
             />
             <StatTile
               hero={false}
-              label="Long-term gains"
+              label={`Long-term gains · ${d.taxYear}`}
               value={fmtUsd(d.ytdLongTermGain)}
               tone={gainClass(d.ytdLongTermGain)}
               subTone="text-muted-foreground"
@@ -200,6 +295,8 @@ export function NowTab({
             />
           </StatStrip>
         )}
+
+        <SalesBehindTotals data={d} />
 
         <p className="text-xs text-muted-foreground">
           {hasSales

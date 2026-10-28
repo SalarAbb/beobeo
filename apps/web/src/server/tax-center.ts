@@ -17,6 +17,7 @@ import {
   type WashSaleBlock,
 } from "@beobeo/core";
 import { cached, userCacheKey } from "./cache";
+import { computeOverview } from "./portfolio";
 import { loadOrCreateTaxProfile, loadTaxLots, toEngineProfile } from "./tax/lots";
 
 const TTL = { now: 60, lots: 60, plan: 60, harvest: 60 } as const;
@@ -37,14 +38,23 @@ function lossCandidates(lots: TaxLot[]): LossLotCandidate[] {
 }
 
 async function assembleScope(userId: string, scope: string, asOf: Date) {
-  const [{ lots, recentBuys, ytdShortTermGain, ytdLongTermGain }, profileRow] =
-    await Promise.all([
-      loadTaxLots(userId, scope, asOf),
-      loadOrCreateTaxProfile(userId, scope),
-    ]);
+  const [bundle, profileRow] = await Promise.all([
+    loadTaxLots(userId, scope, asOf),
+    loadOrCreateTaxProfile(userId, scope),
+  ]);
+  const { lots, recentBuys, ytdShortTermGain, ytdLongTermGain } = bundle;
   const profile = toEngineProfile(profileRow, ytdShortTermGain, ytdLongTermGain);
   const blocked = detectWashSaleBlocks(lossCandidates(lots), recentBuys, asOf);
-  return { lots, profile, blocked, profileRow, ytdShortTermGain, ytdLongTermGain };
+  return {
+    lots,
+    profile,
+    blocked,
+    profileRow,
+    ytdShortTermGain,
+    ytdLongTermGain,
+    ytdSales: bundle.ytdSales,
+    ytdTaxAdvantagedGain: bundle.ytdTaxAdvantagedGain,
+  };
 }
 
 // ---- JSON-safe serialization (Decimal -> number, Date -> ISO string) ----
@@ -152,9 +162,16 @@ export function computeTaxLotsList(userId: string, portfolioId?: string) {
 
 export function computeTaxNow(userId: string, portfolioId?: string) {
   const scope = portfolioKey(portfolioId);
-  return cached(userCacheKey(userId, "tax-now3", scope), TTL.now, async () => {
+  return cached(userCacheKey(userId, "tax-now4", scope), TTL.now, async () => {
     const asOf = new Date();
-    const { lots, profile, blocked } = await assembleScope(userId, scope, asOf);
+    const [{ lots, profile, blocked, profileRow, ytdSales, ytdTaxAdvantagedGain }, overview] =
+      await Promise.all([
+        assembleScope(userId, scope, asOf),
+        // The dashboard's "Gain from sales" tile, so the page can say how its
+        // this-year taxable totals relate to it (personas read the all-time
+        // tile as their tax number and called the Tax Center wrong).
+        computeOverview(userId, portfolioId).catch(() => null),
+      ]);
 
     const yearEnd = new Date(Date.UTC(asOf.getUTCFullYear(), 11, 31, 23, 59, 59));
     const daysLeftInTaxYear = Math.max(
@@ -166,6 +183,7 @@ export function computeTaxNow(userId: string, portfolioId?: string) {
     const tm = taxMoves(lots, blocked, profile, asOf);
 
     return {
+      taxYear: asOf.getUTCFullYear(),
       daysLeftInTaxYear,
       // The effective (override-aware) YTD position — this is what actually
       // drives every marginal tax-cost number on this page: a loss offsetting
@@ -173,6 +191,23 @@ export function computeTaxNow(userId: string, portfolioId?: string) {
       ytdShortTermGain: profile.ytdShortTermGain.toNumber(),
       ytdLongTermGain: profile.ytdLongTermGain.toNumber(),
       taxOwedSoFarUsd: taxOwedSoFar(profile).toNumber(),
+      ytdOverridden:
+        profileRow.ytdShortTermOverride !== null || profileRow.ytdLongTermOverride !== null,
+      ytdSales: ytdSales.map((s) => ({
+        txnId: s.txnId,
+        soldAt: toIsoDate(s.soldAt),
+        symbol: s.symbol,
+        accountName: s.accountName,
+        quantity: s.quantity.toNumber(),
+        proceeds: s.proceeds.toNumber(),
+        shortTermGain: s.shortTermGain.toNumber(),
+        longTermGain: s.longTermGain.toNumber(),
+      })),
+      ytdTaxAdvantagedGain: ytdTaxAdvantagedGain.toNumber(),
+      dashboardRealized: overview && {
+        allTime: overview.totals.realized,
+        thisYear: overview.totals.realizedThisYear,
+      },
       moves: tm.moves.map(serializeMove),
       movesTaxSavedUsd: tm.lockAndHarvestSavedUsd.toNumber(),
       movesBreakdown: {
