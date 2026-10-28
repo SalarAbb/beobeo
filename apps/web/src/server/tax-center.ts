@@ -181,6 +181,41 @@ export function computeTaxLotsList(userId: string, portfolioId?: string) {
 }
 
 /**
+ * What each account holds (retirement accounts included), from the same
+ * per-account replay as the lots: chat answers "what's in my IRA?" and
+ * "work from the brokerage alone" from it. Value is null when unpriced.
+ */
+export function computeAccountHoldings(userId: string, portfolioId?: string) {
+  const scope = portfolioKey(portfolioId);
+  return cached(userCacheKey(userId, "account-holdings", scope), TTL.lots, async () => {
+    const { accountPositions } = await loadScopeLots(userId, scope, new Date());
+    const byAccount = new Map<
+      string,
+      { value: number; costBasis: number; holdings: { symbol: string; quantity: number; costBasis: number; marketValue: number | null }[] }
+    >();
+    for (const p of accountPositions) {
+      const a = byAccount.get(p.accountName) ?? { value: 0, costBasis: 0, holdings: [] };
+      const marketValue = p.price ? p.quantity.mul(p.price).toDecimalPlaces(2).toNumber() : null;
+      a.value += marketValue ?? 0;
+      a.costBasis += p.costBasis.toNumber();
+      a.holdings.push({
+        symbol: p.symbol,
+        quantity: p.quantity.toNumber(),
+        costBasis: p.costBasis.toDecimalPlaces(2).toNumber(),
+        marketValue,
+      });
+      byAccount.set(p.accountName, a);
+    }
+    return [...byAccount].map(([accountName, a]) => ({
+      accountName,
+      value: Math.round(a.value * 100) / 100,
+      costBasis: Math.round(a.costBasis * 100) / 100,
+      holdings: a.holdings.sort((x, y) => (y.marketValue ?? 0) - (x.marketValue ?? 0)),
+    }));
+  });
+}
+
+/**
  * `income` = filing status + taxable income the user saved on this device
  * (Tax Profile), which unlocks the 0% long-term gain moves. Without it the
  * list has no gain moves and `zeroRateRoomUsd` is null.

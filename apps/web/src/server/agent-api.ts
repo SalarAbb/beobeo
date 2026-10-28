@@ -20,6 +20,7 @@ import {
   loadEngineTransactions,
 } from "./portfolio";
 import {
+  computeAccountHoldings,
   computeTaxLotsList,
   computeTaxNow,
   computeTaxPlan,
@@ -48,12 +49,13 @@ async function findUserAsset(userId: string, symbol: string) {
 async function loadContextSnapshot(userId: string, portfolioId?: string) {
   const accountFilter = [eq(schema.accounts.userId, userId)];
   if (portfolioId) accountFilter.push(eq(schema.accounts.portfolioId, portfolioId));
-  const [overview, series, tax, taxLots, taxNow, accounts] = await Promise.all([
+  const [overview, series, tax, taxLots, taxNow, accountHoldings, accountRows] = await Promise.all([
     computeOverview(userId, portfolioId),
     computeTimeseries(userId, undefined, portfolioId).catch(() => []),
     computeTaxProfile(userId, portfolioId).catch(() => null),
     computeTaxLotsList(userId, portfolioId).catch(() => []),
     computeTaxNow(userId, portfolioId).catch(() => null),
+    computeAccountHoldings(userId, portfolioId).catch(() => []),
     db
       .select({ name: schema.accounts.name, type: schema.accounts.accountType })
       .from(schema.accounts)
@@ -80,6 +82,19 @@ async function loadContextSnapshot(userId: string, portfolioId?: string) {
     else t.shortTerm += l.unrealizedGain;
     taxable.set(l.symbol, t);
   }
+  // "What's in my IRA?" / "answer from the brokerage alone": without each
+  // account's holdings the agent said it couldn't tell taxable from IRA.
+  const heldIn = new Map(accountHoldings.map((a) => [a.accountName, a]));
+  const accounts = accountRows.map((a) => {
+    const held = heldIn.get(a.name);
+    return {
+      name: a.name,
+      type: a.type,
+      value: held?.value ?? 0,
+      costBasis: held?.costBasis ?? 0,
+      holdings: held?.holdings ?? [],
+    };
+  });
   return {
     contributions,
     totals: {

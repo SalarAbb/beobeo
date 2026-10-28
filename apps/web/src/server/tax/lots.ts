@@ -35,6 +35,18 @@ export interface TaxLotBundle {
   /** This year's realized gain inside IRAs/401(k)s: counted in the
    *  dashboard's "this year" figure, never taxed. */
   ytdTaxAdvantagedGain: ReturnType<typeof D>;
+  /** What each account holds now, retirement accounts included: one row per
+   *  (account, asset) with units left. `price` is null when unpriced. */
+  accountPositions: AccountPosition[];
+}
+
+export interface AccountPosition {
+  accountName: string;
+  accountType: string;
+  symbol: string;
+  quantity: ReturnType<typeof D>;
+  costBasis: ReturnType<typeof D>;
+  price: ReturnType<typeof D> | null;
 }
 
 export interface YtdSale {
@@ -137,6 +149,7 @@ export async function loadTaxLots(
       ytdLongTermGain: ZERO,
       ytdSales: [],
       ytdTaxAdvantagedGain: ZERO,
+      accountPositions: [],
     };
   }
 
@@ -155,9 +168,28 @@ export async function loadTaxLots(
   let ytdLongTermGain = ZERO;
   let ytdTaxAdvantagedGain = ZERO;
   const salesById = new Map<string, YtdSale>();
+  const accountPositions: AccountPosition[] = [];
   const thisYear = asOf.getUTCFullYear();
 
   for (const { account, asset, result: engineResult } of replayByAccount(rows, knownSplits)) {
+    let quantity = ZERO;
+    let costBasis = ZERO;
+    for (const lot of engineResult.openLots) {
+      quantity = quantity.add(lot.quantity);
+      costBasis = costBasis.add(lot.costBasis);
+    }
+    if (quantity.gt(0)) {
+      const latest = latestByAsset.get(asset.id);
+      accountPositions.push({
+        accountName: account.name,
+        accountType: account.accountType,
+        symbol: asset.symbol,
+        quantity,
+        costBasis,
+        price: latest ? D(latest.close) : null,
+      });
+    }
+
     if (account.accountType !== "taxable") {
       // IRAs contribute no sellable lots and no taxable gain.
       for (const g of engineResult.realized) {
@@ -247,6 +279,7 @@ export async function loadTaxLots(
     ytdLongTermGain,
     ytdSales,
     ytdTaxAdvantagedGain,
+    accountPositions,
   };
 }
 
