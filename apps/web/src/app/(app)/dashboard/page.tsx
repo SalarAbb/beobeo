@@ -362,15 +362,25 @@ export default function DashboardPage() {
   const queryClient = useQueryClient();
   const prefetchPosition = (assetId: string) =>
     void queryClient.prefetchQuery(trpc.portfolio.position.queryOptions({ assetId, ...scope }));
+  // Keep showing the previous window's data while the new one loads, but
+  // never another portfolio's: that put Main's numbers under "Kid Custodial"
+  // for a moment after a switch (hermione, portfolios.manage mission 32).
+  const samePortfolio = <T,>(
+    prev: T | undefined,
+    prevQuery: { queryKey: readonly unknown[] } | undefined,
+  ): T | undefined => {
+    const input = (prevQuery?.queryKey[1] as { input?: { portfolioId?: string } } | undefined)
+      ?.input;
+    return input?.portfolioId === scope.portfolioId ? keepPreviousData(prev) : undefined;
+  };
   const overview = useQuery({
     ...trpc.portfolio.overview.queryOptions({ ...scope, window: pnlWindow }),
-    // keep showing the previous window's data while the new one loads
-    placeholderData: keepPreviousData,
+    placeholderData: samePortfolio,
   });
   const timeseries = useQuery(trpc.portfolio.timeseries.queryOptions(scope));
   const metrics = useQuery({
     ...trpc.portfolio.metrics.queryOptions({ ...scope, window: pnlWindow }),
-    placeholderData: keepPreviousData,
+    placeholderData: samePortfolio,
   });
 
   const windowed = pnlWindow !== "all";
