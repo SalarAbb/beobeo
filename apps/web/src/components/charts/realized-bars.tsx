@@ -30,7 +30,7 @@ export function RealizedBars({ data }: { data: YearGains[] }) {
   if (data.length === 0) {
     return (
       <p className="py-10 text-center text-sm text-muted-foreground">
-        No realized gains yet — nothing has been sold.
+        Nothing sold yet, so no gain or loss from sales.
       </p>
     );
   }
@@ -66,7 +66,7 @@ export function RealizedBars({ data }: { data: YearGains[] }) {
                     Total <span className="font-medium">{fmtUsd(p.total)}</span>
                   </p>
                   <p className="text-muted-foreground data">
-                    Short-term {fmtUsd(p.shortTerm)} · Long-term {fmtUsd(p.longTerm)}
+                    Held under a year {fmtUsd(p.shortTerm)} · over a year {fmtUsd(p.longTerm)}
                   </p>
                 </div>
               );

@@ -143,7 +143,7 @@ export function PriceChart({
 
   return (
     <div>
-      <div className="mb-2 flex items-center gap-4 text-xs">
+      <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
         <span className="flex items-center gap-1.5">
           <span
             className="inline-block h-0.5 w-4 rounded"
@@ -159,7 +159,7 @@ export function PriceChart({
             className="inline-block w-4 border-t-2 border-dashed"
             style={{ borderColor: theme.muted }}
           />
-          <span className="text-muted-foreground">Avg cost</span>
+          <span className="text-muted-foreground">Your average price</span>
         </span>
         <span className="flex items-center gap-1.5">
           <span style={{ color: theme.gain }}>▲</span>

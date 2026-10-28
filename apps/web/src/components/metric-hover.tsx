@@ -30,7 +30,8 @@ export function MetricHover({
   /** One-line reading of the user's own number ("fair reward for the risk"). */
   insight: string;
   meaning: string;
-  yardstick: string;
+  /** Footer comparison; omitted for plain terms that have none. */
+  yardstick?: string;
   /** The trigger's content. */
   children: ReactNode;
   className?: string;
@@ -53,7 +54,7 @@ export function MetricHover({
         </button>
       </TooltipTrigger>
       <TooltipContent side="bottom" align="start" className="w-64 p-0">
-        <div className="px-3.5 pt-3">
+        <div className={cn("px-3.5 pt-3", !yardstick && "pb-3")}>
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
             {label}
             {term && <span className="opacity-60"> · {term}</span>}
@@ -61,10 +62,12 @@ export function MetricHover({
           <p className="mt-1 text-sm font-semibold leading-snug">{insight}</p>
           <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{meaning}</p>
         </div>
-        <div className="mt-2.5 flex items-center gap-1.5 border-t px-3.5 py-2 text-[11px] text-muted-foreground">
-          <Ruler aria-hidden className="size-3 shrink-0 opacity-60" />
-          {yardstick}
-        </div>
+        {yardstick && (
+          <div className="mt-2.5 flex items-center gap-1.5 border-t px-3.5 py-2 text-[11px] text-muted-foreground">
+            <Ruler aria-hidden className="size-3 shrink-0 opacity-60" />
+            {yardstick}
+          </div>
+        )}
       </TooltipContent>
     </Tooltip>
   );
