@@ -31,12 +31,12 @@ const STATUS_OPTIONS: { value: FilingStatus; label: string }[] = [
 type AccountType = "taxable" | "traditional_ira" | "roth_ira" | "401k";
 
 /** The accounts most people have; each tap becomes one account. */
-const ACCOUNT_PRESETS: { name: string; type: AccountType; hint: string }[] = [
-  { name: "Brokerage", type: "taxable", hint: "taxable" },
-  { name: "Crypto exchange", type: "taxable", hint: "taxable" },
-  { name: "Roth IRA", type: "roth_ira", hint: "tax-free" },
-  { name: "Traditional IRA", type: "traditional_ira", hint: "tax-deferred" },
-  { name: "401(k)", type: "401k", hint: "tax-deferred" },
+const ACCOUNT_PRESETS: { name: string; type: AccountType; hint: string; example: string }[] = [
+  { name: "Brokerage", type: "taxable", hint: "taxable", example: "Fidelity" },
+  { name: "Crypto exchange", type: "taxable", hint: "taxable", example: "Coinbase" },
+  { name: "Roth IRA", type: "roth_ira", hint: "tax-free", example: "Vanguard Roth" },
+  { name: "Traditional IRA", type: "traditional_ira", hint: "tax-deferred", example: "Schwab IRA" },
+  { name: "401(k)", type: "401k", hint: "tax-deferred", example: "Work 401(k)" },
 ];
 
 const TYPE_LABEL: Record<string, string> = {
@@ -308,11 +308,31 @@ function AccountsStep({
   const selected =
     picked ?? (existing.data && existing.data.length === 0 ? new Set(["Brokerage"]) : new Set<string>());
 
+  // What each ticked kind is called at your broker ("IBKR"): generic names
+  // meant renaming them on Accounts before the add form's list made sense
+  // (hermione, mission 34). Blank keeps the kind's own name.
+  const [names, setNames] = useState<Record<string, string>>({});
+  const chosen = offered.filter((p) => selected.has(p.name));
+
   function toggle(name: string) {
     const next = new Set(selected);
     if (next.has(name)) next.delete(name);
     else next.add(name);
     setPicked(next);
+  }
+
+  function finish() {
+    // Never create an account twice: a typed name that already exists, or
+    // that two kinds share, is added once.
+    const taken = new Set(have);
+    const out: AccountPreset[] = [];
+    for (const p of chosen) {
+      const name = names[p.name]?.trim() || p.name;
+      if (taken.has(name.toLowerCase())) continue;
+      taken.add(name.toLowerCase());
+      out.push({ ...p, name });
+    }
+    onDone(out);
   }
 
   return (
@@ -367,13 +387,29 @@ function AccountsStep({
           );
         })}
       </div>
+      {/* Below the toggles, not inside them, so ticking one never moves the
+          next kind out from under the pointer. */}
+      {existing.data && chosen.length > 0 && (
+        <div className="grid gap-1.5">
+          <Label className="text-sm">What do you call them? (optional)</Label>
+          {chosen.map((p) => (
+            <div key={p.name} className="flex items-center gap-2">
+              <span className="w-28 shrink-0 text-sm text-muted-foreground">{p.name}</span>
+              <Input
+                aria-label={`Name for your ${p.name}`}
+                placeholder={`e.g. ${p.example}`}
+                maxLength={100}
+                value={names[p.name] ?? ""}
+                onChange={(e) => setNames({ ...names, [p.name]: e.target.value })}
+              />
+            </div>
+          ))}
+        </div>
+      )}
       <p className="text-xs text-muted-foreground">
         Rename or retype them any time on the Accounts page.
       </p>
-      <Button
-        onClick={() => onDone(offered.filter((p) => selected.has(p.name)))}
-        disabled={existing.isLoading}
-      >
+      <Button onClick={finish} disabled={existing.isLoading}>
         Continue
       </Button>
     </AuthShell>
