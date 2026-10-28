@@ -107,3 +107,27 @@ export function bracketOptions(status: FilingStatus): BracketOption[] {
   }
   return out;
 }
+
+/** Pay before deductions → taxable income, assuming the standard deduction. */
+export function taxableFromPay(status: FilingStatus, pay: number): number {
+  return Math.max(0, pay - STANDARD_DEDUCTION[status]);
+}
+
+/**
+ * The band (index into `bracketOptions`) a taxable income falls in, and the
+ * rates the tax profile should hold for it. A band's lower bound belongs to
+ * it ($50,400 single is 22%). Unlike a picked band, which only knows its lower
+ * edge, a known income gets its exact long-term rate (single $50,000 → 15%).
+ */
+export function ratesAtIncome(
+  status: FilingStatus,
+  taxableIncome: number,
+): { band: number; ordinaryRatePct: number; ltcgRatePct: number } {
+  const bands = bracketOptions(status);
+  const band = bands.findIndex((b) => b.incomeTo === null || taxableIncome < b.incomeTo);
+  return {
+    band,
+    ordinaryRatePct: bands[band]!.ordinaryRatePct,
+    ltcgRatePct: ltcgRateAt(status, taxableIncome),
+  };
+}

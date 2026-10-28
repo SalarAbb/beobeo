@@ -45,7 +45,7 @@ export const FEATURES: Feature[] = [
   { id: "chat.followup", route: "/chat", does: "Have a short back-and-forth with the assistant, leave Chat and come back (the conversation should still be open), then reopen an earlier conversation from the list" },
   { id: "accounts.types", route: "/accounts", does: "Make sure each of your accounts is marked correctly (taxable, IRA, Roth, 401k) and see why it matters", fits: ["multi-account", "tax"] },
   { id: "portfolios.manage", route: "/dashboard", does: "Switch between portfolios, or create a separate portfolio (e.g. for a child or a side account) and view it alone", fits: ["multi-account", "expert"] },
-  { id: "welcome.setup", route: "/welcome", does: "Go through the first-run setup as if you had just signed up: how you file and your rough income, which kinds of accounts you have, then add a first holding; afterwards check the Tax Center's Tax Profile shows your bracket", fits: ["beginner", "tax"] },
+  { id: "welcome.setup", route: "/welcome", does: "Go through the first-run setup as if you had just signed up: how you file and your rough pay (or taxable-income band), which kinds of accounts you have, then add a first holding; afterwards check the Tax Center's Tax Profile shows your bracket and says why", fits: ["beginner", "tax"] },
   { id: "account.profile", route: "/account", does: "Check which account you're signed into, how you sign in, and how much is stored" },
   { id: "app.mobile", route: "/dashboard", does: "Do your usual check-in on your phone (small screen)", fits: ["beginner"] },
 ];

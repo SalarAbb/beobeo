@@ -3,6 +3,7 @@
 import {
   FILING_STATUS_LABEL,
   ltcgZeroUpTo,
+  ratesAtIncome,
   STANDARD_DEDUCTION,
   type FilingStatus,
 } from "@beobeo/core/tax-brackets";
@@ -142,6 +143,14 @@ function ProfileForm({ initial }: { initial: NonNullable<Profile> }) {
             </span>
           </div>
         </div>
+        <RatesCheck
+          ordinary={n(fedOrdinary)}
+          ltcg={n(fedLtcg)}
+          onUse={(o, l) => {
+            setFedOrdinary(String(o));
+            setFedLtcg(String(l));
+          }}
+        />
       </Section>
 
       <Section title="This year so far">
@@ -184,6 +193,55 @@ function ProfileForm({ initial }: { initial: NonNullable<Profile> }) {
         advisor for your actual filing.
       </p>
     </div>
+  );
+}
+
+/**
+ * Says where the federal rates come from: with an income on the device, the
+ * 2026 bracket it falls in, and a one-tap fix when the fields disagree.
+ * Hermione's setup chose 24% at $250k joint pay (right: $217,800 taxable),
+ * but nothing on this page said why, so she read it as wrong.
+ */
+function RatesCheck({
+  ordinary,
+  ltcg,
+  onUse,
+}: {
+  ordinary: number | undefined;
+  ltcg: number | undefined;
+  onUse: (ordinary: number, ltcg: number) => void;
+}) {
+  const { complete } = useIncome();
+  if (!complete)
+    return (
+      <p className="text-xs text-muted-foreground">
+        Setup filled these from the income band you picked, or 24% / 15% if you skipped it. Add
+        your income above and we&apos;ll check them against the 2026 brackets.
+      </p>
+    );
+  const at = ratesAtIncome(complete.status, complete.taxableIncomeUsd);
+  const matches = ordinary === at.ordinaryRatePct && ltcg === at.ltcgRatePct;
+  return (
+    <p className="text-xs text-muted-foreground">
+      At about <span className="data">{fmtUsd(complete.taxableIncomeUsd, 0)}</span> of taxable
+      income ({FILING_STATUS_LABEL[complete.status].toLowerCase()}), 2026 brackets put you at{" "}
+      <span className="data">{at.ordinaryRatePct}%</span> on short-term gains and{" "}
+      <span className="data">{at.ltcgRatePct}%</span> on long-term ones
+      {matches ? ", which is what these say." : "."}
+      {!matches && (
+        <>
+          {" "}
+          <button
+            type="button"
+            onClick={() => onUse(at.ordinaryRatePct, at.ltcgRatePct)}
+            className="font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Use {at.ordinaryRatePct}% / {at.ltcgRatePct}%
+          </button>
+          , then Save.
+        </>
+      )}
+    </p>
   );
 }
 

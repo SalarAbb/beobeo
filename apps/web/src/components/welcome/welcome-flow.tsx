@@ -7,6 +7,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, FileUp, PenLine, ArrowRight, Loader2 } from "lucide-react";
 import {
   bracketOptions,
+  ratesAtIncome,
+  STANDARD_DEDUCTION,
+  taxableFromPay,
   type BracketOption,
   type FilingStatus,
 } from "@beobeo/core/tax-brackets";
@@ -147,22 +150,34 @@ function TaxStep({
 }) {
   const [status, setStatus] = useState<FilingStatus>("single");
   const [band, setBand] = useState<number | null>(null);
+  // Optional pay before deductions. People know their pay, not their taxable
+  // income: hermione ($250k, married) expected 32% and read the 24% band
+  // setup chose as wrong. Typing it picks the band and says why.
+  const [payText, setPayText] = useState("");
   const [stateRate, setStateRate] = useState("");
   const bands = bracketOptions(status);
-  const picked = band === null ? null : bands[band];
+  const payNum = Number(payText.replace(/[$,\s]/g, ""));
+  const pay = payText.trim() !== "" && Number.isFinite(payNum) && payNum >= 0 ? payNum : null;
+  const taxable = pay === null ? null : taxableFromPay(status, pay);
+  const fromPay = taxable === null ? null : ratesAtIncome(status, taxable);
+  // A tapped band wins over the typed pay.
+  const chosen = band ?? fromPay?.band ?? null;
+  const picked = chosen === null ? null : bands[chosen];
+  const usesPay = fromPay !== null && chosen === fromPay.band;
+  const rates = usesPay ? fromPay : picked;
   const statePct = Number(stateRate);
   const stateOk = stateRate.trim() === "" || (Number.isFinite(statePct) && statePct >= 0 && statePct <= 20);
-  // Filing status has no server column yet; the device keeps it for Tax
-  // Profile → Your income (the 0% gain room, R-003).
+  // Filing status and income have no server column yet; the device keeps
+  // them for Tax Profile → Your income (the 0% gain room, R-003).
   const { income, setIncome } = useIncome();
 
   function onContinue() {
-    if (picked) setIncome({ ...income, status });
-    if (!picked && stateRate.trim() === "") return onDone(null);
+    if (picked) setIncome({ status, taxableIncomeUsd: usesPay ? taxable : income.taxableIncomeUsd });
+    if (!rates && stateRate.trim() === "") return onDone(null);
     onDone({
-      ...(picked && {
-        federalOrdinaryRatePct: picked.ordinaryRatePct,
-        federalLtcgRatePct: picked.ltcgRatePct,
+      ...(rates && {
+        federalOrdinaryRatePct: rates.ordinaryRatePct,
+        federalLtcgRatePct: rates.ltcgRatePct,
       }),
       // Most states tax gains like any other income.
       ...(stateRate.trim() !== "" && {
@@ -189,7 +204,32 @@ function TaxStep({
         />
       </div>
       <div className="grid gap-2">
-        <Label id="band-label">Taxable income this year, roughly</Label>
+        <Label htmlFor="pay">Your pay this year, roughly</Label>
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm text-muted-foreground">$</span>
+          <Input
+            id="pay"
+            inputMode="decimal"
+            placeholder={status === "married_joint" ? "e.g. 150000 for both of you" : "e.g. 85000"}
+            value={payText}
+            onChange={(e) => {
+              setPayText(e.target.value);
+              setBand(null);
+            }}
+            className="data w-48"
+          />
+        </div>
+        {taxable !== null && fromPay && (
+          <p className="text-xs text-muted-foreground">
+            After the <span className="data">${STANDARD_DEDUCTION[status].toLocaleString("en-US")}</span>{" "}
+            standard deduction, that&apos;s about{" "}
+            <span className="data">${Math.round(taxable).toLocaleString("en-US")}</span> of taxable
+            income: the {bands[fromPay.band]!.ordinaryRatePct}% bracket below.
+          </p>
+        )}
+      </div>
+      <div className="grid gap-2">
+        <Label id="band-label">Or pick your taxable income</Label>
         <p className="-mt-1 text-xs text-muted-foreground">
           2026 federal brackets. Taxable income is what&apos;s left after deductions, so it&apos;s
           usually well below your pay.
@@ -200,9 +240,14 @@ function TaxStep({
               key={b.ordinaryRatePct}
               type="button"
               role="radio"
-              aria-checked={band === i}
-              onClick={() => setBand(band === i ? null : i)}
-              className={`${choice(band === i)} flex items-center justify-between gap-3`}
+              aria-checked={chosen === i}
+              onClick={() => {
+                if (chosen !== i) return setBand(i);
+                // Un-picking the band the pay chose forgets the pay too.
+                setBand(null);
+                setPayText("");
+              }}
+              className={`${choice(chosen === i)} flex items-center justify-between gap-3`}
             >
               <span className="data font-medium">{bandLabel(b)}</span>
               <span className="data text-xs text-muted-foreground">
@@ -212,8 +257,8 @@ function TaxStep({
           ))}
         </div>
         <p className="text-xs text-muted-foreground">
-          {picked
-            ? `Sales held a year or less are taxed at ${picked.ordinaryRatePct}%, longer ones at ${picked.ltcgRatePct}%.`
+          {rates
+            ? `Sales held a year or less are taxed at ${rates.ordinaryRatePct}%, longer ones at ${rates.ltcgRatePct}%.`
             : "Not sure? Skip it and we'll assume the 24% bracket (15% on long-term gains)."}
         </p>
       </div>

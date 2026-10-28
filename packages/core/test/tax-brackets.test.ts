@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bracketOptions, ltcgRateAt } from "../src/tax-brackets";
+import { bracketOptions, ltcgRateAt, ratesAtIncome, taxableFromPay } from "../src/tax-brackets";
 
 describe("bracketOptions", () => {
   it("single: six bands, 10% folded into 12%, each with its gain rate", () => {
@@ -40,5 +40,35 @@ describe("ltcgRateAt", () => {
     expect(ltcgRateAt("single", 545_499)).toBe(15);
     expect(ltcgRateAt("single", 545_500)).toBe(20);
     expect(ltcgRateAt("married_joint", 98_899)).toBe(0);
+  });
+});
+
+describe("taxableFromPay + ratesAtIncome", () => {
+  it("$250k pay, married jointly: $217,800 taxable sits in the 24% band, 15% on long-term", () => {
+    // 250,000 − 32,200 standard deduction = 217,800; 24% runs 211,400–403,550.
+    const taxable = taxableFromPay("married_joint", 250_000);
+    expect(taxable).toBe(217_800);
+    expect(ratesAtIncome("married_joint", taxable)).toEqual({ band: 2, ordinaryRatePct: 24, ltcgRatePct: 15 });
+  });
+
+  it("pay under the standard deduction is $0 taxable: lowest band, 0% on gains", () => {
+    expect(taxableFromPay("single", 12_000)).toBe(0);
+    expect(ratesAtIncome("single", 0)).toEqual({ band: 0, ordinaryRatePct: 12, ltcgRatePct: 0 });
+  });
+
+  it("a band's lower bound belongs to it, and the gain rate follows the exact income", () => {
+    // Single: 22% starts at 50,400. 50,000 is still the 12% band, but past the
+    // 49,450 0% bound, so 15% (the picked band would say 0%).
+    expect(ratesAtIncome("single", 50_400)).toEqual({ band: 1, ordinaryRatePct: 22, ltcgRatePct: 15 });
+    expect(ratesAtIncome("single", 50_000)).toEqual({ band: 0, ordinaryRatePct: 12, ltcgRatePct: 15 });
+  });
+
+  it("the open-ended top band", () => {
+    // HoH 37% from 640,600; 20% on gains from 579,600.
+    expect(ratesAtIncome("head_of_household", 1_000_000)).toEqual({
+      band: 5,
+      ordinaryRatePct: 37,
+      ltcgRatePct: 20,
+    });
   });
 });
