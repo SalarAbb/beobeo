@@ -65,13 +65,22 @@ export async function recreateSimUser(persona: Persona, email: string, password:
  * A disposable twin of a persona's account for missions: same portfolios, accounts, trades and tax
  * profiles, under `sim+<id>-m@beobeo.sim`, recreated before every mission. Missions really use the
  * app (save, edit, delete, import), and none of that may touch the persona's own history, which the
- * daily habits keep building on.
+ * daily habits keep building on. `empty` makes a brand-new sign-up instead (no portfolios, accounts,
+ * trades or tax profile), for first-run missions: a setup run on a copied history reported the
+ * persona's own VOO as "doubled" and its own accounts as "pre-existing" (hermione, missions 21–33).
  */
-export async function cloneSimUser(sourceUserId: string, persona: Persona, email: string, password: string): Promise<SimUser> {
+export async function cloneSimUser(
+  sourceUserId: string,
+  persona: Persona,
+  email: string,
+  password: string,
+  opts: { empty?: boolean } = {},
+): Promise<SimUser> {
   await db.delete(schema.user).where(eq(schema.user.email, email));
   const userId = crypto.randomUUID();
   await db.insert(schema.user).values({ id: userId, name: persona.name, email, emailVerified: true });
   await db.insert(schema.account).values({ id: crypto.randomUUID(), accountId: userId, providerId: "credential", userId, password: await hashPassword(password) });
+  if (opts.empty) return { userId, accounts: new Map() };
 
   const portfolioMap = new Map<string, string>();
   for (const { id, userId: _u, createdAt: _c, ...rest } of await db.select().from(schema.portfolios).where(eq(schema.portfolios.userId, sourceUserId))) {

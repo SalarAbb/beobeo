@@ -76,11 +76,23 @@ export async function runOneMission(
   if (!sourceId) return { persona: p, feature, result: null, diaryLine: "" };
 
   // A disposable twin, so the mission can really save, edit, delete and import.
+  // First-run setup starts from nothing, as a real sign-up does.
   const email = simEmail(p.id, "-m");
-  const twin = await cloneSimUser(sourceId, p, email, simPassword(p.id));
+  const twin = await cloneSimUser(sourceId, p, email, simPassword(p.id), { empty: feature.id === "welcome.setup" });
   const client = new AppClient();
   await client.signIn(email, simPassword(p.id));
-  const overview = await client.query<Overview>("portfolio.overview", { window: "all" });
+  let overview = await client.query<Overview>("portfolio.overview", { window: "all" });
+  let freshNote = "";
+  if (feature.id === "welcome.setup") {
+    // The empty twin's dashboard says $0; the persona still knows what it owns.
+    const own = new AppClient();
+    await own.signIn(simEmail(p.id), simPassword(p.id));
+    overview = await own.query<Overview>("portfolio.overview", { window: "all" });
+    freshNote = "You have just created a brand-new Beobeo account: it has no accounts or holdings yet.\n";
+  }
+  const brief = freshNote
+    ? freshNote + appBrief(overview.data).replace("(as shown on your Beobeo dashboard)", "(what you own at your brokers, not in Beobeo yet)")
+    : appBrief(overview.data);
   const csvFile = feature.id === "transactions.import" ? await brokerCsv(twin.userId, join(o.outDir, `mission-${p.id}-broker-export.csv`), date) : null;
 
   const rng = mulberry32(seedFrom(`mission-view:${p.id}:${date}`));
@@ -88,7 +100,7 @@ export async function runOneMission(
   const scheme = /dark mode/i.test(p.aesthetic) ? "dark" : "light";
   const ctx = await newContext(browser, { viewport, scheme, cookies: client.cookieList, storage: deviceStorage(p, twin.userId) });
   const result = await runMission(ctx, {
-    persona: p, feature, holdingsBrief: appBrief(overview.data), themes: themesBrief(journal), csvFile,
+    persona: p, feature, holdingsBrief: brief, themes: themesBrief(journal), csvFile,
     viewport, scheme, outDir: o.outDir, date, journal, runId,
   }).finally(() => ctx.close());
   if (!result) return { persona: p, feature, result: null, diaryLine: "" };
