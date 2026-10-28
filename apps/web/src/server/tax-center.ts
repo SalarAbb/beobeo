@@ -234,15 +234,30 @@ export function computeTaxPlan(
   portfolioId: string | undefined,
   targetProceeds: number,
   doNotSell?: string[],
+  accountId?: string,
 ) {
   const scope = portfolioKey(portfolioId);
   const doNotSellKey = doNotSell && doNotSell.length > 0 ? [...doNotSell].sort().join(",") : "none";
   return cached(
-    userCacheKey(userId, "tax-plan5", scope, Math.round(targetProceeds), doNotSellKey),
+    userCacheKey(
+      userId,
+      "tax-plan5",
+      scope,
+      Math.round(targetProceeds),
+      doNotSellKey,
+      accountId ?? "any",
+    ),
     TTL.plan,
     async () => {
       const asOf = new Date();
-      const { lots, profile, blocked } = await assembleScope(userId, scope, asOf);
+      const all = await assembleScope(userId, scope, asOf);
+      // "Sell only from my Schwab account" (petyr, mission 4): the plan, the FIFO
+      // comparison and the on-hold list see just that account's lots. Wash-sale
+      // detection already ran over every account, so a rebuy elsewhere still blocks.
+      const { profile } = all;
+      const lots = accountId ? all.lots.filter((l) => l.accountId === accountId) : all.lots;
+      const inAccount = new Set(lots.map((l) => l.lotId));
+      const blocked = accountId ? all.blocked.filter((b) => inAccount.has(b.lotId)) : all.blocked;
       const doNotSellSet = doNotSell && doNotSell.length > 0 ? new Set(doNotSell) : undefined;
       const opts = {
         targetProceeds: D(targetProceeds),

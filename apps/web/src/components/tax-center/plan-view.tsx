@@ -2,7 +2,7 @@
 
 import { Section } from "@/components/page-section";
 import { SellPlanChart } from "@/components/tax-center/sell-plan-chart";
-import { fmtUsd } from "@/lib/viz";
+import { fmtUsd, gainClass } from "@/lib/viz";
 import { cn } from "@/lib/utils";
 
 interface Lot {
@@ -10,6 +10,8 @@ interface Lot {
   assetClass: string;
   accountName: string;
   assetId: string;
+  lotId: string;
+  openedAt: string;
 }
 interface Sale {
   lot: Lot;
@@ -51,6 +53,67 @@ function groupBlocks(blocked: Block[]) {
   }
   return [...groups.values()];
 }
+const fmtUnits = (q: number) => q.toLocaleString("en-US", { maximumFractionDigits: 6 });
+
+/**
+ * The plan's purchases one by one, closed by default: what you tell your broker
+ * when you sell specific shares instead of its oldest-first default (petyr, mission
+ * 4: "the plan only gave per-ticker totals, so I never saw which lots to sell").
+ * Same order as the chart's columns.
+ */
+function PurchaseList({ sales }: { sales: Sale[] }) {
+  const order = [...new Set(sales.map((s) => s.lot.symbol))];
+  // The optimizer's swap pass can leave a zero-unit sale behind: nothing to tell a broker.
+  const rows = sales
+    .map((s, i) => ({ s, i }))
+    .filter(({ s }) => s.sellQuantity > 0)
+    .sort((a, b) => order.indexOf(a.s.lot.symbol) - order.indexOf(b.s.lot.symbol) || a.i - b.i)
+    .map(({ s }) => s);
+  return (
+    <details className="group text-sm">
+      <summary className="w-fit cursor-pointer text-primary marker:text-muted-foreground">
+        Show the{" "}
+        {rows.length === 1 ? (
+          "purchase"
+        ) : (
+          <>
+            <span className="data">{rows.length}</span> purchases
+          </>
+        )}{" "}
+        to sell
+      </summary>
+      <p className="mt-2 text-xs text-muted-foreground">
+        Tell your broker to sell these specific shares (often called &quot;specific lot&quot;),
+        or it sells your oldest shares first.
+      </p>
+      <ul className="mt-2 grid divide-y border-y">
+        {rows.map((s) => (
+          <li
+            key={s.lot.lotId}
+            className="grid grid-cols-[1fr_auto] items-baseline gap-x-4 gap-y-0.5 py-2"
+          >
+            <span>
+              <span className="font-medium">{s.lot.symbol}</span>{" "}
+              <span className="text-muted-foreground">
+                bought <span className="data">{s.lot.openedAt.slice(0, 10)}</span>
+              </span>
+            </span>
+            <span className={cn("data text-right", gainClass(s.realizedGain))}>
+              {fmtUsd(s.realizedGain)}
+            </span>
+            <span className="data text-xs text-muted-foreground">
+              Sell {fmtUnits(s.sellQuantity)} in {s.lot.accountName} · {fmtUsd(s.proceeds)}
+            </span>
+            <span className="text-right text-xs text-muted-foreground">
+              {s.isLongTerm ? "long-term" : "short-term"}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 interface Excluded {
   lot: Lot;
   reason: string;
@@ -99,6 +162,7 @@ export function PlanView({
             startingRealizedGain={startingRealizedGain}
             cashRaised={totalProceeds}
           />
+          <PurchaseList sales={sales} />
           {excluded && excluded.length > 0 && (
             <p className="text-xs text-muted-foreground">
               Left alone (your do-not-sell list):{" "}

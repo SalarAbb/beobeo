@@ -9,13 +9,26 @@ import { PlanView } from "@/components/tax-center/plan-view";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { TabError, TabLoading } from "@/components/tax-center/tab-state";
 import { useTRPC } from "@/lib/trpc";
 import { useStoredState } from "@/lib/use-stored-state";
 import { fmtUsd } from "@/lib/viz";
 import { cn } from "@/lib/utils";
 
-type RaiseCashState = { amountInput: string; target: number | null; doNotSell: string[] };
+type RaiseCashState = {
+  amountInput: string;
+  target: number | null;
+  doNotSell: string[];
+  /** Sell only from this taxable account; unset = any of them. */
+  accountId?: string;
+};
 
 function parseAmount(input: string): number | null {
   const n = Number(input.replace(/[^0-9.]/g, ""));
@@ -30,21 +43,35 @@ export function RaiseCashTab() {
   // Kept on the device: tabs unmount on switch, and petyr's $20,000 kept snapping back to
   // $10,000 every time he checked All Lots (mission 2). One value for every portfolio: the
   // cash you need doesn't change when you switch scope (a per-portfolio key reset it, mission 15).
-  const [{ amountInput, target, doNotSell }, setState] = useStoredState<RaiseCashState>(
-    "beobeo.tax.raise",
-    { amountInput: "10000", target: 10000, doNotSell: [] },
-  );
+  const [{ amountInput, target, doNotSell, accountId: storedAccountId }, setState] =
+    useStoredState<RaiseCashState>("beobeo.tax.raise", {
+      amountInput: "10000",
+      target: 10000,
+      doNotSell: [],
+    });
 
   const lots = useQuery(trpc.tax.lots.queryOptions(scope));
   const symbols = [...new Set((lots.data ?? []).map((l) => l.symbol))].sort();
   // The list is shared across portfolios; only count what this one holds.
   const excludedHere = doNotSell.filter((s) => symbols.includes(s)).length;
+  // Taxable accounts that hold something here. A stored account this portfolio
+  // doesn't have means "any account", same as the do-not-sell count above.
+  const accounts = [
+    ...new Map((lots.data ?? []).map((l) => [l.accountId, l.accountName])).entries(),
+  ].sort((a, b) => a[1].localeCompare(b[1]));
+  const accountId = accounts.some(([id]) => id === storedAccountId) ? storedAccountId : undefined;
 
   // The previous plan stays up (dimmed) while the next one is worked out, instead of
   // flashing an empty grey block.
   const plan = useQuery({
-    ...trpc.tax.plan.queryOptions({ ...scope, targetProceeds: target ?? 0, doNotSell }),
-    enabled: target !== null && target > 0,
+    ...trpc.tax.plan.queryOptions({
+      ...scope,
+      targetProceeds: target ?? 0,
+      doNotSell,
+      accountId,
+    }),
+    // A saved account waits for the lot list, so the plan isn't worked out twice.
+    enabled: target !== null && target > 0 && (!storedAccountId || !lots.isPending),
     placeholderData: keepPreviousData,
   });
 
@@ -123,6 +150,35 @@ export function RaiseCashTab() {
               )}
           </PopoverContent>
         </Popover>
+
+        {accounts.length > 1 && (
+          <div className="grid gap-1.5">
+            <span id="raise-account" className="eyebrow">
+              Sell from
+            </span>
+            <Select
+              value={accountId ?? "any"}
+              onValueChange={(v) =>
+                setState((s) => ({ ...s, accountId: v === "any" ? undefined : v }))
+              }
+            >
+              <SelectTrigger
+                aria-labelledby="raise-account"
+                className={cn("w-56", accountId && "bg-accent text-primary")}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">Any taxable account</SelectItem>
+                {accounts.map(([id, name]) => (
+                  <SelectItem key={id} value={id}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       {target === null ? null : plan.isError && !d ? (

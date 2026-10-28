@@ -97,10 +97,17 @@ export const taxRouter = router({
         portfolioId: z.uuid().optional(),
         targetProceeds: z.number().positive(),
         doNotSell: z.array(z.string()).max(200).optional(),
+        accountId: z.uuid().optional(),
       }),
     )
     .query(({ ctx, input }) =>
-      computeTaxPlan(ctx.userId, input.portfolioId, input.targetProceeds, input.doNotSell),
+      computeTaxPlan(
+        ctx.userId,
+        input.portfolioId,
+        input.targetProceeds,
+        input.doNotSell,
+        input.accountId,
+      ),
     ),
 
   harvest: protectedProcedure
