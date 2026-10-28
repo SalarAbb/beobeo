@@ -11,8 +11,13 @@
  *         buy, so spreading money wins over piling onto the biggest holding.
  *   dip — how far it sits below its own trailing-year range (70%) and below
  *         what you paid for it (30%, full marks at 20% under your cost).
- * score = 0.6 × fit + 0.4 × dip. Ties go to the lower weight after the buy,
- * then the symbol, so the same inputs always give the same pick.
+ * score = 0.6 × fit + 0.4 × dip without a target mix. With one, 0.9 × fit +
+ * 0.1 × dip: the user has said where money should go, so the option furthest
+ * short of its target comes first and the dip only settles near-ties (e.g.
+ * two sleeves that can each take the whole amount). Under 0.6/0.4 a bond fund
+ * 5% off its high outranked a sleeve twice as far short (minerva, mission 48).
+ * Ties go to the lower weight after the buy, then the symbol, so the same
+ * inputs always give the same pick.
  *
  * Plain numbers, like allocation.ts: values arrive Decimal→number from the
  * overview payload, and the output is a suggestion, not a ledger entry.
@@ -21,6 +26,8 @@
 import type { TargetMix } from "./allocation";
 
 export const NEXT_BUY_WEIGHTS = { fit: 0.6, dip: 0.4 } as const;
+/** With a target mix: the shortfall decides, the dip breaks near-ties. */
+export const NEXT_BUY_TARGET_WEIGHTS = { fit: 0.9, dip: 0.1 } as const;
 /** Inside the dip score: position in the 1-year range vs. under your cost. */
 const RANGE_SHARE = 0.7;
 /** Being this far under your average cost earns the full cost part. */
@@ -105,6 +112,7 @@ export function pickNextBuy(input: {
   const targets =
     input.targets && Object.values(input.targets).some((w) => w > 0) ? input.targets : null;
   const totalAfter = portfolioValue + amountUsd;
+  const weights = targets ? NEXT_BUY_TARGET_WEIGHTS : NEXT_BUY_WEIGHTS;
 
   const picks = candidates.map((c): NextBuyPick => {
     const weightNow = portfolioValue > 0 ? c.heldValue / portfolioValue : 0;
@@ -138,7 +146,7 @@ export function pickNextBuy(input: {
       dip = RANGE_SHARE * rangeScore + (1 - RANGE_SHARE) * costScore;
     }
 
-    const score = NEXT_BUY_WEIGHTS.fit * fit + NEXT_BUY_WEIGHTS.dip * dip;
+    const score = weights.fit * fit + weights.dip * dip;
     const pick: NextBuyPick = {
       key: c.key,
       score,
@@ -154,7 +162,7 @@ export function pickNextBuy(input: {
       reason: "",
       account: placeAccount(c, input.accounts ?? []),
     };
-    pick.reason = reasonFor(pick, c);
+    pick.reason = reasonFor(pick, c, weights);
     return pick;
   });
 
@@ -176,12 +184,69 @@ export function pickNextBuy(input: {
           : `${share}, so it spreads your money less than ${top.key}.`;
     });
   }
+  if (top) compareShortfalls(picks, amountUsd);
   return picks;
 }
 
+const shortOf = (p: NextBuyPick) =>
+  `${p.key} is ${usd(p.gapUsd ?? 0)} short of its ${pctOf(p.target ?? 0)} target`;
+
+/**
+ * "$941 short of its 20% target" alone read as a reason to buy BND next to
+ * VTI, $3,117 short, and sat beside "27.5% after" as if the numbers disagreed
+ * (minerva, mission 48). Among the options whose target speaks, say how each
+ * shortfall compares with the biggest, and tell the top pick when the whole
+ * amount carries it past its target.
+ */
+function compareShortfalls(picks: NextBuyPick[], amountUsd: number) {
+  const short = picks.filter((p) => p.target !== null && p.reason === `${shortOf(p)}.`);
+  if (short.length === 0) return;
+  const same = (a: number, b: number) => Math.abs(a - b) < 1e-9;
+  const bestFit = Math.max(...short.map((p) => p.fit));
+  const best = short.find((p) => same(p.fit, bestFit))!;
+  const top = picks[0]!;
+  const offHigh = (p: NextBuyPick) =>
+    p.offHigh !== null && p.offHigh <= -0.01 ? `, and it sits ${pct(p.offHigh)} below its 1-year high` : "";
+
+  for (const p of short) {
+    const base = shortOf(p);
+    if (p === top) {
+      const overshoot =
+        (p.gapUsd ?? 0) < amountUsd - 0.5
+          ? `; all ${usd(amountUsd)} here takes it to ${pctOf(p.weightAfter)}`
+          : "";
+      const tied = short.find((o) => o !== p && same(o.fit, p.fit));
+      if (!same(p.fit, bestFit)) {
+        // A near-tie the dip settled.
+        p.reason = `${base}, close to ${best.key}'s ${usd(best.gapUsd ?? 0)}${offHigh(p)}.`;
+      } else if (tied) {
+        p.reason =
+          p.fit === 1
+            ? `${base}, so it can take all ${usd(amountUsd)}, like ${tied.key}${offHigh(p)}.`
+            : `${base}, as much as ${tied.key}${offHigh(p)}.`;
+      } else if (short.length > 1) {
+        p.reason = `${base}, the most of your options${overshoot}.`;
+      } else {
+        p.reason = `${base}${overshoot}.`;
+      }
+    } else if (!same(p.fit, bestFit)) {
+      p.reason = `${base}, less than ${best.key}'s ${usd(best.gapUsd ?? 0)}.`;
+    } else {
+      p.reason =
+        top.dip > p.dip
+          ? `${base}${same(p.fit, top.fit) ? " too" : ""}, but ${top.key} sits lower in its 1-year range.`
+          : `${base}, the same as ${top.key}.`;
+    }
+  }
+}
+
 /** The larger weighted part of the score speaks. */
-function reasonFor(p: NextBuyPick, c: NextBuyCandidate): string {
-  const dipLeads = NEXT_BUY_WEIGHTS.dip * p.dip > NEXT_BUY_WEIGHTS.fit * p.fit;
+function reasonFor(
+  p: NextBuyPick,
+  c: NextBuyCandidate,
+  weights: { fit: number; dip: number },
+): string {
+  const dipLeads = weights.dip * p.dip > weights.fit * p.fit;
   if (dipLeads && p.offHigh !== null && p.offHigh <= -DIP_REASON_MIN) {
     const underCost =
       p.vsCost !== null && p.vsCost <= -0.01 ? `, and ${pct(p.vsCost)} under what you paid` : "";
@@ -189,8 +254,7 @@ function reasonFor(p: NextBuyPick, c: NextBuyCandidate): string {
   }
   if (p.target !== null && p.gapUsd !== null) {
     if (p.target === 0) return `${p.key} isn't in your target mix.`;
-    if (p.gapUsd > 0.5)
-      return `${p.key} is ${usd(p.gapUsd)} short of its ${pctOf(p.target)} target.`;
+    if (p.gapUsd > 0.5) return `${shortOf(p)}.`;
     return `${p.key} is already at or above its ${pctOf(p.target)} target.`;
   }
   if (c.heldValue <= 0) return `You don't own ${p.key} yet, so it spreads your money wider.`;

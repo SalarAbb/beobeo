@@ -179,6 +179,14 @@ export function NextBuySection({
             )}
           </p>
           <p className="text-sm">{pick.reason}</p>
+          {/* One buy is the ask (R-004), but next to Allocation's split it read as the
+              two sections disagreeing (minerva, mission 49): say which one lands exactly. */}
+          {pick.target !== null && pick.target > 0 && pick.weightAfter > pick.target + 0.0005 && (
+            <p className="text-sm text-muted-foreground">
+              One buy this size goes past its target. To land exactly on your mix, split it
+              the way Allocation shows above.
+            </p>
+          )}
           {pick.account && (
             <p className="text-sm text-muted-foreground">
               Buy it in {pick.account.name}
@@ -231,7 +239,13 @@ function HowPicked({
   if (pick.target !== null && pick.gapUsd !== null)
     lines.push(
       pick.target > 0
-        ? `Your target for it is ${pctText(pick.target)}: ${pick.gapUsd > 0 ? `${fmtUsd(pick.gapUsd)} short` : "already reached"}.`
+        ? `Your target for it is ${pctText(pick.target)}: ${
+            pick.gapUsd <= 0
+              ? "already reached"
+              : pick.weightAfter > pick.target + 0.0005
+                ? `${fmtUsd(pick.gapUsd)} short, so all of this buy carries it past the target`
+                : `${fmtUsd(pick.gapUsd)} short`
+          }.`
         : "It has no share in your target mix.",
     );
   lines.push(
@@ -259,10 +273,11 @@ function HowPicked({
             <li key={l}>{l}</li>
           ))}
         </ul>
+        {/* Mirrors NEXT_BUY_WEIGHTS / NEXT_BUY_TARGET_WEIGHTS in @beobeo/core. */}
         <p className="border-t pt-2 text-xs text-muted-foreground">
-          Each option is scored 60% on fit with what you hold (your target mix if you set
-          one, otherwise how spread out you&apos;d be) and 40% on how far it sits below its
-          1-year high and your cost.
+          {pick.target !== null
+            ? "With a target mix, the option furthest short of its target comes first (90% of the score). How far it sits below its 1-year high and your cost only settles close calls (10%)."
+            : "Each option is scored 60% on how spread out your money would be and 40% on how far it sits below its 1-year high and your cost."}
         </p>
       </PopoverContent>
     </Popover>

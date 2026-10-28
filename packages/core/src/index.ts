@@ -102,6 +102,7 @@ export {
   pickNextBuy,
   placeAccount,
   NEXT_BUY_WEIGHTS,
+  NEXT_BUY_TARGET_WEIGHTS,
   type NextBuyCandidate,
   type NextBuyAccount,
   type NextBuyAccountType,

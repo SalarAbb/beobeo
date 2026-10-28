@@ -126,10 +126,73 @@ describe("pickNextBuy", () => {
     });
     expect(picks.map((p) => p.key)).toEqual(["BND", "AAPL", "VTI"]);
     expect(picks[0]!.gapUsd).toBeCloseTo(700, 9);
-    expect(picks[0]!.score).toBeCloseTo(0.42, 12);
-    expect(picks[0]!.reason).toBe("BND is $700 short of its 20% target.");
+    // With a target mix fit weighs 0.9: 0.9 × 0.7 = 0.63.
+    expect(picks[0]!.score).toBeCloseTo(0.63, 12);
+    // All $1,000 overshoots the $700 gap: (1,500 + 1,000) / 11,000 = 22.7%.
+    expect(picks[0]!.reason).toBe(
+      "BND is $700 short of its 20% target; all $1,000 here takes it to 22.7%.",
+    );
     expect(picks[1]!.reason).toBe("AAPL isn't in your target mix.");
     expect(picks[2]!.reason).toBe("VTI is already at or above its 50% target.");
+  });
+
+  it("with a target mix, a dip can't lift a smaller shortfall over a bigger one", () => {
+    // Mission 48 (minerva): 50/30/20, VTI 30,750 / VXUS 18,378 / BND 12,606 =
+    // 61,734; $6,000 → 67,734.
+    // VTI gap = 33,867 − 30,750 = 3,117 → fit 0.5195. At its 1-year high, above cost → dip 0.
+    //   score = 0.9 × 0.5195 = 0.46755.
+    // VXUS gap = 20,320.2 − 18,378 = 1,942.2 → fit 0.3237. At its high → dip 0.
+    //   score = 0.9 × 0.3237 = 0.29133.
+    // BND gap = 13,546.8 − 12,606 = 940.8 → fit 0.1568. At its 1-year low and
+    //   2% under its cost: range 1, cost 0.02/0.2 = 0.1 → dip 0.7 + 0.03 = 0.73.
+    //   score = 0.9 × 0.1568 + 0.1 × 0.73 = 0.14112 + 0.073 = 0.21412.
+    // Under the old 0.6/0.4 BND scored 0.386 and beat VXUS's 0.194.
+    const picks = pickNextBuy({
+      amountUsd: 6000,
+      portfolioValue: 61734,
+      targets: { VTI: 0.5, VXUS: 0.3, BND: 0.2 },
+      candidates: [
+        cand({ key: "BND", price: 98, rangeLow: 98, rangeHigh: 103, avgCost: 100, heldValue: 12606 }),
+        cand({ key: "VXUS", price: 70, rangeLow: 60, rangeHigh: 70, avgCost: 60, heldValue: 18378 }),
+        cand({ key: "VTI", price: 330, rangeLow: 280, rangeHigh: 330, avgCost: 300, heldValue: 30750 }),
+      ],
+    });
+    expect(picks.map((p) => p.key)).toEqual(["VTI", "VXUS", "BND"]);
+    expect(picks[0]!.score).toBeCloseTo(0.46755, 6);
+    expect(picks[1]!.score).toBeCloseTo(0.29133, 6);
+    expect(picks[2]!.dip).toBeCloseTo(0.73, 12);
+    expect(picks[2]!.score).toBeCloseTo(0.21412, 6);
+    // VTI after = 36,750 / 67,734 = 54.3%.
+    expect(picks[0]!.reason).toBe(
+      "VTI is $3,117 short of its 50% target, the most of your options; all $6,000 here takes it to 54.3%.",
+    );
+    expect(picks[1]!.reason).toBe("VXUS is $1,942 short of its 30% target, less than VTI's $3,117.");
+    // BND's dip part (0.073) is smaller than its fit part (0.141), so the target speaks.
+    expect(picks[2]!.reason).toBe("BND is $941 short of its 20% target, less than VTI's $3,117.");
+  });
+
+  it("with a target mix, the dip decides between options that can each take it all", () => {
+    // $1,000 into 20,000 → 21,000. A and B targeted 50%, each held 5,000:
+    // gap 10,500 − 5,000 = 5,500 ≥ 1,000 → fit 1 each.
+    // A at its 1-year low (range 1), at cost → dip 0.7, score 0.9 + 0.07 = 0.97.
+    // B at its high → dip 0, score 0.9.
+    const [a, b] = pickNextBuy({
+      amountUsd: 1000,
+      portfolioValue: 20000,
+      targets: { A: 0.5, B: 0.5 },
+      candidates: [
+        cand({ key: "B", price: 120, rangeLow: 100, rangeHigh: 120, heldValue: 5000 }),
+        cand({ key: "A", price: 100, rangeLow: 100, rangeHigh: 125, heldValue: 5000 }),
+      ],
+    });
+    expect(a!.key).toBe("A");
+    expect(a!.score).toBeCloseTo(0.97, 12);
+    expect(b!.score).toBeCloseTo(0.9, 12);
+    // A = 100/125 − 1 = −20% off its high.
+    expect(a!.reason).toBe(
+      "A is $5,500 short of its 50% target, so it can take all $1,000, like B, and it sits 20% below its 1-year high.",
+    );
+    expect(b!.reason).toBe("B is $5,500 short of its 50% target too, but A sits lower in its 1-year range.");
   });
 
   it("caps fit at 1 when the gap is bigger than the deposit, and breaks ties by symbol", () => {

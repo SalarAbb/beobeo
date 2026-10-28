@@ -143,7 +143,7 @@ export function buildPortfolioTools(
     betaZodTool({
       name: "pick_next_buy",
       description:
-        "'I have $n, where should it go?' Ranks 1–5 candidate symbols for one buy of the whole amount, deterministically: 60% fit with what the user holds (lower weight after the buy wins), 40% how far each sits below its 1-year high and the user's average cost. Returns picks best first, each with a one-sentence reason and the account it belongs in. The first pick is the answer; the second is 'another option'.",
+        "'I have $n, where should it go?' Ranks 1–5 candidate symbols for one buy of the whole amount, deterministically: 60% fit with what the user holds (lower weight after the buy wins), 40% how far each sits below its 1-year high and the user's average cost; with a target mix, 90% how far short of its target each is and 10% the dip (close calls only). Returns picks best first, each with a one-sentence reason and the account it belongs in. The first pick is the answer; the second is 'another option'.",
       inputSchema: z.object({
         amountUsd: z.number().positive().describe("Dollars to invest"),
         symbols: z.array(z.string()).min(1).max(5).describe("Candidate tickers"),
