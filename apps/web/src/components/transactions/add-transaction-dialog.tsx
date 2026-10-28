@@ -52,11 +52,15 @@ const TOTAL_LABEL: Partial<Record<TxnType, string>> = {
 
 export function AddTransactionDialog({
   onCreated,
+  onSaving,
   defaultOpen = false,
   defaultType = "buy",
   trigger,
 }: {
   onCreated?: () => void;
+  /** Called with what's being saved ("VOO buy") when Save is pressed, and
+   *  with null if the save fails (the welcome step says so on the page). */
+  onSaving?: (what: string | null) => void;
   /** What opens the dialog (default: the "Add transaction" button). */
   trigger?: React.ReactNode;
   /** Open on mount (the welcome flow links to /transactions?add=1). */
@@ -175,6 +179,7 @@ export function AddTransactionDialog({
     setSaving(true);
     setOpen(false);
     const toastId = toast.loading(`Saving ${what}…`);
+    onSaving?.(what);
     try {
       let acctId = effectiveAccountId;
       if (!acctId) {
@@ -204,6 +209,7 @@ export function AddTransactionDialog({
       resetForm();
       onCreated?.();
     } catch (err) {
+      onSaving?.(null);
       toast.error(`Couldn't save the ${what}: ${(err as Error).message}`, {
         id: toastId,
         duration: 10_000,

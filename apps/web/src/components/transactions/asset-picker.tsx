@@ -138,12 +138,23 @@ export function AssetPicker({
   const localByKey = new Map(allLocal.map((a) => [`${a.symbol}:${a.class}`, a]));
   const popularRows = popular;
   const seen = new Set(popularRows.map((p) => `${p.symbol}:${p.class}`));
-  const local = allLocal.filter((a) => !seen.has(`${a.symbol}:${a.class}`));
+  // Only assets you've traded are "Your assets". Others come from the shared
+  // table and list with the market results, minus a same-ticker twin of a
+  // Popular or owned row (a brand-new user saw "VOO · Stock" under Your
+  // assets next to the VOO ETF, missions 37 and 39; then crypto tokens
+  // called VOO under Markets, mission 40).
+  const local = allLocal.filter((a) => a.mine && !seen.has(`${a.symbol}:${a.class}`));
   for (const a of local) seen.add(`${a.symbol}:${a.class}`);
-  const remoteRows = (search.data?.remote ?? []).filter(
-    (r) => !seen.has(`${r.symbol}:${r.class}`),
+  const taken = new Set([...popularRows, ...local].map((a) => a.symbol));
+  const known = allLocal.filter(
+    (a) => !a.mine && !taken.has(a.symbol) && !seen.has(`${a.symbol}:${a.class}`),
   );
-  const hasResults = local.length > 0 || popularRows.length > 0 || remoteRows.length > 0;
+  for (const a of known) seen.add(`${a.symbol}:${a.class}`);
+  const remoteRows = (search.data?.remote ?? []).filter(
+    (r) => !taken.has(r.symbol) && !seen.has(`${r.symbol}:${r.class}`),
+  );
+  const hasResults =
+    local.length > 0 || popularRows.length > 0 || known.length > 0 || remoteRows.length > 0;
 
   function pickLocal(a: PickedAsset) {
     setFailed(null);
@@ -248,8 +259,23 @@ export function AssetPicker({
                     ))}
                   </CommandGroup>
                 )}
-                {remoteRows.length > 0 && (
+                {known.length + remoteRows.length > 0 && (
                   <CommandGroup heading="Markets">
+                    {known.map((a) => (
+                      <CommandItem
+                        key={a.id}
+                        value={`known-${a.id}`}
+                        className="gap-2.5 py-2"
+                        onSelect={() => pickLocal(a)}
+                      >
+                        <AssetRow
+                          symbol={a.symbol}
+                          name={a.name}
+                          assetClass={a.class}
+                          selected={value?.id === a.id}
+                        />
+                      </CommandItem>
+                    ))}
                     {remoteRows.map((r, i) => (
                       <CommandItem
                         key={`${r.symbol}:${r.class}:${i}`}

@@ -2,7 +2,7 @@
 
 import Link, { useLinkStatus } from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, FileUp, PenLine, ArrowRight, Loader2 } from "lucide-react";
 import {
@@ -54,6 +54,22 @@ function bandLabel(b: BracketOption) {
   if (b.incomeFrom === 0) return `Under ${k(b.incomeTo!)}`;
   if (b.incomeTo === null) return `Over ${k(b.incomeFrom)}`;
   return `${k(b.incomeFrom)} – ${k(b.incomeTo)}`;
+}
+
+/**
+ * A tapped band in pay terms: hermione ($250k married, jointly) tapped
+ * "$211k – $404k", saw 24% and still expected 32%, because she thinks in pay,
+ * not taxable income (mission 35).
+ */
+function payRange(status: FilingStatus, b: BracketOption) {
+  const d = STANDARD_DEDUCTION[status];
+  const range =
+    b.incomeFrom === 0
+      ? `up to about ${k(b.incomeTo! + d)}`
+      : b.incomeTo === null
+        ? `over about ${k(b.incomeFrom + d)}`
+        : `about ${k(b.incomeFrom + d)} – ${k(b.incomeTo + d)}`;
+  return `With the $${d.toLocaleString("en-US")} standard deduction, that's pay of ${range}.`;
 }
 
 /** Selected rows/chips: the accent pill look used across the app. */
@@ -260,6 +276,7 @@ function TaxStep({
           ))}
         </div>
         <p className="text-xs text-muted-foreground">
+          {picked && !usesPay && pay === null && `${payRange(status, picked)} `}
           {rates
             ? `Sales held a year or less are taxed at ${rates.ordinaryRatePct}%, longer ones at ${rates.ltcgRatePct}%.`
             : "Not sure? Skip it and we'll assume the 24% bracket (15% on long-term gains)."}
@@ -446,6 +463,13 @@ function FirstHoldingStep({
   accountsError: string | null;
 }) {
   const router = useRouter();
+  // After Save the step itself says what happens next: a small "Saving…"
+  // toast over unchanged options read as "the page didn't advance, did VOO
+  // land?" (hermione, mission 35). The dashboard is prefetched so it opens
+  // as soon as the save is in.
+  const [saving, setSaving] = useState<string | null>(null);
+  useEffect(() => router.prefetch("/dashboard"), [router]);
+  const busy = accountsSaving || saving !== null;
   const card = `${choice(false)} flex w-full items-start gap-3 py-3 disabled:pointer-events-none disabled:opacity-60`;
   return (
     <AuthShell
@@ -461,6 +485,12 @@ function FirstHoldingStep({
           <Loader2 className="size-3.5 animate-spin" aria-hidden /> Adding your accounts…
         </p>
       )}
+      {saving && (
+        <p role="status" className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Loader2 className="size-3.5 animate-spin" aria-hidden /> Saving your {saving}. Your
+          dashboard opens as soon as it&apos;s in.
+        </p>
+      )}
       {accountsError && (
         <p className="text-sm text-destructive">
           Your accounts didn&apos;t save ({accountsError}). Add them any time on the Accounts
@@ -472,8 +502,9 @@ function FirstHoldingStep({
             which read as being dropped out of setup), then lands on the dashboard. */}
         <AddTransactionDialog
           onCreated={() => router.push("/dashboard")}
+          onSaving={setSaving}
           trigger={
-            <button type="button" className={card} disabled={accountsSaving}>
+            <button type="button" className={card} disabled={busy}>
               <PenLine className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
               <OptionText
                 title="Type in a holding"
@@ -485,8 +516,8 @@ function FirstHoldingStep({
         />
         <Link
           href="/transactions?import=1"
-          aria-disabled={accountsSaving}
-          className={`${card} ${accountsSaving ? "pointer-events-none opacity-60" : ""}`}
+          aria-disabled={busy}
+          className={`${card} ${busy ? "pointer-events-none opacity-60" : ""}`}
         >
           <FileUp className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
           <OptionText

@@ -1,4 +1,4 @@
-import { eq, ilike, or } from "drizzle-orm";
+import { eq, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { schema } from "@beobeo/db";
 import { getMarketData } from "@/server/market-data";
@@ -11,8 +11,18 @@ export const assetsRouter = router({
   search: protectedProcedure
     .input(z.object({ query: z.string().min(1).max(50) }))
     .query(async ({ ctx, input }) => {
+      // `assets` is shared, so a match may be another user's asset; `mine`
+      // says whether this user has a transaction in it (the picker's "Your
+      // assets"). Same single query: a subquery, not a second round trip.
+      const t = schema.transactions;
       const local = await ctx.db
-        .select()
+        .select({
+          id: schema.assets.id,
+          symbol: schema.assets.symbol,
+          name: schema.assets.name,
+          class: schema.assets.class,
+          mine: sql<boolean>`exists (select 1 from ${t} where ${t.assetId} = ${schema.assets.id} and ${t.userId} = ${ctx.userId})`,
+        })
         .from(schema.assets)
         .where(
           or(
