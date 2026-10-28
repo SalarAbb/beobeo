@@ -101,7 +101,24 @@ export function AllLotsTab() {
         <Link href="/transactions" className="text-primary hover:underline">
           Transactions
         </Link>
-        : tap a sale to see the purchases it used and its gain.
+        : tap a sale to see the purchases it used and its gain. To check them against your
+        broker, download{" "}
+        <a
+          href={`/api/export/lots${portfolioId ? `?portfolio=${portfolioId}` : ""}`}
+          download
+          className="text-primary hover:underline"
+        >
+          every purchase you hold
+        </a>{" "}
+        or{" "}
+        <a
+          href={`/api/export/realized${portfolioId ? `?portfolio=${portfolioId}` : ""}`}
+          download
+          className="text-primary hover:underline"
+        >
+          every sale
+        </a>{" "}
+        as a spreadsheet (CSV).
       </p>
       <div className="min-w-0 border-t">
         <Table>

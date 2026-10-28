@@ -6,6 +6,7 @@ import {
   toIsoDate,
   ZERO,
   type EngineTransaction,
+  type LotEngineResult,
   type RecentBuyTxn,
   type TaxLot,
   type TaxProfile,
@@ -47,6 +48,74 @@ export interface YtdSale {
   longTermGain: ReturnType<typeof D>;
 }
 
+export interface ScopedTxnRow {
+  txn: typeof schema.transactions.$inferSelect;
+  asset: typeof schema.assets.$inferSelect;
+  account: typeof schema.accounts.$inferSelect;
+}
+
+/** Every transaction in a scope ("all" or a portfolio id) with its asset and
+ *  account, oldest first. One query. */
+export function loadScopedRows(userId: string, portfolioKey: string): Promise<ScopedTxnRow[]> {
+  const conditions = [eq(schema.transactions.userId, userId)];
+  if (portfolioKey !== "all") {
+    conditions.push(eq(schema.accounts.portfolioId, portfolioKey));
+  }
+  return db
+    .select({ txn: schema.transactions, asset: schema.assets, account: schema.accounts })
+    .from(schema.transactions)
+    .innerJoin(schema.assets, eq(schema.transactions.assetId, schema.assets.id))
+    .innerJoin(schema.accounts, eq(schema.transactions.accountId, schema.accounts.id))
+    .where(and(...conditions))
+    .orderBy(asc(schema.transactions.tradedAt), asc(schema.transactions.createdAt));
+}
+
+/**
+ * Replay each (account, asset) pair through the lot engine. Rows must be
+ * sorted by tradedAt. Lots must carry their account identity so a plan can
+ * say "sell from Fidelity" (and brokers match FIFO per account), which the
+ * dashboard's per-asset engine transactions don't track. A pair whose history
+ * doesn't replay (an oversell from a partial export) is skipped, never thrown.
+ */
+export function replayByAccount(
+  rows: ScopedTxnRow[],
+  knownSplits: Awaited<ReturnType<typeof loadKnownSplits>>,
+): { account: ScopedTxnRow["account"]; asset: ScopedTxnRow["asset"]; result: LotEngineResult }[] {
+  const groups = new Map<string, ScopedTxnRow[]>();
+  for (const row of rows) {
+    const key = `${row.txn.accountId}:${row.txn.assetId}`;
+    const g = groups.get(key);
+    if (g) g.push(row);
+    else groups.set(key, [row]);
+  }
+  const out = [];
+  for (const groupRows of groups.values()) {
+    const { account, asset } = groupRows[0]!;
+    // Same provider splits the dashboard injects: without them a position the
+    // user never recorded a split for keeps pre-split units at post-split
+    // prices (fake losses), and a post-split sale oversells and drops the
+    // whole asset from the Tax Center (gilderoy's NFLX).
+    const txns: EngineTransaction[] = mergeKnownSplits(
+      groupRows.map(({ txn }) => ({
+        id: txn.id,
+        assetId: txn.assetId,
+        type: txn.type,
+        quantity: D(txn.quantity),
+        pricePerUnit: txn.pricePerUnit === null ? null : D(txn.pricePerUnit),
+        fees: D(txn.fees),
+        tradedAt: txn.tradedAt,
+      })),
+      knownSplits.filter((s) => s.assetId === asset.id),
+    );
+    try {
+      out.push({ account, asset, result: buildLots(txns) });
+    } catch {
+      // inconsistent history for this account+asset — skip, don't crash the page
+    }
+  }
+  return out;
+}
+
 /**
  * Load the sellable lot universe + wash-sale context for a tax-entity scope
  * ("all" or one portfolio id — see tax_profiles' doc comment for why a
@@ -58,18 +127,7 @@ export async function loadTaxLots(
   portfolioKey: string,
   asOf: Date = new Date(),
 ): Promise<TaxLotBundle> {
-  const conditions = [eq(schema.transactions.userId, userId)];
-  if (portfolioKey !== "all") {
-    conditions.push(eq(schema.accounts.portfolioId, portfolioKey));
-  }
-
-  const rows = await db
-    .select({ txn: schema.transactions, asset: schema.assets, account: schema.accounts })
-    .from(schema.transactions)
-    .innerJoin(schema.assets, eq(schema.transactions.assetId, schema.assets.id))
-    .innerJoin(schema.accounts, eq(schema.transactions.accountId, schema.accounts.id))
-    .where(and(...conditions))
-    .orderBy(asc(schema.transactions.tradedAt), asc(schema.transactions.createdAt));
+  const rows = await loadScopedRows(userId, portfolioKey);
 
   if (rows.length === 0) {
     return {
@@ -80,17 +138,6 @@ export async function loadTaxLots(
       ytdSales: [],
       ytdTaxAdvantagedGain: ZERO,
     };
-  }
-
-  // Group by (account, asset) — lots must carry their account identity so a
-  // plan can say "sell from Fidelity", which the shared engine transactions
-  // don't track (buildLots itself is unaware of accounts).
-  const groups = new Map<string, typeof rows>();
-  for (const row of rows) {
-    const key = `${row.txn.accountId}:${row.txn.assetId}`;
-    const g = groups.get(key);
-    if (g) g.push(row);
-    else groups.set(key, [row]);
   }
 
   const assetsById = new Map(rows.map((r) => [r.asset.id, r.asset]));
@@ -110,32 +157,7 @@ export async function loadTaxLots(
   const salesById = new Map<string, YtdSale>();
   const thisYear = asOf.getUTCFullYear();
 
-  for (const groupRows of groups.values()) {
-    const { account, asset } = groupRows[0]!;
-    // Same provider splits the dashboard injects: without them a position the
-    // user never recorded a split for keeps pre-split units at post-split
-    // prices (fake losses), and a post-split sale oversells and drops the
-    // whole asset from the Tax Center (gilderoy's NFLX).
-    const txns: EngineTransaction[] = mergeKnownSplits(
-      groupRows.map(({ txn }) => ({
-        id: txn.id,
-        assetId: txn.assetId,
-        type: txn.type,
-        quantity: D(txn.quantity),
-        pricePerUnit: txn.pricePerUnit === null ? null : D(txn.pricePerUnit),
-        fees: D(txn.fees),
-        tradedAt: txn.tradedAt,
-      })),
-      knownSplits.filter((s) => s.assetId === asset.id),
-    );
-
-    let engineResult;
-    try {
-      engineResult = buildLots(txns);
-    } catch {
-      continue; // inconsistent history for this account+asset — skip, don't crash the page
-    }
-
+  for (const { account, asset, result: engineResult } of replayByAccount(rows, knownSplits)) {
     if (account.accountType !== "taxable") {
       // IRAs contribute no sellable lots and no taxable gain.
       for (const g of engineResult.realized) {

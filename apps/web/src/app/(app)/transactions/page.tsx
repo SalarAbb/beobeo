@@ -7,6 +7,7 @@ import { AssetLogo } from "@/components/asset-logo";
 import { usePortfolio } from "@/components/portfolio-context";
 import { AddTransactionDialog } from "@/components/transactions/add-transaction-dialog";
 import { CsvImportDialog } from "@/components/transactions/csv-import-dialog";
+import { ExportMenu } from "@/components/transactions/export-menu";
 import {
   TransactionDetailsDialog,
   describeEdit,
@@ -214,6 +215,7 @@ export default function TransactionsPage({
         subtitle="The source of truth — everything else is derived from these."
         actions={
           <>
+            <ExportMenu portfolioId={portfolioId ?? undefined} />
             <CsvImportDialog onImported={refresh} defaultOpen={params.import === "1"} />
             <AddTransactionDialog
               onCreated={refresh}

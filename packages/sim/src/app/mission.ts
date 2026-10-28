@@ -41,6 +41,20 @@ export interface Observation {
 }
 
 /** Tag every visible control with a ref and describe it the way a screen reader would. */
+/** The SUM a spreadsheet shows under each dollar column, over every row: a
+ *  persona summing 13 rows in its head was $100 off and reported the file wrong. */
+function columnSums(lines: string[]): string {
+  const split = (l: string) => [...l.matchAll(/("(?:[^"]|"")*"|[^,]*)(,|$)/g)].map((m) => m[1]!).slice(0, -1);
+  const header = split(lines[0] ?? "");
+  const rows = lines.slice(1).map(split);
+  const sums = header.flatMap((h, i) => {
+    if (!/proceeds|cost basis|gain|value|amount|fees/i.test(h)) return [];
+    const vals = rows.map((r) => Number(r[i])).filter((v) => Number.isFinite(v));
+    return vals.length ? [`${h} ${vals.reduce((s, v) => s + v, 0).toFixed(2)}`] : [];
+  });
+  return sums.length ? `\nColumn sums over all ${rows.length} rows (your spreadsheet's SUM): ${sums.join(" · ")}` : "";
+}
+
 export async function observe(page: Page): Promise<Observation> {
   // tsx/esbuild wraps named functions in a `__name` helper that doesn't exist in the page. A string
   // evaluate isn't transpiled, so it can define the helper first.
@@ -273,6 +287,19 @@ ${o.holdingsBrief}${o.csvFile ? `\n\nYou have a CSV export of your recent stock 
       const u = r.url();
       if (r.status() >= 500 || (u.includes("/api/trpc") && r.status() >= 400 && r.status() !== 401)) appErrors.push({ route: here(), message: `${r.status()} ${new URL(u).pathname}`.slice(0, 300) });
     });
+    // A downloaded file (Transactions → Export) is shown to the persona on the
+    // next step, the way it would open in their spreadsheet; otherwise an
+    // export is a click with nothing to judge.
+    const downloads: string[] = [];
+    page.on("download", (d) => {
+      void d.path().then(
+        (path) => {
+          const lines = readFileSync(path, "utf8").split(/\r?\n/).filter(Boolean);
+          downloads.push(`You downloaded ${d.suggestedFilename()} (${lines.length - 1} rows). Opened in your spreadsheet${lines.length > 31 ? ", the first 30 rows" : ""}:\n${lines.slice(0, 31).join("\n")}${columnSums(lines)}`);
+        },
+        () => downloads.push(`A download of ${d.suggestedFilename()} failed.`),
+      );
+    });
 
     const t0 = performance.now();
     await page.goto(`${APP_URL}${feature.route}`, { waitUntil: "domcontentloaded", timeout: 30_000 }).catch(() => undefined);
@@ -298,7 +325,7 @@ ${o.holdingsBrief}${o.csvFile ? `\n\nYou have a CSV export of your recent stock 
 
   Steps so far:
   ${history || "(none yet: you just arrived)"}
-  ${steps.at(-1)?.error ? `\nYour last action didn't work: ${steps.at(-1)!.error}` : ""}
+  ${steps.at(-1)?.error ? `\nYour last action didn't work: ${steps.at(-1)!.error}` : ""}${downloads.length ? `\n${downloads.splice(0).join("\n\n")}\n` : ""}
   That last screen took ${(lastMs / 1000).toFixed(1)}s to settle.
 
   ${describe(obs)}
