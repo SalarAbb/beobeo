@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { fmtQty, fmtUsd, gainClass } from "@/lib/viz";
 import type { AppRouter } from "@/server/routers";
 import { LossBreakdownBar } from "./loss-breakdown-bar";
+import { useIncome } from "./use-income";
 
 type Now = inferRouterOutputs<AppRouter>["tax"]["now"];
 type Move = Now["moves"][number];
@@ -97,6 +98,19 @@ function MoveText({ move: m }: { move: Move }) {
         </>
       );
       why = "then the gain is taxed at the lower long-term rate";
+      break;
+    case "zero_gain":
+      action = (
+        <>
+          Sell and buy back <span className="data">{fmtQty(m.quantity ?? 0)}</span> {symbol}
+        </>
+      );
+      why = (
+        <>
+          takes a <span className="data">{fmtUsd(m.gainUsd ?? 0, 0)}</span>{" "}gain at 0% and
+          raises your cost, so a later sale owes less · {m.accounts?.join(", ")}
+        </>
+      );
       break;
   }
   return (
@@ -214,8 +228,13 @@ export function NowTab({
 }) {
   const trpc = useTRPC();
   const { portfolioId } = usePortfolio();
-  const scope = { portfolioId: portfolioId ?? undefined };
-  const now = useQuery(trpc.tax.now.queryOptions(scope));
+  const { complete: income } = useIncome();
+  const now = useQuery(
+    trpc.tax.now.queryOptions(
+      { portfolioId: portfolioId ?? undefined, income },
+      { placeholderData: keepPreviousData },
+    ),
+  );
 
   if (now.isError && !now.data) {
     return <TabError what="your tax picture" onRetry={() => void now.refetch()} />;
@@ -235,6 +254,10 @@ export function NowTab({
   );
   const canHarvest = d.movesTaxSavedUsd >= 5;
   const hasLocks = moves.some((m) => m.kind === "lock");
+  const hasZeroGains = moves.some((m) => m.kind === "zero_gain");
+  // The welcome bracket says 0% long-term, but without an income figure the
+  // room can't be sized (R-003).
+  const askIncome = !income && d.inZeroRateBand && d.hasLongTermGains;
   const b = d.movesBreakdown;
   const unusedDeduction = d.deductionRoomUsd - b.ordinaryDeductionUsd;
 
@@ -348,6 +371,7 @@ export function NowTab({
                     <span className="text-gain">
                       {m.kind === "on_hold" ? "then saves" : "saves"}{" "}
                       <span className="data">~{fmtUsd(m.taxSavedUsd, 0)}</span>
+                      {m.kind === "zero_gain" && " later"}
                     </span>
                   )}
                 </span>
@@ -374,9 +398,32 @@ export function NowTab({
           <p className="text-xs text-muted-foreground">
             {hasLocks &&
               "Crypto has no wash-sale rule under current US law, so you can buy it straight back. That resets your cost lower, which moves tax to a later sale rather than erasing it. "}
+            {hasZeroGains && (
+              <>
+                The 0% lines use the{" "}
+                <span className="data">{fmtUsd(d.zeroRateRoomUsd ?? 0, 0)}</span> of room your
+                income leaves in the 0% long-term bracket; buying straight back is fine for a
+                gain, and the saving assumes 15% on a later sale. Your state may still tax the
+                gain.{" "}
+              </>
+            )}
             Savings use your Tax Profile rates and assume today&apos;s prices.
           </p>
         </Section>
+      )}
+
+      {askIncome && (
+        <p className="-mt-6 max-w-2xl text-sm text-muted-foreground">
+          Your bracket may let you take long-term gains at 0% this year.{" "}
+          <button
+            type="button"
+            onClick={() => onNavigate("profile")}
+            className="text-primary underline underline-offset-2"
+          >
+            Add your income in Tax Profile
+          </button>{" "}
+          to see how much.
+        </p>
       )}
 
       <Section

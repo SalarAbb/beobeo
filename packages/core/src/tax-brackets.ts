@@ -54,6 +54,18 @@ const LTCG: Record<FilingStatus, { zeroUpTo: number; fifteenUpTo: number }> = {
   head_of_household: { zeroUpTo: 66_200, fifteenUpTo: 579_600 },
 };
 
+/** 2026 standard deduction, for the "what is taxable income" hint. */
+export const STANDARD_DEDUCTION: Record<FilingStatus, number> = {
+  single: 16_100,
+  married_joint: 32_200,
+  head_of_household: 24_150,
+};
+
+/** Taxable income (gains included) up to which long-term gains are taxed at 0%. */
+export function ltcgZeroUpTo(status: FilingStatus): number {
+  return LTCG[status].zeroUpTo;
+}
+
 /** Long-term gain rate on the next dollar above `taxableIncome`. */
 export function ltcgRateAt(status: FilingStatus, taxableIncome: number): number {
   const t = LTCG[status];

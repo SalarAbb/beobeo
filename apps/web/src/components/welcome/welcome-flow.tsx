@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { useIncome } from "@/components/tax-center/use-income";
 import { useTRPC } from "@/lib/trpc";
 
 const STATUS_OPTIONS: { value: FilingStatus; label: string }[] = [
@@ -151,8 +152,12 @@ function TaxStep({
   const picked = band === null ? null : bands[band];
   const statePct = Number(stateRate);
   const stateOk = stateRate.trim() === "" || (Number.isFinite(statePct) && statePct >= 0 && statePct <= 20);
+  // Filing status has no server column yet; the device keeps it for Tax
+  // Profile → Your income (the 0% gain room, R-003).
+  const { income, setIncome } = useIncome();
 
   function onContinue() {
+    if (picked) setIncome({ ...income, status });
     if (!picked && stateRate.trim() === "") return onDone(null);
     onDone({
       ...(picked && {

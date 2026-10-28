@@ -51,15 +51,30 @@ export async function newContext(
 /**
  * Settings a persona has saved on their device. A persona with a `rebalance`
  * rule has a target mix, so the dashboard's Allocation section starts with it
- * set (the app keeps target mixes in localStorage for now).
+ * set (the app keeps target mixes in localStorage for now). `taxableIncomeUsd`
+ * is as if typed into Tax Profile → Your income, with the persona's filing status.
  */
-export function deviceStorage(p: Persona, userId: string | null): Record<string, string> {
+export function deviceStorage(
+  p: Persona,
+  userId: string | null,
+  taxableIncomeUsd?: number,
+): Record<string, string> {
+  if (!userId) return {};
+  const out: Record<string, string> = {};
   const rule = p.policy.find((r) => r.kind === "rebalance");
-  if (!userId || !rule || rule.kind !== "rebalance") return {};
-  const pcts = Object.fromEntries(
-    Object.entries(rule.targets).map(([sym, w]) => [sym, Math.round(w * 10000) / 100]),
-  );
-  return { [`beobeo.targets.${userId}.all`]: JSON.stringify(pcts) };
+  if (rule && rule.kind === "rebalance") {
+    const pcts = Object.fromEntries(
+      Object.entries(rule.targets).map(([sym, w]) => [sym, Math.round(w * 10000) / 100]),
+    );
+    out[`beobeo.targets.${userId}.all`] = JSON.stringify(pcts);
+  }
+  if (taxableIncomeUsd !== undefined) {
+    out[`beobeo.tax.income.${userId}`] = JSON.stringify({
+      status: p.tax.filingStatus,
+      taxableIncomeUsd,
+    });
+  }
+  return out;
 }
 
 /** Navigate and wait until the page has settled; returns ms until settled. */

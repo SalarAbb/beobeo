@@ -1,9 +1,17 @@
 "use client";
 
+import {
+  FILING_STATUS_LABEL,
+  ltcgZeroUpTo,
+  STANDARD_DEDUCTION,
+  type FilingStatus,
+} from "@beobeo/core/tax-brackets";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 import { usePortfolio } from "@/components/portfolio-context";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { useIncome } from "@/components/tax-center/use-income";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -179,10 +187,86 @@ function ProfileForm({ initial }: { initial: NonNullable<Profile> }) {
   );
 }
 
+const STATUS_OPTIONS: { value: FilingStatus; label: string }[] = [
+  { value: "single", label: "Single" },
+  { value: "married_joint", label: "Married, jointly" },
+  { value: "head_of_household", label: "Head of household" },
+];
+
+/**
+ * Optional, saved on this device as you type (`useIncome`): the only thing it
+ * changes is whether the Now tab can offer long-term gains at 0%.
+ */
+function IncomeSection() {
+  const { income, setIncome } = useIncome();
+  const [text, setText] = useState(
+    income.taxableIncomeUsd === null ? "" : String(income.taxableIncomeUsd),
+  );
+  const status = income.status ?? "single";
+  const top = ltcgZeroUpTo(status);
+
+  function onIncome(v: string) {
+    setText(v);
+    const clean = v.replace(/[$,\s]/g, "");
+    const amount = Number(clean);
+    setIncome({
+      status,
+      taxableIncomeUsd: clean === "" || !Number.isFinite(amount) || amount < 0 ? null : amount,
+    });
+  }
+
+  return (
+    <Section title="Your income">
+      <p className="-mt-2 max-w-2xl text-sm text-muted-foreground">
+        Optional. Long-term gains are taxed at 0% while your taxable income stays under{" "}
+        <span className="data">{fmtUsd(top, 0)}</span> ({FILING_STATUS_LABEL[status].toLowerCase()}),
+        so with a rough figure the Now tab can show gains you could take tax-free. Saved on this
+        device as you type.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-[auto_1fr] sm:items-end">
+        <div className="grid gap-1.5">
+          <Label className="text-xs text-muted-foreground">How you file</Label>
+          <SegmentedControl
+            value={status}
+            onChange={(s) => setIncome({ ...income, status: s })}
+            options={STATUS_OPTIONS}
+          />
+        </div>
+        <div className="grid max-w-xs gap-1.5">
+          <Label htmlFor="taxable-income" className="text-xs text-muted-foreground">
+            Taxable income this year, before investment gains
+          </Label>
+          <div className="flex items-center gap-1.5">
+            <Input
+              id="taxable-income"
+              value={text}
+              onChange={(e) => onIncome(e.target.value)}
+              inputMode="decimal"
+              placeholder="e.g. 42000"
+              className="data"
+            />
+            <span className="text-xs text-muted-foreground">$</span>
+          </div>
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Taxable income is pay and other income minus deductions; for most people that&apos;s
+        income minus the standard deduction (
+        <span className="data">{fmtUsd(STANDARD_DEDUCTION[status], 0)}</span> in 2026).
+      </p>
+    </Section>
+  );
+}
+
 export function TaxProfileTab() {
   const profile = useProfileQuery();
   if (profile.isError && !profile.data)
     return <TabError what="your tax settings" onRetry={() => void profile.refetch()} />;
   if (!profile.data) return <TabLoading label="Loading your tax settings…" className="h-96" />;
-  return <ProfileForm initial={profile.data} />;
+  return (
+    <div className="grid gap-10">
+      <IncomeSection />
+      <ProfileForm initial={profile.data} />
+    </div>
+  );
 }

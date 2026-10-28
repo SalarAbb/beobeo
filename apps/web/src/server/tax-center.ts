@@ -9,6 +9,8 @@ import {
   toIsoDate,
   detectWashSaleBlocks,
   isLongTerm,
+  profileAtIncome,
+  type IncomeInfo,
   type LossLotCandidate,
   type TaxMove,
   type PlannedSale,
@@ -160,11 +162,17 @@ export function computeTaxLotsList(userId: string, portfolioId?: string) {
   });
 }
 
-export function computeTaxNow(userId: string, portfolioId?: string) {
+/**
+ * `income` = filing status + taxable income the user saved on this device
+ * (Tax Profile), which unlocks the 0% long-term gain moves. Without it the
+ * list has no gain moves and `zeroRateRoomUsd` is null.
+ */
+export function computeTaxNow(userId: string, portfolioId?: string, income?: IncomeInfo) {
   const scope = portfolioKey(portfolioId);
-  return cached(userCacheKey(userId, "tax-now4", scope), TTL.now, async () => {
+  const incomeKey = income ? `${income.status}:${Math.round(income.taxableIncomeUsd)}` : "none";
+  return cached(userCacheKey(userId, "tax-now6", scope, incomeKey), TTL.now, async () => {
     const asOf = new Date();
-    const [{ lots, profile, blocked, profileRow, ytdSales, ytdTaxAdvantagedGain }, overview] =
+    const [{ lots, profile: saved, blocked, profileRow, ytdSales, ytdTaxAdvantagedGain }, overview] =
       await Promise.all([
         assembleScope(userId, scope, asOf),
         // The dashboard's "Gain from sales" tile, so the page can say how its
@@ -179,8 +187,15 @@ export function computeTaxNow(userId: string, portfolioId?: string) {
       Math.ceil((yearEnd.getTime() - asOf.getTime()) / 86_400_000),
     );
 
+    // With an income that keeps the year inside the 0% long-term bracket, the
+    // saved federal long-term rate doesn't apply (verdict and loss values;
+    // core `profileAtIncome`).
+    const profile = income
+      ? profileAtIncome(saved, income, Number(profileRow.federalLtcgRatePct) / 100)
+      : saved;
+
     // One ranked list (R-003); the same payload feeds the chat snapshot.
-    const tm = taxMoves(lots, blocked, profile, asOf);
+    const tm = taxMoves(lots, blocked, profile, asOf, { income });
 
     return {
       taxYear: asOf.getUTCFullYear(),
@@ -217,6 +232,13 @@ export function computeTaxNow(userId: string, portfolioId?: string) {
         carryforwardUsd: tm.breakdown.carryforwardUsd.toNumber(),
       },
       deductionRoomUsd: tm.deductionRoomUsd.toNumber(),
+      zeroRateRoomUsd: tm.zeroRateRoomUsd?.toNumber() ?? null,
+      // The bracket the profile's rates came from has 0% long-term gains
+      // (welcome step 1), so it's worth asking for income to size the room.
+      inZeroRateBand: Number(profileRow.federalLtcgRatePct) === 0,
+      hasLongTermGains: lots.some(
+        (l) => isLongTerm(l.openedAt, asOf) && l.quantity.mul(l.price).gt(l.costBasis),
+      ),
     };
   });
 }
@@ -259,6 +281,17 @@ function serializeMove(m: TaxMove) {
         lots: m.lots,
         firstLongTermOn: toIsoDate(m.firstLongTermOn),
         lastLongTermOn: toIsoDate(m.lastLongTermOn),
+        taxSavedUsd: value,
+      };
+    case "zero_gain":
+      return {
+        kind: m.kind,
+        assetId: m.gain.assetId,
+        symbol: m.gain.symbol,
+        assetClass: m.gain.assetClass,
+        quantity: m.gain.quantity.toNumber(),
+        gainUsd: m.gain.gainUsd.toNumber(),
+        accounts: [...new Set(m.gain.sales.map((s) => s.lot.accountName))],
         taxSavedUsd: value,
       };
   }

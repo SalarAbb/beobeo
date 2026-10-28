@@ -88,8 +88,21 @@ export const taxRouter = router({
     .query(({ ctx, input }) => computeTaxLotsList(ctx.userId, input.portfolioId)),
 
   now: protectedProcedure
-    .input(scope)
-    .query(({ ctx, input }) => computeTaxNow(ctx.userId, input.portfolioId)),
+    .input(
+      z
+        .object({
+          portfolioId: z.uuid().optional(),
+          // Saved on the device (Tax Profile → Your income); sizes the 0% gain room.
+          income: z
+            .object({
+              status: z.enum(["single", "married_joint", "head_of_household"]),
+              taxableIncomeUsd: z.number().min(0).max(100_000_000),
+            })
+            .optional(),
+        })
+        .default({}),
+    )
+    .query(({ ctx, input }) => computeTaxNow(ctx.userId, input.portfolioId, input.income)),
 
   plan: protectedProcedure
     .input(

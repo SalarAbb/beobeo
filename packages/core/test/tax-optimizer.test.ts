@@ -14,6 +14,8 @@ import {
   taxOwedSoFar,
   lossLocks,
   taxMoves,
+  zeroRateGains,
+  profileAtIncome,
   type TaxLot,
   type TaxProfile,
 } from "../src/tax-optimizer";
@@ -647,5 +649,158 @@ describe("taxMoves (one ranked list of moves, R-003)", () => {
     const r = taxMoves([lot({ openedAt: daysAgo(800) })], [], profile, asOf);
     expect(r.moves).toHaveLength(0);
     expect(r.lockAndHarvestSavedUsd.toNumber()).toBe(0);
+  });
+});
+
+describe("zeroRateGains (0% long-term room, R-003)", () => {
+  // Single, $40,000 taxable income, $2,000 long-term gain already taken.
+  // Room = 49,450 (top of single 0%) - 40,000 - 2,000 = 7,450.
+  const profile: TaxProfile = { ...baseProfile, ytdLongTermGain: D(2000) };
+  const income = { status: "single" as const, taxableIncomeUsd: 40_000 };
+  const vtiA = lot({
+    lotId: "z-a",
+    assetId: "asset-vti",
+    symbol: "VTI",
+    quantity: D(10),
+    costBasis: D(2000),
+    price: D(300), // proceeds 3,000, gain 1,000 (1/3 of proceeds), $100 a share
+    openedAt: daysAgo(900),
+  });
+  const vtiB = lot({
+    lotId: "z-b",
+    assetId: "asset-vti",
+    symbol: "VTI",
+    quantity: D(20),
+    costBasis: D(3000),
+    price: D(300), // proceeds 6,000, gain 3,000 (1/2)
+    openedAt: daysAgo(500),
+  });
+  const aapl = lot({
+    lotId: "z-c",
+    assetId: "asset-aapl",
+    symbol: "AAPL",
+    quantity: D(50),
+    costBasis: D(5000),
+    price: D(200), // proceeds 10,000, gain 5,000 (1/2), $100 a share
+    openedAt: daysAgo(1200),
+  });
+  const qqqShort = lot({
+    lotId: "z-d",
+    assetId: "asset-qqq",
+    symbol: "QQQ",
+    quantity: D(5),
+    costBasis: D(1000),
+    price: D(500), // gain 1,500 but short-term: not 0%-eligible
+    openedAt: daysAgo(100),
+  });
+  const bndLoss = lot({
+    lotId: "z-e",
+    assetId: "asset-bnd",
+    symbol: "BND",
+    costBasis: D(2000),
+    price: D(150), // loss 500, long-term
+    openedAt: daysAgo(700),
+  });
+
+  it("golden: fills the room with the most gain per dollar first, whole shares only", () => {
+    // Ratio order: z-b (1/2) and z-c (1/2) tie -> lot id: z-b, z-c, then z-a (1/3).
+    // z-b whole: gain 3,000, left 4,450. z-c: 4,450 / $100 = 44.5 -> 44 shares,
+    // gain 4,400, left 50. z-a: 50 / $100 = 0.5 -> 0 shares, skipped.
+    // Value at 15% later: AAPL 660, VTI 450, total 7,400 x .15 = 1,110.
+    const r = zeroRateGains([vtiA, vtiB, aapl, qqqShort, bndLoss], profile, income, asOf);
+    expect(r.roomUsd.toNumber()).toBe(7450);
+    expect(r.gains.map((g) => g.symbol)).toEqual(["AAPL", "VTI"]);
+    const [a, v] = r.gains;
+    expect(a!.quantity.toNumber()).toBe(44);
+    expect(a!.gainUsd.toNumber()).toBe(4400);
+    expect(a!.proceeds.toNumber()).toBe(8800);
+    expect(v!.quantity.toNumber()).toBe(20);
+    expect(v!.gainUsd.toNumber()).toBe(3000);
+    expect(v!.sales.map((s) => s.lot.lotId)).toEqual(["z-b"]);
+    expect(r.valueUsd.toNumber()).toBe(1110);
+  });
+
+  it("cuts crypto to the exact dollar of room", () => {
+    // MFJ, 98,000 income -> room 98,900 - 98,000 = 900 (no gains this year).
+    // BTC gain per coin 40,000 -> 900 / 40,000 = 0.0225 BTC, gain exactly 900, value 135.
+    const btc = lot({
+      lotId: "z-btc",
+      assetId: "asset-btc",
+      symbol: "BTC",
+      assetClass: "crypto",
+      quantity: D(1),
+      costBasis: D(20000),
+      price: D(60000),
+      openedAt: daysAgo(800),
+    });
+    const r = zeroRateGains(
+      [btc],
+      baseProfile,
+      { status: "married_joint", taxableIncomeUsd: 98_000 },
+      asOf,
+    );
+    expect(r.roomUsd.toNumber()).toBe(900);
+    expect(r.gains[0]!.quantity.toString()).toBe("0.0225");
+    expect(r.gains[0]!.gainUsd.toNumber()).toBe(900);
+    expect(r.valueUsd.toNumber()).toBe(135);
+  });
+
+  it("offers nothing above the bracket, or when the year nets to a loss", () => {
+    const above = zeroRateGains(
+      [aapl],
+      baseProfile,
+      { status: "married_joint", taxableIncomeUsd: 120_000 },
+      asOf,
+    );
+    expect(above.roomUsd.toNumber()).toBe(0);
+    expect(above.gains).toHaveLength(0);
+    // Net -5,000 this year: room ignores the loss (49,450 - 40,000 = 9,450), but
+    // gains would first eat a loss worth a deduction, so none are offered.
+    const lossYear = zeroRateGains(
+      [aapl],
+      { ...baseProfile, ytdLongTermGain: D(-5000) },
+      income,
+      asOf,
+    );
+    expect(lossYear.roomUsd.toNumber()).toBe(9450);
+    expect(lossYear.gains).toHaveLength(0);
+  });
+
+  it("profileAtIncome: drops the federal long-term rate only when the year fits in 0%", () => {
+    // Combined LT rate 0.20 = 15% federal + 5% state. Single, 40,000 income.
+    const p: TaxProfile = { ...baseProfile, ltcgRate: 0.2, ytdLongTermGain: D(9000) };
+    // 40,000 + 9,000 = 49,000 <= 49,450: state part only. Tax on 9,000 = 450.
+    const inside = profileAtIncome(p, income, 0.15);
+    expect(inside.ltcgRate).toBeCloseTo(0.05, 12);
+    expect(taxOwedSoFar(inside).toNumber()).toBeCloseTo(450, 6);
+    // 40,000 + 9,500 = 49,500 > 49,450: straddles, keeps the full 20%.
+    const straddle = { ...p, ytdLongTermGain: D(9500) };
+    expect(profileAtIncome(straddle, income, 0.15).ltcgRate).toBe(0.2);
+    // A carryforward that nets the year below the line counts: 9,500 - 1,000 = 8,500.
+    expect(
+      profileAtIncome({ ...straddle, carryforwardLongTerm: D(1000) }, income, 0.15).ltcgRate,
+    ).toBeCloseTo(0.05, 12);
+  });
+
+  it("in taxMoves: skips assets with a loss move, ranks with the rest, null room without income", () => {
+    // BND harvest (loss 500, LT): LT +2,000 -> +1,500, saves 75. The room ignores it
+    // (the user may skip the loss sale): 49,450 - 40,000 - 2,000 = 7,450, the
+    // golden's fill: AAPL 44 shares 4,400 -> 660, VTI 3,000 -> 450. A second BND
+    // lot in gain is skipped (BND has a loss move).
+    const bndGain = { ...bndLoss, lotId: "z-f", costBasis: D(1000), price: D(300) };
+    const lots = [vtiA, vtiB, aapl, bndLoss, bndGain];
+    const r = taxMoves(lots, [], profile, asOf, { income });
+    expect(r.zeroRateRoomUsd!.toNumber()).toBe(7450);
+    expect(r.moves.map((m) => m.kind)).toEqual(["zero_gain", "zero_gain", "harvest"]);
+    const [a, v, h] = r.moves;
+    if (a!.kind !== "zero_gain" || v!.kind !== "zero_gain") throw new Error("expected zero_gain");
+    expect(a!.gain.symbol).toBe("AAPL");
+    expect(a!.gain.quantity.toNumber()).toBe(44);
+    expect(a!.valueUsd.toNumber()).toBe(660);
+    expect(v!.valueUsd.toNumber()).toBe(450);
+    expect(h!.valueUsd!.toNumber()).toBeCloseTo(75, 6);
+    // Gain moves leave the joint loss saving alone.
+    expect(r.lockAndHarvestSavedUsd.toNumber()).toBeCloseTo(75, 6);
+    expect(taxMoves(lots, [], profile, asOf).zeroRateRoomUsd).toBeNull();
   });
 });

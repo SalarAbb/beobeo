@@ -10,6 +10,7 @@ import { HarvestTab } from "@/components/tax-center/harvest-tab";
 import { NowTab } from "@/components/tax-center/now-tab";
 import { RaiseCashTab } from "@/components/tax-center/raise-cash-tab";
 import { TaxProfileTab } from "@/components/tax-center/tax-profile-tab";
+import { useIncome } from "@/components/tax-center/use-income";
 import { useTRPC } from "@/lib/trpc";
 
 type Tab = "now" | "cash" | "harvest" | "lots" | "profile";
@@ -38,12 +39,13 @@ export default function TaxCenterPage({
   // instead of a loading block (personas kept landing on that block and calling it broken).
   const trpc = useTRPC();
   const queryClient = useQueryClient();
+  const { complete: income } = useIncome();
   useEffect(() => {
     const scope = { portfolioId: portfolioId ?? undefined };
-    void queryClient.prefetchQuery(trpc.tax.now.queryOptions(scope));
+    void queryClient.prefetchQuery(trpc.tax.now.queryOptions({ ...scope, income }));
     void queryClient.prefetchQuery(trpc.tax.lots.queryOptions(scope));
     void queryClient.prefetchQuery(trpc.tax.profile.queryOptions(scope));
-  }, [trpc, queryClient, portfolioId]);
+  }, [trpc, queryClient, portfolioId, income]);
 
   return (
     <div className="mx-auto grid w-full max-w-5xl grid-cols-1 gap-8">

@@ -2,6 +2,7 @@ import { D, Decimal, ZERO } from "./types";
 import { isLongTerm } from "./lots";
 import { explainNetting, totalTax, type TaxRates } from "./tax-netting";
 import { isWashSaleExempt, type WashSaleBlock, type WashSaleOpts } from "./tax-wash-sale";
+import { ltcgZeroUpTo, type FilingStatus } from "./tax-brackets";
 
 const DAY_MS = 86_400_000;
 
@@ -581,7 +582,8 @@ export type TaxMove =
       /** Selling before `clearsOn` loses the loss for good (IRA rebuy). */
       permanentlyDisallowed: boolean;
       valueUsd: Decimal | null;
-    };
+    }
+  | { kind: "zero_gain"; gain: ZeroRateGain; valueUsd: Decimal };
 
 export interface TaxMoves {
   /** Biggest value first; unpriced moves last. */
@@ -595,6 +597,150 @@ export interface TaxMoves {
   deductionRoomUsd: Decimal;
   /** Last day a sale counts for this tax year (Dec 31, UTC). */
   deadline: Date;
+  /** Long-term gains that would still be taxed at 0% this year, given the
+   *  sales already made (not the loss moves); null when no income was given. */
+  zeroRateRoomUsd: Decimal | null;
+}
+
+/** Enough about the year's income to place it against the 0% gain bracket. */
+export interface IncomeInfo {
+  status: FilingStatus;
+  /** Taxable income this year (after deductions) before any investment gains. */
+  taxableIncomeUsd: number;
+}
+
+/**
+ * The profile as it applies at this income: when income plus the year's net
+ * gain stays inside the 0% long-term bracket, `federalLtcgRate` (a fraction,
+ * already part of `profile.ltcgRate`) comes off, so the verdict and loss
+ * values don't charge 15% on gains that owe 0%. A year that straddles the
+ * bracket keeps the full rate (conservative: it overstates, never hides tax).
+ */
+export function profileAtIncome(
+  profile: TaxProfile,
+  income: IncomeInfo,
+  federalLtcgRate: number,
+): TaxProfile {
+  const { st, lt } = effectiveStart(profile);
+  const net = Decimal.max(ZERO, st.add(lt));
+  if (net.add(income.taxableIncomeUsd).gt(ltcgZeroUpTo(income.status))) return profile;
+  return { ...profile, ltcgRate: Math.max(0, profile.ltcgRate - federalLtcgRate) };
+}
+
+/** One asset's long-term gains to sell and buy straight back inside the 0% room. */
+export interface ZeroRateGain {
+  assetId: string;
+  symbol: string;
+  assetClass: string;
+  sales: PlannedSale[];
+  quantity: Decimal;
+  proceeds: Decimal;
+  gainUsd: Decimal;
+}
+
+export interface ZeroRateGainsOpts {
+  /** Assets not to touch: a rebuy would restart a wash-sale wait on them. */
+  excludeAssetIds?: Iterable<string>;
+  /** Federal long-term rate the reset cost spares a later sale (default 15%). */
+  laterRate?: number;
+}
+
+/**
+ * Gain harvesting (R-003): when this year's taxable income sits under the 0%
+ * long-term bracket, long-term gains up to the bracket's top cost no federal
+ * tax. Selling and buying straight back (gains have no wash-sale rule) resets
+ * the cost higher, so a later sale owes `laterRate` less on that gain.
+ *
+ * Room = top of the 0% bracket − income − this year's net gain (short-term
+ * gains are ordinary income and stack under the long-term ones). When the
+ * year nets to a loss, no gains are offered: they would first eat losses
+ * worth a deduction or carryforward, so they aren't free.
+ *
+ * Fill: long-term gain lots, the most gain per dollar sold first (fewest
+ * dollars traded), ties by lot id; a partial lot is cut to whole units
+ * (crypto to 8 decimals) so the gain never overshoots the room. One line per
+ * asset, biggest gain first.
+ */
+export function zeroRateGains(
+  lots: TaxLot[],
+  profile: TaxProfile,
+  income: IncomeInfo,
+  asOf: Date,
+  opts: ZeroRateGainsOpts = {},
+): { roomUsd: Decimal; gains: ZeroRateGain[]; valueUsd: Decimal } {
+  const laterRate = D(opts.laterRate ?? 0.15);
+  const { st, lt } = effectiveStart(profile);
+  const net = st.add(lt);
+  const room = Decimal.max(
+    ZERO,
+    D(ltcgZeroUpTo(income.status)).sub(income.taxableIncomeUsd).sub(Decimal.max(ZERO, net)),
+  );
+  if (net.lt(0) || room.lt(1)) return { roomUsd: room, gains: [], valueUsd: ZERO };
+
+  const excluded = new Set(opts.excludeAssetIds ?? []);
+  const candidates = lots
+    .filter((l) => !excluded.has(l.assetId) && l.quantity.gt(0) && isLongTerm(l.openedAt, asOf))
+    .map((l) => {
+      const proceeds = l.quantity.mul(l.price);
+      return { l, proceeds, gain: proceeds.sub(l.costBasis) };
+    })
+    .filter((c) => c.gain.gt(0))
+    .sort((a, b) => {
+      const r = b.gain.div(b.proceeds).cmp(a.gain.div(a.proceeds));
+      if (r !== 0) return r;
+      return a.l.lotId < b.l.lotId ? -1 : a.l.lotId > b.l.lotId ? 1 : 0;
+    });
+
+  let left = room;
+  const sales: PlannedSale[] = [];
+  for (const { l, proceeds, gain } of candidates) {
+    if (left.lt(1)) break;
+    let qty = l.quantity;
+    let g = gain;
+    let p = proceeds;
+    if (gain.gt(left)) {
+      const perUnit = gain.div(l.quantity);
+      qty = left.div(perUnit).toDecimalPlaces(l.assetClass === "crypto" ? 8 : 0, Decimal.ROUND_DOWN);
+      if (qty.lte(0)) continue;
+      g = perUnit.mul(qty);
+      p = l.price.mul(qty);
+    }
+    left = left.sub(g);
+    sales.push({
+      lot: l,
+      sellQuantity: qty,
+      proceeds: p,
+      realizedGain: g,
+      isLongTerm: true,
+      taxCost: ZERO,
+      effectiveRate: 0,
+      netAfterTax: p,
+    });
+  }
+
+  const byAsset = new Map<string, ZeroRateGain>();
+  for (const s of sales) {
+    let z = byAsset.get(s.lot.assetId);
+    if (!z) {
+      z = {
+        assetId: s.lot.assetId,
+        symbol: s.lot.symbol,
+        assetClass: s.lot.assetClass,
+        sales: [],
+        quantity: ZERO,
+        proceeds: ZERO,
+        gainUsd: ZERO,
+      };
+      byAsset.set(s.lot.assetId, z);
+    }
+    z.sales.push(s);
+    z.quantity = z.quantity.add(s.sellQuantity);
+    z.proceeds = z.proceeds.add(s.proceeds);
+    z.gainUsd = z.gainUsd.add(s.realizedGain);
+  }
+  const gains = [...byAsset.values()].sort((a, b) => b.gainUsd.cmp(a.gainUsd));
+  const total = gains.reduce((s, z) => s.add(z.gainUsd), ZERO);
+  return { roomUsd: room, gains, valueUsd: total.mul(laterRate) };
 }
 
 const addDays = (d: Date, n: number) => new Date(d.getTime() + n * DAY_MS);
@@ -630,7 +776,7 @@ export function taxMoves(
   blocked: WashSaleBlock[],
   profile: TaxProfile,
   asOf: Date,
-  opts: WashSaleOpts = {},
+  opts: WashSaleOpts & { income?: IncomeInfo } = {},
 ): TaxMoves {
   const deadline = new Date(Date.UTC(asOf.getUTCFullYear(), 11, 31));
   const r = rates(profile);
@@ -725,6 +871,28 @@ export function taxMoves(
   }
   moves.push(...waits.values());
 
+  // zero_gain: long-term gains inside the 0% bracket, measured from the year
+  // as it stands (not after the loss sales: a user may skip those, and inside
+  // 0% they're worth little, so the UI may hide them), and never on an asset
+  // with a loss move or hold, since the rebuy would restart its wash-sale wait.
+  let zeroRateRoomUsd: Decimal | null = null;
+  if (opts.income) {
+    const lossAssets = moves.flatMap((m) =>
+      m.kind === "lock" || m.kind === "harvest"
+        ? [m.lock.assetId]
+        : m.kind === "on_hold"
+          ? [m.assetId]
+          : [],
+    );
+    const z = zeroRateGains(lots, profile, opts.income, asOf, {
+      excludeAssetIds: lossAssets,
+    });
+    zeroRateRoomUsd = z.roomUsd;
+    for (const gain of z.gains) {
+      moves.push({ kind: "zero_gain", gain, valueUsd: gain.gainUsd.mul(0.15) });
+    }
+  }
+
   moves.sort((a, b) => {
     if (a.valueUsd === null || b.valueUsd === null) {
       return a.valueUsd === null ? (b.valueUsd === null ? 0 : 1) : -1;
@@ -739,5 +907,6 @@ export function taxMoves(
     breakdown: summarizeHarvest(profile, harvestSales),
     deductionRoomUsd: D(3000).sub(explainNetting(st, lt, r).ordinaryDeduction),
     deadline,
+    zeroRateRoomUsd,
   };
 }

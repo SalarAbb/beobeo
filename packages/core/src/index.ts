@@ -84,10 +84,15 @@ export {
   type TaxPlan,
   type PlanSaleOpts,
   type HarvestBreakdown,
+  zeroRateGains,
+  profileAtIncome,
+  type IncomeInfo,
+  type ZeroRateGain,
 } from "./tax-optimizer";
 export {
   bracketOptions,
   ltcgRateAt,
+  ltcgZeroUpTo,
   FILING_STATUS_LABEL,
   type FilingStatus,
   type BracketOption,

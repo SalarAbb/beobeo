@@ -35,14 +35,14 @@
 
 ## R-003 · Proactive tax moves ("free money" alerts)
 - **Asked:** 2026-10-23
-- **Status:** in progress
-- **Shipped on:** —
+- **Status:** shipped
+- **Shipped on:** 2026-10-28
 - **In your words:** "At any moment in time, I want recommendations if I can do any tax advantage moves: e.g., ETH is down and I have some realized tax gains? Tell me I can sell and buy my ETH to lock some capital losses to offset my gains for free. Or tens of other things you can think of."
 - **Done means:**
   - ✓ Crypto is exempt from the wash-sale rule in the engine (configurable, with golden tests)
-  - A quiet "Moves available now" card lists each opportunity with its dollar value: crypto loss locks against realized gains, lots about to turn long-term, unused $3,000 deduction, 0% long-term gain room, year-end deadline, wash-sale traps
+  - ✓ A quiet "Moves available now" card lists each opportunity with its dollar value: crypto loss locks against realized gains, lots about to turn long-term, unused $3,000 deduction, 0% long-term gain room, year-end deadline, wash-sale traps
   - ✓ Every number is deterministic and explainable; the assistant can point to the same list
-- **Notes:** 2026-10-26 round 1 (`evolve/2026-10-26`): crypto is exempt from wash-sale detection by default (`exemptAssetClasses`, 4 golden tests), and the Tax Center's Now tab opens a "Moves available now" section listing crypto sell-and-buy-back locks with the coins, the loss booked and the tax saved (`lossLocks`, 3 hand-computed golden tests), plus a note that buying back defers the tax rather than erasing it. Round 3: the Now tab is now one ranked list from core `taxMoves` (3 golden tests). It holds crypto locks, other loss sales with their "don't buy back before" date, losses on hold under the wash-sale rule ("Don't sell BND before Nov 7"), and lots about to turn long-term, each with the tax it saves. Under the list: the total, the unused part of the $3,000 deduction, and the Dec 31 deadline with days left. The chat snapshot carries the same list. Remaining for the card line: 0% long-term gain room, which needs income and filing status (comes with R-005's sign-up bracket step).
+- **Notes:** 2026-10-26 round 1 (`evolve/2026-10-26`): crypto is exempt from wash-sale detection by default (`exemptAssetClasses`, 4 golden tests), and the Tax Center's Now tab opens a "Moves available now" section listing crypto sell-and-buy-back locks with the coins, the loss booked and the tax saved (`lossLocks`, 3 hand-computed golden tests), plus a note that buying back defers the tax rather than erasing it. Round 3: the Now tab is now one ranked list from core `taxMoves` (3 golden tests). It holds crypto locks, other loss sales with their "don't buy back before" date, losses on hold under the wash-sale rule ("Don't sell BND before Nov 7"), and lots about to turn long-term, each with the tax it saves. Under the list: the total, the unused part of the $3,000 deduction, and the Dec 31 deadline with days left. The chat snapshot carries the same list. Remaining for the card line: 0% long-term gain room, which needs income and filing status (comes with R-005's sign-up bracket step). 2026-10-28 round 19: Tax Profile has an optional "Your income" box (how you file, which setup fills in, plus a rough taxable income), saved on this device. With it, the list adds "Sell and buy back 90 VTI · takes a $12,806 gain at 0%", which fills the room left under the 0% long-term bracket and raises your cost so a later sale owes less. When your year fits in 0%, the verdict also stops charging 15% on gains that owe nothing. The chat can't see the income yet, because storing it on the server needs a `db:push`.
 
 ## R-004 · "I have $n — where should it go?"
 - **Asked:** 2026-10-23
