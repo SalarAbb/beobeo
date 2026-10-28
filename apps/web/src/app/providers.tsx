@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createTRPCClient, httpBatchLink } from "@trpc/client";
+import { createTRPCClient, httpBatchStreamLink } from "@trpc/client";
 import superjson from "superjson";
 import { TRPCProvider } from "@/lib/trpc";
 import type { AppRouter } from "@/server/routers";
@@ -19,7 +19,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [trpcClient] = useState(() =>
     createTRPCClient<AppRouter>({
       links: [
-        httpBatchLink({
+        // Streamed batch: each query in a batch renders as soon as its own
+        // answer is ready (the dashboard's tiles no longer wait for the
+        // chart's timeseries, the Tax Center's Now tab for All Lots).
+        httpBatchStreamLink({
           url: "/api/trpc",
           transformer: superjson,
         }),

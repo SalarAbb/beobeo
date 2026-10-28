@@ -1,7 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { createContext, useContext, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useSyncExternalStore } from "react";
+import { setPortfolioCookie } from "@/lib/portfolio-cookie";
 import { useTRPC } from "@/lib/trpc";
 
 const STORAGE_KEY = "beobeo.activePortfolioId";
@@ -67,6 +68,10 @@ export function PortfolioProvider({
     stored && portfolios.data && !portfolios.data.some((p) => p.id === stored)
       ? null
       : stored;
+
+  // Mirror the selection into a cookie so the server can warm the dashboard
+  // for it (also covers selections saved before the cookie existed).
+  useEffect(() => setPortfolioCookie(portfolioId), [portfolioId]);
 
   const activeName =
     (portfolioId

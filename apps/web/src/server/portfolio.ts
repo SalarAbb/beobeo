@@ -25,7 +25,7 @@ import {
   type SplitEvent,
 } from "@beobeo/core";
 import { getMarketData } from "./market-data";
-import { cached, userCacheKey } from "./cache";
+import { cached, sharedRun, userCacheKey } from "./cache";
 
 /**
  * Short TTLs for the heavy per-request computations (full txn replay +
@@ -56,14 +56,30 @@ export interface AssetRow {
   providerRef: string | null;
 }
 
-/** Load a user's transactions as engine inputs, sorted, with their assets. */
-export async function loadEngineTransactions(
+/** Load a user's transactions as engine inputs, sorted, with their assets.
+ *  Concurrent identical loads share one pair of queries (the dashboard's
+ *  overview and timeseries ask at the same moment), so the result is
+ *  read-only to callers. */
+export function loadEngineTransactions(
   db: Db,
   userId: string,
   assetId?: string,
   /** Restrict to a subset of assets (scope for partial-portfolio comparisons). */
   assetIds?: string[],
   /** Restrict to one named portfolio (undefined = all portfolios). */
+  portfolioId?: string,
+): Promise<{ txns: EngineTransaction[]; assets: Map<string, AssetRow> }> {
+  return sharedRun(
+    userCacheKey(userId, "engine-txns", assetId ?? "-", portfolioId ?? "all", scopeKey(assetIds)),
+    () => loadEngineTransactionsUncached(db, userId, assetId, assetIds, portfolioId),
+  );
+}
+
+async function loadEngineTransactionsUncached(
+  db: Db,
+  userId: string,
+  assetId?: string,
+  assetIds?: string[],
   portfolioId?: string,
 ): Promise<{ txns: EngineTransaction[]; assets: Map<string, AssetRow> }> {
   const conditions = [eq(schema.transactions.userId, userId)];

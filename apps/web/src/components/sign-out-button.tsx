@@ -4,6 +4,7 @@ import { LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { signOut } from "@/lib/auth-client";
+import { setPortfolioCookie } from "@/lib/portfolio-cookie";
 
 export function SignOutButton({
   variant = "ghost",
@@ -19,6 +20,7 @@ export function SignOutButton({
         await signOut();
         // Stale portfolio selection must not leak into the next login.
         localStorage.removeItem("beobeo.activePortfolioId");
+        setPortfolioCookie(null);
         router.push("/signin");
         router.refresh();
       }}
