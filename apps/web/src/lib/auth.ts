@@ -34,6 +34,13 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
   },
+  // Every page render and tRPC request checks the session. Without the
+  // signed cookie cache that's a ~150ms DB round trip each time, more than the
+  // query it guards. A session revoked elsewhere stays usable here for at
+  // most maxAge; signing out on this device clears the cookie at once.
+  session: {
+    cookieCache: { enabled: true, maxAge: 5 * 60 },
+  },
   socialProviders: {
     ...(googleEnabled
       ? {

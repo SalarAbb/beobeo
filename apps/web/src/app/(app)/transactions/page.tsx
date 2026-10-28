@@ -13,8 +13,7 @@ import {
   type TransactionRow,
 } from "@/components/transactions/transaction-details-dialog";
 import { PageHeader } from "@/components/page-section";
-import { Skeleton } from "@/components/ui/skeleton";
-import { TabError } from "@/components/tax-center/tab-state";
+import { TabError, TabLoading } from "@/components/tax-center/tab-state";
 import {
   Table,
   TableBody,
@@ -143,11 +142,7 @@ export default function TransactionsPage({
 
       <div className="min-w-0 border-t">
         {list.isLoading ? (
-          <div className="space-y-2 py-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full" />
-            ))}
-          </div>
+          <TabLoading label="Loading your transactions…" className="my-4 h-24" />
         ) : list.isError && !list.data ? (
           <TabError what="your transactions" onRetry={() => void list.refetch()} />
         ) : (list.data?.length ?? 0) === 0 ? (

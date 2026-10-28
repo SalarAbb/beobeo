@@ -3,6 +3,9 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { usePortfolio } from "@/components/portfolio-context";
+import { useTRPC } from "@/lib/trpc";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard" },
@@ -19,6 +22,18 @@ const nav = [
 export function AppNav() {
   const pathname = usePathname();
   const navRef = useRef<HTMLElement>(null);
+  const trpc = useTRPC();
+  const queryClient = useQueryClient();
+  const { portfolioId } = usePortfolio();
+  // Start a page's data on the way to the click, so it arrives with the page
+  // instead of after it (the transactions list sat on a loading state).
+  const warm: Record<string, () => void> = {
+    "/transactions": () => {
+      const scope = { portfolioId: portfolioId ?? undefined };
+      void queryClient.prefetchQuery(trpc.transactions.list.queryOptions({ limit: 200, ...scope }));
+      void queryClient.prefetchQuery(trpc.accounts.list.queryOptions(scope));
+    },
+  };
   // On phones the row scrolls; keep the current page's tab visible.
   useEffect(() => {
     navRef.current
@@ -41,6 +56,9 @@ export function AppNav() {
             key={item.href}
             href={item.href}
             aria-current={active ? "page" : undefined}
+            onPointerEnter={warm[item.href]}
+            onFocus={warm[item.href]}
+            onTouchStart={warm[item.href]}
             className={`shrink-0 whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm transition-colors ${
               active
                 ? "bg-sidebar-accent font-medium text-primary"
