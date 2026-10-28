@@ -14,17 +14,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { METRIC_LABEL_CLASS, MetricHover } from "@/components/metric-hover";
 import { TabError } from "@/components/tax-center/tab-state";
+import { useServerPresets } from "@/components/compare-presets";
+import {
+  COMPARE_KEYS,
+  activeBenchmarkIds,
+  benchmarkChips,
+  dcaInput,
+  type BenchAsset,
+} from "@/lib/compare-selection";
 import { useTRPC } from "@/lib/trpc";
 import { useStoredState } from "@/lib/use-stored-state";
 import { fmtUsd, gainClass, useVizTheme } from "@/lib/viz";
 import { cn } from "@/lib/utils";
 
-interface BenchAsset {
-  id: string;
-  symbol: string;
-  name: string;
-  class: string;
-}
 
 /** Literal class strings per tile count so Tailwind sees them. */
 const STRIP_COLS: Record<number, string> = {
@@ -345,7 +347,14 @@ function MetricsTable({ columns }: { columns: MetricColumn[] }) {
 export default function ComparePage() {
   const trpc = useTRPC();
   const theme = useVizTheme();
-  const presets = useQuery(trpc.compare.presets.queryOptions());
+  // The layout hands over the presets, so the comparison below starts at once
+  // instead of waiting for a presets round trip. They never change.
+  const serverPresets = useServerPresets();
+  const presets = useQuery({
+    ...trpc.compare.presets.queryOptions(),
+    initialData: serverPresets,
+    staleTime: Infinity,
+  });
   const { portfolioId } = usePortfolio();
   const overview = useQuery(
     trpc.portfolio.overview.queryOptions({ portfolioId: portfolioId ?? undefined }),
@@ -353,22 +362,16 @@ export default function ComparePage() {
 
   // Remembered across navigation and reloads (users re-added the same benchmarks every visit).
   // Benchmarks are a personal preference; the scope is per portfolio, since it names holdings.
-  const [selectedIds, setSelectedIds] = useStoredState<string[] | null>("beobeo.compare.selected", null); // null → default to first preset
-  const [customBenchmarks, setCustomBenchmarks] = useStoredState<BenchAsset[]>("beobeo.compare.custom", []);
-  const [scopeIds, setScopeIds] = useStoredState<string[]>(`beobeo.compare.scope.${portfolioId ?? "all"}`, []); // empty = whole portfolio
+  const [selectedIds, setSelectedIds] = useStoredState<string[] | null>(COMPARE_KEYS.selected, null);
+  const [customBenchmarks, setCustomBenchmarks] = useStoredState<BenchAsset[]>(COMPARE_KEYS.custom, []);
+  const [scopeIds, setScopeIds] = useStoredState<string[]>(COMPARE_KEYS.scope(portfolioId), []);
   const [addingCustom, setAddingCustom] = useState(false);
 
-  const chips: BenchAsset[] = useMemo(() => {
-    const presetChips = presets.data ?? [];
-    const seen = new Set(presetChips.map((p) => p.id));
-    return [...presetChips, ...customBenchmarks.filter((c) => !seen.has(c.id))];
-  }, [presets.data, customBenchmarks]);
-
-  // Only ids that still have a chip: a remembered pick of a since-removed preset (VOO,
-  // which just duplicated SPY) must not linger in the chart with no way to turn it off.
-  const defaultIds = presets.data?.[0] ? [presets.data[0].id] : [];
-  const remembered = (selectedIds ?? []).filter((id) => chips.some((c) => c.id === id));
-  const activeIds = remembered.length > 0 ? remembered : defaultIds;
+  const chips: BenchAsset[] = useMemo(
+    () => benchmarkChips(presets.data ?? [], customBenchmarks),
+    [presets.data, customBenchmarks],
+  );
+  const activeIds = activeBenchmarkIds(presets.data ?? [], chips, selectedIds);
 
   function toggleBenchmark(id: string) {
     const next = activeIds.includes(id)
@@ -388,11 +391,7 @@ export default function ComparePage() {
   }
 
   const compare = useQuery({
-    ...trpc.compare.dca.queryOptions({
-      benchmarkIds: activeIds,
-      scopeAssetIds: scopeIds.length > 0 ? scopeIds : undefined,
-      portfolioId: portfolioId ?? undefined,
-    }),
+    ...trpc.compare.dca.queryOptions(dcaInput(activeIds, scopeIds, portfolioId)),
     enabled: activeIds.length > 0,
     staleTime: 5 * 60_000,
   });

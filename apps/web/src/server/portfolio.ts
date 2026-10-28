@@ -833,6 +833,22 @@ async function computeDcaComparisonUncached(
   userId: string,
   opts: { benchmarkIds: string[]; scopeAssetIds?: string[]; portfolioId?: string },
 ) {
+  const market = getMarketData();
+  // Everything that doesn't need the flows starts at once: the portfolio's own
+  // curve (it shares the transaction load below), the benchmark rows and their
+  // splits. Run one after another they made a cold Compare take ~1s.
+  const portfolioRun = computeTimeseries(userId, opts.scopeAssetIds, opts.portfolioId);
+  const assetsRun =
+    opts.benchmarkIds.length > 0
+      ? database.select().from(schema.assets).where(inArray(schema.assets.id, opts.benchmarkIds)).execute()
+      : Promise.resolve([]);
+  const splitsRun = market
+    .getSplits(opts.benchmarkIds)
+    .catch(() => new Map<string, { date: IsoDate; ratio: string }[]>());
+  // Awaited below or dropped on the empty path; never left unhandled.
+  portfolioRun.catch(() => {});
+  assetsRun.catch(() => {});
+
   const { txns } = await loadEngineTransactions(
     database,
     userId,
@@ -853,20 +869,14 @@ async function computeDcaComparisonUncached(
   const flows = extract(txns);
   const from = toIsoDate(flows[0]!.date);
   const to = toIsoDate(new Date());
-  const market = getMarketData();
 
-  const assetRows = await database
-    .select()
-    .from(schema.assets)
-    .where(inArray(schema.assets.id, opts.benchmarkIds));
+  const assetRows = await assetsRun;
   const assetById = new Map(assetRows.map((a) => [a.id, a]));
 
   const benchmarkPrices = await market.getPricesBulk(assetRows, leadIn(from), to);
   // Benchmarks are synthetic positions with no split transactions to multiply
   // units, so their unadjusted series must be split-adjusted before replay.
-  const benchmarkSplits = await market
-    .getSplits(opts.benchmarkIds)
-    .catch(() => new Map<string, { date: IsoDate; ratio: string }[]>());
+  const benchmarkSplits = await splitsRun;
 
   const benchmarks = opts.benchmarkIds.map((id) => {
     const asset = assetById.get(id);
@@ -897,7 +907,7 @@ async function computeDcaComparisonUncached(
     };
   });
 
-  const portfolio = await computeTimeseries(userId, opts.scopeAssetIds, opts.portfolioId);
+  const portfolio = await portfolioRun;
 
   const lastPortfolio = portfolio[portfolio.length - 1];
   const portfolioXirr = lastPortfolio

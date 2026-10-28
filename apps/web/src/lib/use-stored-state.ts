@@ -19,6 +19,11 @@ const pin = <T>(key: string, initial: T): T => {
   return initials.get(key) as T;
 };
 
+/** The stored value outside React (event handlers such as a hover prefetch). */
+export function readStored<T>(key: string, initial: T): T {
+  return read(key, initial);
+}
+
 function read<T>(key: string, initial: T): T {
   let raw: string | null = null;
   try {

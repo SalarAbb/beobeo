@@ -6,7 +6,15 @@ import { usePathname } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePortfolio } from "@/components/portfolio-context";
 import { useIncome } from "@/components/tax-center/use-income";
+import {
+  COMPARE_KEYS,
+  activeBenchmarkIds,
+  benchmarkChips,
+  dcaInput,
+  type BenchAsset,
+} from "@/lib/compare-selection";
 import { useTRPC } from "@/lib/trpc";
+import { readStored } from "@/lib/use-stored-state";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard" },
@@ -41,6 +49,23 @@ export function AppNav() {
       void queryClient.prefetchQuery(trpc.tax.now.queryOptions({ ...scope, income }));
       void queryClient.prefetchQuery(trpc.tax.lots.queryOptions(scope));
       void queryClient.prefetchQuery(trpc.tax.profile.queryOptions(scope));
+    },
+    // The comparison the page will ask for, with the benchmarks and scope saved on the device.
+    "/compare": () => {
+      void queryClient.prefetchQuery(trpc.portfolio.overview.queryOptions({ portfolioId: portfolioId ?? undefined }));
+      void queryClient
+        .fetchQuery({ ...trpc.compare.presets.queryOptions(), staleTime: Infinity })
+        .then((presets) => {
+          const chips = benchmarkChips(presets, readStored<BenchAsset[]>(COMPARE_KEYS.custom, []));
+          const ids = activeBenchmarkIds(presets, chips, readStored<string[] | null>(COMPARE_KEYS.selected, null));
+          if (ids.length === 0) return;
+          const scope = readStored<string[]>(COMPARE_KEYS.scope(portfolioId), []);
+          return queryClient.prefetchQuery({
+            ...trpc.compare.dca.queryOptions(dcaInput(ids, scope, portfolioId)),
+            staleTime: 5 * 60_000,
+          });
+        })
+        .catch(() => {}); // the page loads it itself
     },
   };
   // On phones the row scrolls; keep the current page's tab visible.
