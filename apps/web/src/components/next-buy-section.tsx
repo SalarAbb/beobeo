@@ -167,7 +167,9 @@ export function NextBuySection({
             <p className="text-xs text-muted-foreground">Weighing {fmtUsd(amountUsd)}…</p>
           )}
           <p className="flex flex-wrap items-center gap-x-1.5 text-lg">
-            Put <span className="data font-semibold">{fmtUsd(debouncedAmount)}</span> into
+            {/* The typed amount, never the one still being weighed: "$150" under a
+                freshly typed $100 read as the box ignoring it (luna, mission 29). */}
+            Put <span className="data font-semibold">{fmtUsd(amountUsd)}</span> into
             <AssetLogo symbol={pick.key} assetClass={pick.assetClass} size={20} />
             <span className="font-semibold">{pick.key}</span>
             {picks.length > 1 && index % picks.length > 0 && (

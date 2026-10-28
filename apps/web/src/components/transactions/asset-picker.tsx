@@ -128,15 +128,28 @@ export function AssetPicker({
 
   const searching = search.isFetching || query.trim() !== debouncedQuery;
 
-  // Merge, deduping across the three sections (local wins, then popular).
-  const local = search.data?.local ?? [];
-  const seen = new Set(local.map((a) => `${a.symbol}:${a.class}`));
-  const popularRows = popular.filter((p) => !seen.has(`${p.symbol}:${p.class}`));
-  for (const p of popularRows) seen.add(`${p.symbol}:${p.class}`);
+  // Rows never move once shown: the synchronous Popular rows stay on top and
+  // later sections only add rows below them. When the user already has a
+  // popular asset, its Popular row picks that asset instead of being swapped
+  // for a "Your assets" row; the swap remounted the row under the cursor and
+  // shifted the list 400px, so clicks missed (luna, hermione, barristan,
+  // missions 27–29).
+  const allLocal = search.data?.local ?? [];
+  const localByKey = new Map(allLocal.map((a) => [`${a.symbol}:${a.class}`, a]));
+  const popularRows = popular;
+  const seen = new Set(popularRows.map((p) => `${p.symbol}:${p.class}`));
+  const local = allLocal.filter((a) => !seen.has(`${a.symbol}:${a.class}`));
+  for (const a of local) seen.add(`${a.symbol}:${a.class}`);
   const remoteRows = (search.data?.remote ?? []).filter(
     (r) => !seen.has(`${r.symbol}:${r.class}`),
   );
   const hasResults = local.length > 0 || popularRows.length > 0 || remoteRows.length > 0;
+
+  function pickLocal(a: PickedAsset) {
+    setFailed(null);
+    onChange({ id: a.id, symbol: a.symbol, name: a.name, class: a.class });
+    setOpen(false);
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -174,7 +187,9 @@ export function AssetPicker({
             value={query}
             onValueChange={setQuery}
           />
-          <CommandList>
+          {/* A fixed height while searching: near the bottom of the screen the list
+              opens upward, so growing as results arrive pushed every row up. */}
+          <CommandList className={query.trim() ? "h-[300px]" : undefined}>
             {query.trim().length === 0 ? (
               <p className="px-3 py-6 text-center text-sm text-muted-foreground">
                 Type a ticker or company name
@@ -194,16 +209,24 @@ export function AssetPicker({
                 )}
                 {popularRows.length > 0 && (
                   <CommandGroup heading="Popular">
-                    {popularRows.map((r) => (
-                      <CommandItem
-                        key={`pop-${r.symbol}:${r.class}`}
-                        value={`pop-${r.symbol}-${r.class}`}
-                        className="gap-2.5 py-2"
-                        onSelect={() => void pickRemote(r)}
-                      >
-                        <AssetRow symbol={r.symbol} name={r.name} assetClass={r.class} />
-                      </CommandItem>
-                    ))}
+                    {popularRows.map((r) => {
+                      const mine = localByKey.get(`${r.symbol}:${r.class}`);
+                      return (
+                        <CommandItem
+                          key={`pop-${r.symbol}:${r.class}`}
+                          value={`pop-${r.symbol}-${r.class}`}
+                          className="gap-2.5 py-2"
+                          onSelect={() => (mine ? pickLocal(mine) : void pickRemote(r))}
+                        >
+                          <AssetRow
+                            symbol={r.symbol}
+                            name={r.name}
+                            assetClass={r.class}
+                            selected={!!mine && value?.id === mine.id}
+                          />
+                        </CommandItem>
+                      );
+                    })}
                   </CommandGroup>
                 )}
                 {local.length > 0 && (
@@ -213,16 +236,7 @@ export function AssetPicker({
                         key={a.id}
                         value={`local-${a.id}`}
                         className="gap-2.5 py-2"
-                        onSelect={() => {
-                          setFailed(null);
-                          onChange({
-                            id: a.id,
-                            symbol: a.symbol,
-                            name: a.name,
-                            class: a.class,
-                          });
-                          setOpen(false);
-                        }}
+                        onSelect={() => pickLocal(a)}
                       >
                         <AssetRow
                           symbol={a.symbol}
