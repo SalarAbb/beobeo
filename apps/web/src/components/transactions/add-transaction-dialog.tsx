@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { DatePicker } from "@/components/date-picker";
+import { DatePicker, localIsoDate } from "@/components/date-picker";
 import { usePortfolio } from "@/components/portfolio-context";
 import { Button } from "@/components/ui/button";
 import {
@@ -67,6 +67,7 @@ export function AddTransactionDialog({
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(defaultOpen);
+  const [saving, setSaving] = useState(false);
 
   const { portfolioId } = usePortfolio();
   const accounts = useQuery(
@@ -85,7 +86,7 @@ export function AddTransactionDialog({
   const [entry, setEntry] = useState<"price" | "total">("price");
   const [totalInput, setTotalInput] = useState("");
   const [fees, setFees] = useState("");
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => localIsoDate());
   const [note, setNote] = useState("");
 
   // Account is optional: preselect the first account; if the user has none,
@@ -159,8 +160,21 @@ export function AddTransactionDialog({
     setNote("");
   }
 
+  // The form closes the moment Save is pressed and a toast carries the save:
+  // a button sitting on "Saving…" through a slow round trip read as a hang
+  // (hermione, barristan). The values stay in state until the save lands, so
+  // a failure reopens the form exactly as it was.
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (saving) return;
+    if (!asset) {
+      toast.error("Pick an asset");
+      return;
+    }
+    const what = `${asset.symbol} ${type.replace("_", " ")}`;
+    setSaving(true);
+    setOpen(false);
+    const toastId = toast.loading(`Saving ${what}…`);
     try {
       let acctId = effectiveAccountId;
       if (!acctId) {
@@ -170,11 +184,7 @@ export function AddTransactionDialog({
           portfolioId: portfolioId ?? undefined,
         });
         acctId = acct.id;
-        await queryClient.invalidateQueries({ queryKey: trpc.accounts.list.queryKey() });
-      }
-      if (!asset) {
-        toast.error("Pick an asset");
-        return;
+        void queryClient.invalidateQueries({ queryKey: trpc.accounts.list.queryKey() });
       }
       await createTxn.mutateAsync({
         accountId: acctId,
@@ -190,12 +200,17 @@ export function AddTransactionDialog({
         note: note || undefined,
         source: "manual",
       });
-      toast.success(`${asset.symbol} ${type.replace("_", " ")} recorded`);
-      setOpen(false);
+      toast.success(`${what} recorded`, { id: toastId });
       resetForm();
       onCreated?.();
     } catch (err) {
-      toast.error((err as Error).message);
+      toast.error(`Couldn't save the ${what}: ${(err as Error).message}`, {
+        id: toastId,
+        duration: 10_000,
+        action: { label: "Open it again", onClick: () => setOpen(true) },
+      });
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -372,8 +387,8 @@ export function AddTransactionDialog({
                 Cancel
               </Button>
             </DialogClose>
-            <Button type="submit" disabled={createTxn.isPending || !asset}>
-              {createTxn.isPending
+            <Button type="submit" disabled={saving || !asset}>
+              {saving
                 ? "Saving…"
                 : total !== null
                   ? `Save · ${fmtUsd(total)}`

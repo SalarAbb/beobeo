@@ -13,6 +13,12 @@ const fmt = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
 });
 
+/** A local calendar date as YYYY-MM-DD. `toISOString()` is the UTC date,
+ * already tomorrow on a US evening, and the calendar disables future days. */
+export function localIsoDate(d: Date = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 /**
  * Calendar popover bound to an ISO date string (YYYY-MM-DD). Month/year
  * dropdowns make far-back dates (old buys) quick to reach.
@@ -52,11 +58,19 @@ export function DatePicker({
         </Button>
       </PopoverTrigger>
       {/* Focus lands on the selected day, not the previous-month button, so
-          arrow keys move the date right away. */}
+          arrow keys move the date right away. It's moved here, once the
+          popover's focus scope is active: the day button's own focus fires
+          first and a surrounding dialog's focus trap pulled it back to the
+          trigger. */}
       <PopoverContent
         className="w-auto p-0"
         align="start"
-        onOpenAutoFocus={(e) => e.preventDefault()}
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          (e.currentTarget as HTMLElement | null)
+            ?.querySelector<HTMLElement>('button[data-day][tabindex="0"]')
+            ?.focus();
+        }}
       >
         <Calendar
           mode="single"
@@ -69,8 +83,7 @@ export function DatePicker({
           disabled={{ after: new Date() }}
           onSelect={(d) => {
             if (d) {
-              const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-              onChange(iso);
+              onChange(localIsoDate(d));
               setOpen(false);
             }
           }}
