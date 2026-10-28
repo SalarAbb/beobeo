@@ -224,7 +224,10 @@ function TaxStep({
             After the <span className="data">${STANDARD_DEDUCTION[status].toLocaleString("en-US")}</span>{" "}
             standard deduction, that&apos;s about{" "}
             <span className="data">${Math.round(taxable).toLocaleString("en-US")}</span> of taxable
-            income: the {bands[fromPay.band]!.ordinaryRatePct}% bracket below.
+            income: the {bands[fromPay.band]!.ordinaryRatePct}% bracket
+            {usesPay
+              ? " below."
+              : `. You picked the ${picked!.ordinaryRatePct}% one below instead, so that's what we'll use.`}
           </p>
         )}
       </div>
