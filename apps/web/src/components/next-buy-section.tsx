@@ -15,7 +15,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Skeleton } from "@/components/ui/skeleton";
+import { TabLoading } from "@/components/tax-center/tab-state";
+import { defaultNextBuyAmount } from "@/lib/next-buy-defaults";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { fmtUsd } from "@/lib/viz";
@@ -36,7 +37,8 @@ export function NextBuySection({
 }: {
   /** Largest first, like the overview. */
   holdings: PickedAsset[];
-  lastDeposit: number | null;
+  /** undefined while the history is still loading (null = no deposit in it). */
+  lastDeposit: number | null | undefined;
 }) {
   const trpc = useTRPC();
   const { portfolioId } = usePortfolio();
@@ -47,9 +49,17 @@ export function NextBuySection({
   const [shown, setShown] = useState({ key: "", index: 0 });
 
   const options = picked ?? holdings.slice(0, 3);
-  const amountStr = amount ?? String(Math.round(lastDeposit ?? 500));
+  const defaultAmount = defaultNextBuyAmount(lastDeposit ?? null);
+  // Until the history says what the last deposit was, the box stays empty
+  // rather than showing $500 and then changing under the reader.
+  const waiting = amount === null && lastDeposit === undefined;
+  const amountStr = amount ?? (waiting ? "" : String(defaultAmount));
   const amountUsd = Math.max(0, Number(amountStr) || 0);
-  const debouncedAmount = useDebounced(amountUsd, 300);
+  // Only typing is debounced: the default goes out at once, and exactly as the
+  // dashboard layout warmed it.
+  const typed = useDebounced(amount, 300);
+  const debouncedAmount =
+    amount === null ? amountUsd : Math.max(0, Number(typed ?? defaultAmount) || 0);
   const assetIds = options.map((o) => o.id);
 
   const query = useQuery({
@@ -59,7 +69,8 @@ export function NextBuySection({
       assetIds,
       targets,
     }),
-    enabled: debouncedAmount > 0 && assetIds.length > 0,
+    // The default amount waits for the history, so it's asked once, not $500 first.
+    enabled: !waiting && debouncedAmount > 0 && assetIds.length > 0,
     placeholderData: keepPreviousData,
   });
 
@@ -68,7 +79,7 @@ export function NextBuySection({
   const index = shown.key === inputKey ? shown.index : 0;
   const picks = query.data?.picks ?? [];
   const pick = picks.length > 0 ? picks[index % picks.length]! : null;
-  const ready = amountUsd > 0 && options.length > 0;
+  const ready = options.length > 0 && (waiting || amountUsd > 0);
   // The pick on screen is for an older amount or list until the new one lands.
   const stale = amountUsd !== debouncedAmount || query.isPlaceholderData;
 
@@ -155,7 +166,7 @@ export function NextBuySection({
             Couldn&apos;t weigh these options right now. Try again in a moment.
           </p>
         ) : (
-          <Skeleton className="h-16 w-full max-w-md" />
+          <TabLoading label="Weighing your options…" className="h-16 max-w-md" />
         )
       ) : (
         <div

@@ -24,6 +24,7 @@ import {
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { METRIC_LABEL_CLASS, MetricHover } from "@/components/metric-hover";
+import { lastDeposit, nextBuyHoldings } from "@/lib/next-buy-defaults";
 import { useTRPC } from "@/lib/trpc";
 import { fmtPct, fmtQty, fmtUsd, gainClass } from "@/lib/viz";
 
@@ -37,17 +38,6 @@ const WINDOWS: { value: PnlWindow; label: string }[] = [
   { value: "1y", label: "1Y" },
   { value: "all", label: "All" },
 ];
-
-/** The most recent day money went in (a rise in the invested line), as the
- *  default "next deposit" for the target-mix split. */
-function lastDeposit(points: { invested: number }[] | undefined): number | null {
-  if (!points) return null;
-  for (let i = points.length - 1; i > 0; i--) {
-    const step = points[i]!.invested - points[i - 1]!.invested;
-    if (step >= 1) return step;
-  }
-  return null;
-}
 
 type SortKey = "symbol" | "quantity" | "price" | "marketValue" | "pl";
 type SortState = { key: SortKey; dir: "asc" | "desc" };
@@ -641,11 +631,16 @@ export default function DashboardPage() {
         lastDeposit={lastDeposit(timeseries.data)}
       />
 
+      {/* Asked once, with the real last deposit: a $500 placeholder asked first
+          meant two next-buy requests on every cold dashboard. */}
       <NextBuySection
-        holdings={data.holdings
-          .filter((h) => (h.marketValue ?? 0) >= 1)
-          .map((h) => ({ id: h.assetId, symbol: h.symbol, name: h.name, class: h.class }))}
-        lastDeposit={lastDeposit(timeseries.data)}
+        holdings={nextBuyHoldings(data.holdings).map((h) => ({
+          id: h.assetId,
+          symbol: h.symbol,
+          name: h.name,
+          class: h.class,
+        }))}
+        lastDeposit={timeseries.isPending ? undefined : lastDeposit(timeseries.data)}
       />
     </div>
   );

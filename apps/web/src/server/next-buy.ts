@@ -34,38 +34,53 @@ export interface NextBuyInput {
 }
 
 /**
- * "I have $n — where should it go?" (R-004). Gathers what core
- * `pickNextBuy` needs for each candidate: what the user holds of it (from the
- * cached overview), its trailing-year range, and which accounts it already
- * sits in. Ranked best first; the UI's "Show me another" walks the list.
+ * "I have $n — where should it go?" (R-004). Core `pickNextBuy` ranks the
+ * candidates, best first; the UI's "Show me another" walks the list. Ranking
+ * is pure and cheap, so only the gathering is cached: a new amount or target
+ * mix answers at once, and the dashboard layout's warm-up serves every
+ * device's target mix.
  */
-export function computeNextBuy(userId: string, input: NextBuyInput) {
-  const targets = input.targets
-    ? Object.entries(input.targets).sort(([a], [b]) => a.localeCompare(b))
-    : [];
+export async function computeNextBuy(userId: string, input: NextBuyInput) {
+  const ids = [...new Set(input.assetIds)].sort();
+  if (ids.length === 0 || !(input.amountUsd > 0)) return { picks: [] };
+  const { portfolioValue, candidates, meta, accounts } = await loadNextBuyCandidates(
+    userId,
+    input.portfolioId,
+    ids,
+  );
+  const picks = pickNextBuy({
+    amountUsd: input.amountUsd,
+    portfolioValue,
+    candidates,
+    targets: input.targets,
+    accounts,
+  });
+  return { picks: picks.map((p) => ({ ...p, ...meta[p.key]! })) };
+}
+
+/**
+ * What `pickNextBuy` needs for each candidate: what the user holds of it
+ * (from the cached overview), its trailing-year range, and which accounts it
+ * already sits in. `ids` must be sorted (they're the cache key).
+ */
+function loadNextBuyCandidates(userId: string, portfolioId: string | undefined, ids: string[]) {
   return cached(
-    userCacheKey(
-      userId,
-      "nextbuy",
-      input.portfolioId ?? "all",
-      input.amountUsd.toFixed(2),
-      [...input.assetIds].sort().join(","),
-      JSON.stringify(targets),
-    ),
+    userCacheKey(userId, "nextbuy-in", portfolioId ?? "all", ids.join(",")),
     TTL,
-    () => computeNextBuyUncached(userId, input),
+    () => loadNextBuyCandidatesUncached(userId, portfolioId, ids),
   );
 }
 
-async function computeNextBuyUncached(userId: string, input: NextBuyInput) {
-  const ids = [...new Set(input.assetIds)];
-  if (ids.length === 0 || !(input.amountUsd > 0)) return { picks: [] };
-
+async function loadNextBuyCandidatesUncached(
+  userId: string,
+  portfolioId: string | undefined,
+  ids: string[],
+) {
   const accountScope = [eq(schema.accounts.userId, userId)];
-  if (input.portfolioId) accountScope.push(eq(schema.accounts.portfolioId, input.portfolioId));
+  if (portfolioId) accountScope.push(eq(schema.accounts.portfolioId, portfolioId));
 
   const [overview, assetRows, accountRows, buys] = await Promise.all([
-    computeOverview(userId, input.portfolioId),
+    computeOverview(userId, portfolioId),
     db.select().from(schema.assets).where(inArray(schema.assets.id, ids)),
     db
       .select({
@@ -105,7 +120,8 @@ async function computeNextBuyUncached(userId: string, input: NextBuyInput) {
     .catch(() => new Map<string, Map<IsoDate, unknown>>());
 
   const holdingBy = new Map(overview.holdings.map((h) => [h.assetId, h]));
-  const meta = new Map<string, { assetId: string; name: string; assetClass: string; price: number | null }>();
+  const meta: Record<string, { assetId: string; name: string; assetClass: string; price: number | null }> =
+    {};
   const candidates: NextBuyCandidate[] = assetRows.map((a) => {
     const held = holdingBy.get(a.id);
     const closes = [...(series.get(a.id) ?? new Map()).entries()]
@@ -113,7 +129,7 @@ async function computeNextBuyUncached(userId: string, input: NextBuyInput) {
       .map(([, c]) => Number(c));
     const price = held?.price ?? closes.at(-1) ?? null;
     const range = price !== null ? [...closes, price] : closes;
-    meta.set(a.symbol, { assetId: a.id, name: a.name, assetClass: a.class, price });
+    meta[a.symbol] = { assetId: a.id, name: a.name, assetClass: a.class, price };
     return {
       key: a.symbol,
       assetClass: a.class,
@@ -127,12 +143,5 @@ async function computeNextBuyUncached(userId: string, input: NextBuyInput) {
     };
   });
 
-  const picks = pickNextBuy({
-    amountUsd: input.amountUsd,
-    portfolioValue: overview.totals.value,
-    candidates,
-    targets: input.targets,
-    accounts: accountRows,
-  });
-  return { picks: picks.map((p) => ({ ...p, ...meta.get(p.key)! })) };
+  return { portfolioValue: overview.totals.value, candidates, meta, accounts: accountRows };
 }
