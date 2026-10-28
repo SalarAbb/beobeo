@@ -140,7 +140,9 @@ export function ValueChart({ data }: { data: ValuePoint[] }) {
               className="inline-block w-4 border-t-2 border-dashed"
               style={{ borderColor: theme.muted }}
             />
-            <span className="text-muted-foreground">Invested</span>
+            {/* Buys minus sale proceeds, so it drifts from "You paid" (cost of what
+                you hold) once you've sold; "Invested" read as the same number. */}
+            <span className="text-muted-foreground">Put in, minus sales</span>
             <span className="font-medium data">
               {shown ? fmtUsd(shown.invested) : "—"}
             </span>

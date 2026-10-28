@@ -453,7 +453,14 @@ export default function DashboardPage() {
       )}
 
       <StatStrip className="-mt-6">
-        <StatTile label="Portfolio value" value={fmtUsd(totals.value)} />
+        <StatTile
+          label="Portfolio value"
+          value={fmtUsd(totals.value)}
+          // "I put in $X, it's worth $Y" is the first thing people check (samwell).
+          // Cost of what you hold, so value − this = Gain on holdings next to it.
+          sub={`You paid ${fmtUsd(totals.cost)}`}
+          subTone="text-muted-foreground"
+        />
         {windowed ? (
           <StatTile
             label={`Change · ${windowLabel}`}
