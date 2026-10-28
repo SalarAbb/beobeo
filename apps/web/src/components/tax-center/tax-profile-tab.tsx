@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  bracketOptions,
   FILING_STATUS_LABEL,
   ltcgZeroUpTo,
   ratesAtIncome,
@@ -211,7 +212,49 @@ function RatesCheck({
   ltcg: number | undefined;
   onUse: (ordinary: number, ltcg: number) => void;
 }) {
-  const { complete } = useIncome();
+  const { income, complete } = useIncome();
+  // A band tapped in setup, still under the filing status shown above:
+  // "Setup filled these from the income band you picked" with no band named
+  // left hermione unable to check them (mission 41).
+  const band =
+    !complete && income.band && income.band.status === (income.status ?? income.band.status)
+      ? bracketOptions(income.band.status).find((b) => b.incomeFrom === income.band!.incomeFrom)
+      : undefined;
+  if (!complete && band) {
+    const status = income.band!.status;
+    const d = STANDARD_DEDUCTION[status];
+    const matches = ordinary === band.ordinaryRatePct && ltcg === band.ltcgRatePct;
+    const range = (shift: number) =>
+      band.incomeTo === null
+        ? `over ${fmtUsd(band.incomeFrom + shift, 0)}`
+        : band.incomeFrom === 0
+          ? `under ${fmtUsd(band.incomeTo + shift, 0)}`
+          : `${fmtUsd(band.incomeFrom + shift, 0)} – ${fmtUsd(band.incomeTo + shift, 0)}`;
+    return (
+      <p className="text-xs text-muted-foreground">
+        Setup set these from the band you picked: <span className="data">{range(0)}</span> of
+        taxable income ({FILING_STATUS_LABEL[status].toLowerCase()}), which is pay of about{" "}
+        <span className="data">{range(d)}</span>{" "}
+        after the <span className="data">{fmtUsd(d, 0)}</span> standard deduction. 2026 brackets
+        put that band at <span className="data">{band.ordinaryRatePct}%</span> on short-term gains
+        and <span className="data">{band.ltcgRatePct}%</span> on long-term ones
+        {matches ? ", which is what these say" : ""}.{" "}
+        {!matches && (
+          <>
+            <button
+              type="button"
+              onClick={() => onUse(band.ordinaryRatePct, band.ltcgRatePct)}
+              className="font-medium text-primary underline-offset-4 hover:underline"
+            >
+              Use {band.ordinaryRatePct}% / {band.ltcgRatePct}%
+            </button>
+            , then Save.{" "}
+          </>
+        )}
+        Add your income above for an exact check.
+      </p>
+    );
+  }
   if (!complete)
     return (
       <p className="text-xs text-muted-foreground">
@@ -268,6 +311,7 @@ function IncomeSection() {
     const clean = v.replace(/[$,\s]/g, "");
     const amount = Number(clean);
     setIncome({
+      ...income,
       status,
       taxableIncomeUsd: clean === "" || !Number.isFinite(amount) || amount < 0 ? null : amount,
     });

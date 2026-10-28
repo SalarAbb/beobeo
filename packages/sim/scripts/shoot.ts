@@ -5,6 +5,7 @@
  * Run: pnpm --filter @beobeo/sim shoot --persona samwell --routes /dashboard,/tax-center [--out DIR]
  *      [--click '<css> | <css>']   (clicked in order after each route loads, e.g. to open a dialog)
  *      [--income 42000]            (as if typed into Tax Profile → Your income)
+ *      [--band 211400]             (as if setup's band with that lower edge was tapped, no pay)
  */
 import "../src/env";
 import { AppClient } from "../src/app/client";
@@ -29,7 +30,13 @@ if (!p) throw new Error(`unknown persona ${persona}`);
 const client = new AppClient();
 await client.signIn(simEmail(persona), simPassword(persona));
 const browser = await launchBrowser();
-const storage = deviceStorage(p, client.userId, income ? Number(income) : undefined);
+const band = opt("band"); // a setup band tapped instead of typing pay (its lower edge)
+const storage = deviceStorage(
+  p,
+  client.userId,
+  income ? Number(income) : undefined,
+  band ? Number(band) : undefined,
+);
 for (const [viewport, scheme] of [["desktop", "light"], ["desktop", "dark"], ["mobile", "light"]] as const) {
   const ctx = await newContext(browser, {
     viewport, scheme, cookies: client.cookieList, storage,

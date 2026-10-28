@@ -9,6 +9,10 @@ export interface StoredIncome {
   status: FilingStatus | null;
   /** Taxable income this year (after deductions), before investment gains. */
   taxableIncomeUsd: number | null;
+  /** The taxable-income band tapped in setup instead of typing pay (its
+   *  lower edge, under that filing status), so Tax Profile can say which
+   *  band set the rates. Absent when pay was typed or setup was skipped. */
+  band?: { status: FilingStatus; incomeFrom: number } | null;
 }
 
 const EMPTY: StoredIncome = { status: null, taxableIncomeUsd: null };

@@ -53,11 +53,15 @@ const TOTAL_LABEL: Partial<Record<TxnType, string>> = {
 export function AddTransactionDialog({
   onCreated,
   onSaving,
+  accountsPending,
   defaultOpen = false,
   defaultType = "buy",
   trigger,
 }: {
   onCreated?: () => void;
+  /** Accounts still being created (welcome step 2): the form opens at once,
+   *  and a Save that beats them waits for them instead of making "Default". */
+  accountsPending?: Promise<unknown> | null;
   /** Called with what's being saved ("VOO buy") when Save is pressed, and
    *  with null if the save fails (the welcome step says so on the page). */
   onSaving?: (what: string | null) => void;
@@ -182,6 +186,13 @@ export function AddTransactionDialog({
     onSaving?.(what);
     try {
       let acctId = effectiveAccountId;
+      if (!acctId && accountsPending) {
+        await accountsPending.catch(() => {});
+        const list = await queryClient.fetchQuery(
+          trpc.accounts.list.queryOptions({ portfolioId: portfolioId ?? undefined }),
+        );
+        acctId = list[0]?.id ?? "";
+      }
       if (!acctId) {
         const acct = await createAccount.mutateAsync({
           name: "Default",
@@ -284,14 +295,17 @@ export function AddTransactionDialog({
             </div>
             <div className="grid content-start gap-1.5">
               <div className="flex items-baseline justify-between gap-1">
-                <Label>{type === "dividend" ? "Amount" : byTotal ? "Total" : "Price"}</Label>
+                {/* The label says which mode is on and the link offers the
+                    other: a bare "Enter price" while in total mode read as
+                    the current state (hermione, mission 40). */}
+                <Label>{type === "dividend" ? "Amount" : byTotal ? totalLabel : "Price"}</Label>
                 {needsPrice(type) && (
                   <button
                     type="button"
                     className="text-xs text-primary hover:underline"
                     onClick={() => setEntry(byTotal ? "price" : "total")}
                   >
-                    {byTotal ? "Enter price" : "Enter total"}
+                    {byTotal ? "Use unit price" : "Enter total"}
                   </button>
                 )}
               </div>
@@ -376,7 +390,7 @@ export function AddTransactionDialog({
                   </SelectContent>
                 </Select>
               ) : (
-                <Input value="Default" disabled />
+                <Input value={accountsPending ? "Adding your accounts…" : "Default"} disabled />
               )}
             </div>
             <div className="grid content-start gap-1.5">

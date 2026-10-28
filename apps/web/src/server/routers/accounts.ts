@@ -77,6 +77,51 @@ export const accountsRouter = router({
       return account!;
     }),
 
+  /** Several accounts in one round trip (welcome step 2): one create per
+   *  account, in order, kept step 3 waiting on "Adding your accounts…"
+   *  (hermione, mission 40). They go into the user's first portfolio. */
+  createMany: protectedProcedure
+    .input(
+      z
+        .array(z.object({ name: z.string().min(1).max(100), accountType: accountTypeSchema }))
+        .min(1)
+        .max(10),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db
+        .select({ id: schema.portfolios.id })
+        .from(schema.portfolios)
+        .where(eq(schema.portfolios.userId, ctx.userId))
+        .orderBy(schema.portfolios.createdAt)
+        .limit(1);
+      const portfolioId =
+        existing[0]?.id ??
+        (
+          await ctx.db
+            .insert(schema.portfolios)
+            .values({ userId: ctx.userId, name: "Main" })
+            .returning()
+        )[0]!.id;
+      // One insert shares one now(); a millisecond apart keeps the list (sorted
+      // by createdAt) in the order they were ticked, so the add form
+      // preselects the first.
+      const now = Date.now();
+      const accounts = await ctx.db
+        .insert(schema.accounts)
+        .values(
+          input.map((a, i) => ({
+            ...a,
+            currency: "USD",
+            portfolioId,
+            userId: ctx.userId,
+            createdAt: new Date(now + i),
+          })),
+        )
+        .returning();
+      await invalidateUserComputations(ctx.userId);
+      return accounts;
+    }),
+
   remove: protectedProcedure
     .input(z.object({ id: z.uuid() }))
     .mutation(async ({ ctx, input }) => {

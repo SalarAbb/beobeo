@@ -58,6 +58,8 @@ export function deviceStorage(
   p: Persona,
   userId: string | null,
   taxableIncomeUsd?: number,
+  /** Lower edge of the taxable-income band tapped in setup (no pay typed). */
+  bandFrom?: number,
 ): Record<string, string> {
   if (!userId) return {};
   const out: Record<string, string> = {};
@@ -68,10 +70,12 @@ export function deviceStorage(
     );
     out[`beobeo.targets.${userId}.all`] = JSON.stringify(pcts);
   }
-  if (taxableIncomeUsd !== undefined) {
+  if (taxableIncomeUsd !== undefined || bandFrom !== undefined) {
+    const status = p.tax.filingStatus;
     out[`beobeo.tax.income.${userId}`] = JSON.stringify({
-      status: p.tax.filingStatus,
-      taxableIncomeUsd,
+      status,
+      taxableIncomeUsd: taxableIncomeUsd ?? null,
+      band: bandFrom === undefined ? null : { status, incomeFrom: bandFrom },
     });
   }
   return out;

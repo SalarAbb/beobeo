@@ -96,30 +96,27 @@ export function WelcomeFlow({ name }: { name: string }) {
   const first = name.trim().split(/\s+/)[0] ?? "";
   // Each step's answers save in the background while the next step shows: a
   // Continue stuck on "Saving…" read as a broken sign-up (hermione, missions
-  // 18 and 21). Step 1's failure is reported on step 2; step 3 waits for the
-  // accounts before its add form can use them.
+  // 18 and 21). Step 1's failure is reported on step 2. Step 3 is usable at
+  // once too: its options greyed out behind "Adding your accounts…" read as a
+  // spinner on the first-run path (hermione, mission 40), so the add form
+  // opens right away and only a Save that beats the accounts waits for them.
   const saveTax = useMutation(trpc.tax.updateProfile.mutationOptions());
   // Step 2 needs the account list; fetch it while step 1 is being read.
   useQuery(trpc.accounts.list.queryOptions({}));
-  const createAccount = useMutation(trpc.accounts.create.mutationOptions());
-  const [accounts, setAccounts] = useState<{ saving: boolean; error: string | null }>({
-    saving: false,
-    error: null,
-  });
+  const createAccounts = useMutation(trpc.accounts.createMany.mutationOptions());
+  const [accountsPending, setAccountsPending] = useState<Promise<unknown> | null>(null);
 
-  async function createAccounts(presets: AccountPreset[]) {
+  function addAccounts(presets: AccountPreset[]) {
     setStep(3);
     if (presets.length === 0) return;
-    setAccounts({ saving: true, error: null });
-    try {
-      // One at a time: the first create also makes the "Main" portfolio.
-      for (const p of presets) await createAccount.mutateAsync({ name: p.name, accountType: p.type });
+    // One request for all of them (it also makes the "Main" portfolio).
+    const pending = createAccounts
+      .mutateAsync(presets.map((p) => ({ name: p.name, accountType: p.type })))
       // The add form lists accounts; a stale empty list would make it create "Default".
-      await queryClient.invalidateQueries({ queryKey: trpc.accounts.list.queryKey() });
-      setAccounts({ saving: false, error: null });
-    } catch (e) {
-      setAccounts({ saving: false, error: (e as Error).message });
-    }
+      .then(() => queryClient.invalidateQueries({ queryKey: trpc.accounts.list.queryKey() }))
+      .finally(() => setAccountsPending(null));
+    pending.catch(() => {}); // reported from the mutation's own error state
+    setAccountsPending(pending);
   }
 
   if (step === 1)
@@ -136,10 +133,15 @@ export function WelcomeFlow({ name }: { name: string }) {
     return (
       <AccountsStep
         taxError={saveTax.error?.message ?? null}
-        onDone={(presets) => void createAccounts(presets)}
+        onDone={addAccounts}
       />
     );
-  return <FirstHoldingStep accountsSaving={accounts.saving} accountsError={accounts.error} />;
+  return (
+    <FirstHoldingStep
+      accountsPending={accountsPending}
+      accountsError={createAccounts.error?.message ?? null}
+    />
+  );
 }
 
 function StepFooter({ onSkip, label = "Skip this step" }: { onSkip: () => void; label?: string }) {
@@ -188,7 +190,12 @@ function TaxStep({
   const { income, setIncome } = useIncome();
 
   function onContinue() {
-    if (picked) setIncome({ status, taxableIncomeUsd: usesPay ? taxable : income.taxableIncomeUsd });
+    if (picked)
+      setIncome({
+        status,
+        taxableIncomeUsd: usesPay ? taxable : income.taxableIncomeUsd,
+        band: usesPay ? null : { status, incomeFrom: picked.incomeFrom },
+      });
     if (!rates && stateRate.trim() === "") return onDone(null);
     onDone({
       ...(rates && {
@@ -456,10 +463,10 @@ function OptionText({ title, body }: { title: string; body: string }) {
 }
 
 function FirstHoldingStep({
-  accountsSaving,
+  accountsPending,
   accountsError,
 }: {
-  accountsSaving: boolean;
+  accountsPending: Promise<unknown> | null;
   accountsError: string | null;
 }) {
   const router = useRouter();
@@ -469,7 +476,9 @@ function FirstHoldingStep({
   // as soon as the save is in.
   const [saving, setSaving] = useState<string | null>(null);
   useEffect(() => router.prefetch("/dashboard"), [router]);
-  const busy = accountsSaving || saving !== null;
+  // The accounts still saving don't block anything: the import's account
+  // pick comes after a file is chosen, and the add form waits on its Save.
+  const busy = saving !== null;
   const card = `${choice(false)} flex w-full items-start gap-3 py-3 disabled:pointer-events-none disabled:opacity-60`;
   return (
     <AuthShell
@@ -480,11 +489,6 @@ function FirstHoldingStep({
         <StepFooter label="Skip, show me the app" onSkip={() => router.push("/dashboard")} />
       }
     >
-      {accountsSaving && (
-        <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Loader2 className="size-3.5 animate-spin" aria-hidden /> Adding your accounts…
-        </p>
-      )}
       {saving && (
         <p role="status" className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Loader2 className="size-3.5 animate-spin" aria-hidden /> Saving your {saving}. Your
@@ -503,6 +507,7 @@ function FirstHoldingStep({
         <AddTransactionDialog
           onCreated={() => router.push("/dashboard")}
           onSaving={setSaving}
+          accountsPending={accountsPending}
           trigger={
             <button type="button" className={card} disabled={busy}>
               <PenLine className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
