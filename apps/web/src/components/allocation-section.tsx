@@ -244,14 +244,15 @@ export function AllocationSection({
       <p className="text-sm">{verdict}</p>
       <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-6">
         <AllocationDonut data={holdings} legend={false} />
-        <table className="min-w-0 flex-1 text-sm sm:max-w-md">
+        {/* full width under the donut on phones; beside it it squeezed to "NowTarget" */}
+        <table className="w-full min-w-0 text-sm sm:w-auto sm:max-w-md sm:flex-1">
           <thead>
             <tr className="text-xs text-muted-foreground">
               <th className="pb-2 text-left font-normal">Holding</th>
-              <th className="pb-2 text-right font-normal">Now</th>
-              <th className="pb-2 text-right font-normal">Target</th>
+              <th className="pb-2 pl-3 text-right font-normal">Now</th>
+              <th className="pb-2 pl-3 text-right font-normal">Target</th>
               <th className="hidden w-28 pb-2 sm:table-cell" aria-hidden />
-              <th className="pb-2 text-right font-normal">Off by</th>
+              <th className="pb-2 pl-3 text-right font-normal whitespace-nowrap">Off by</th>
             </tr>
           </thead>
           <tbody>
@@ -266,8 +267,8 @@ export function AllocationSection({
                     <span className="font-medium">{r.key}</span>
                   </span>
                 </td>
-                <td className="data py-1.5 text-right">{(r.current * 100).toFixed(1)}%</td>
-                <td className="data py-1.5 text-right text-muted-foreground">
+                <td className="data py-1.5 pl-3 text-right">{(r.current * 100).toFixed(1)}%</td>
+                <td className="data py-1.5 pl-3 text-right text-muted-foreground">
                   {r.target > 0 ? `${Number((r.target * 100).toFixed(2))}%` : "—"}
                 </td>
                 {/* bullet bar: fill = now, tick = target, one scale per table */}
@@ -291,7 +292,7 @@ export function AllocationSection({
                 </td>
                 <td
                   className={cn(
-                    "data py-1.5 text-right",
+                    "data py-1.5 pl-3 text-right whitespace-nowrap",
                     Math.abs(r.drift) >= FLAG_DRIFT ? "text-warn" : "text-muted-foreground",
                   )}
                 >

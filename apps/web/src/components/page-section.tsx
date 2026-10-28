@@ -34,7 +34,9 @@ export function Section({
   children: ReactNode;
 }) {
   return (
-    <section className="grid min-w-0 grid-cols-1 gap-5">
+    // content-start: beside a taller neighbour (position page's two columns) the
+    // rows would stretch and drop the chart to the column's bottom
+    <section className="grid min-w-0 grid-cols-1 content-start gap-5">
       <div className="flex items-baseline justify-between gap-3 border-b pb-2.5">
         <h2 className="font-display text-lg font-bold">{title}</h2>
         {aside}

@@ -182,25 +182,27 @@ export function PlanView({
           <ul className="grid divide-y border-y">
             {groupBlocks(blocked).map((b) => (
               <li key={b.key} className="grid gap-0.5 py-2.5 text-sm">
+                {/* the note gets its own line: beside the symbol it squeezed into a
+                    three-line column on a phone */}
                 <div className="flex items-baseline gap-3">
                   <span className="font-medium">{b.symbol}</span>
                   {b.lots > 1 && (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs whitespace-nowrap text-muted-foreground">
                       <span className="data">{b.lots}</span> purchases
                     </span>
                   )}
-                  <span
-                    className={cn(
-                      "text-xs",
-                      b.permanentlyDisallowed ? "text-loss" : "text-muted-foreground",
-                    )}
-                  >
-                    {b.permanentlyDisallowed
-                      ? "sell now and the loss is gone for good (retirement-account buy)"
-                      : "sell now and the loss is only postponed"}
-                  </span>
                   <span className="data ml-auto text-loss">{fmtUsd(-b.disallowedLossUsd)}</span>
                 </div>
+                <p
+                  className={cn(
+                    "text-xs",
+                    b.permanentlyDisallowed ? "text-loss" : "text-muted-foreground",
+                  )}
+                >
+                  {b.permanentlyDisallowed
+                    ? "Sell now and the loss is gone for good (retirement-account buy)."
+                    : "Sell now and the loss is only postponed."}
+                </p>
                 <p className="text-xs text-muted-foreground">
                   Bought again in {b.triggerAccountName} on{" "}
                   <span className="data">{b.triggerDate.slice(0, 10)}</span>
