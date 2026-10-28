@@ -23,6 +23,9 @@ export interface PortfolioApi {
   getTransactions(filter: { symbol?: string; limit?: number }): Promise<unknown>;
   getRealizedGains(year?: number): Promise<unknown>;
   runDcaComparison(benchmarkSymbol: string): Promise<unknown>;
+  /** Each buy, valued now, next to the same dollars put into a benchmark
+   *  that day, worst first ("which buy lost the most vs VOO?"). */
+  compareBuysToBenchmark(request: BuysVsBenchmarkRequest): Promise<unknown>;
   getPriceHistory(symbol: string, days: number): Promise<unknown>;
   /** "I have $n — where should it go?": the same ranked picks as the
    *  dashboard's next-buy section, for 1–5 symbols. */
@@ -39,4 +42,12 @@ export interface RaiseCashRequest {
   symbols?: string[];
   /** Only sell from the account whose name contains this. */
   account?: string;
+}
+
+export interface BuysVsBenchmarkRequest {
+  benchmarkSymbol: string;
+  /** Only buys of these ticker symbols. */
+  symbols?: string[];
+  /** ISO date: only buys on or after it. */
+  since?: string;
 }

@@ -1,6 +1,6 @@
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
-import type { PortfolioApi, RaiseCashRequest, TaxLotFilter } from "./api";
+import type { BuysVsBenchmarkRequest, PortfolioApi, RaiseCashRequest, TaxLotFilter } from "./api";
 
 const json = (v: unknown) => JSON.stringify(v);
 
@@ -91,7 +91,7 @@ export function buildPortfolioTools(
     betaZodTool({
       name: "get_realized_gains",
       description:
-        "Realized capital gains/losses grouped by calendar year across the whole portfolio, split into short-term and long-term. Optionally a single year.",
+        "Sales grouped by calendar year across the whole portfolio: totals for proceeds (cash taken out by selling), cost basis and realized gain, split short-/long-term, a month-by-month breakdown, and every sale (proceeds, basis, gain, term). Use it for 'how much have I sold / taken out this year and how much was gain?' instead of adding up get_transactions rows. Optionally a single year.",
       inputSchema: z.object({
         year: z.number().int().optional().describe("Calendar year, e.g. 2025"),
       }),
@@ -110,6 +110,22 @@ export function buildPortfolioTools(
       }),
       run: timed("run_dca_comparison", async ({ benchmarkSymbol }: { benchmarkSymbol: string }) =>
         json(await api.runDcaComparison(benchmarkSymbol)),
+      ),
+    }),
+    betaZodTool({
+      name: "compare_buys_to_benchmark",
+      description:
+        "Every buy set against the same dollars put into a benchmark on the same day: what the buy cost, what it's worth now (as if still held, later splits applied), what the benchmark would be worth now, and the edge (negative = the benchmark would have done better), worst edge first, with totals. Use for 'which buy was my worst/best vs VOO?', 'did my dip buys beat just buying SPY?'. Never work this out from get_transactions and get_price_history yourself.",
+      inputSchema: z.object({
+        benchmarkSymbol: z.string().describe("Benchmark ticker, e.g. VOO, SPY, QQQ or BTC"),
+        symbols: z
+          .array(z.string())
+          .optional()
+          .describe("Only buys of these ticker symbols; omit for every buy"),
+        since: z.string().optional().describe("ISO date: only buys on or after it"),
+      }),
+      run: timed("compare_buys_to_benchmark", async (request: BuysVsBenchmarkRequest) =>
+        json(await api.compareBuysToBenchmark(request)),
       ),
     }),
     betaZodTool({

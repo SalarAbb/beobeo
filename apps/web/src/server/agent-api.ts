@@ -1,6 +1,14 @@
 import { and, desc, eq, ilike } from "drizzle-orm";
 import { db, schema } from "@beobeo/db";
-import { buildLots, D, realizedByYear, toIsoDate } from "@beobeo/core";
+import {
+  adjustForSplits,
+  buildLots,
+  buysVsBenchmark,
+  D,
+  realizedByYear,
+  toIsoDate,
+  type Decimal,
+} from "@beobeo/core";
 import type { PortfolioApi } from "@beobeo/agent";
 import { getMarketData } from "./market-data";
 import {
@@ -8,6 +16,7 @@ import {
   computeOverview,
   computePosition,
   computeTimeseries,
+  leadIn,
   loadEngineTransactions,
 } from "./portfolio";
 import {
@@ -239,23 +248,54 @@ export function makePortfolioApi(userId: string, portfolioId?: string): Portfoli
           symbol: assets.get(assetId)!.symbol,
         })),
       );
+      // Totals are summed here: adding up a year of withdrawals in its head
+      // once kept the model thinking for 14s before its first word.
       const years = realizedByYear(allRealized)
         .filter((y) => year === undefined || y.year === year)
-        .map((y) => ({
-          year: y.year,
-          shortTerm: y.shortTerm.toNumber(),
-          longTerm: y.longTerm.toNumber(),
-          total: y.total.toNumber(),
-          sales: y.entries.map((g) => ({
-            symbol: (g as { symbol?: string }).symbol,
-            soldAt: toIsoDate(g.soldAt),
-            acquiredAt: toIsoDate(g.acquiredAt),
-            quantity: g.quantity.toNumber(),
-            gain: g.gain.toNumber(),
-            longTerm: g.longTerm,
-          })),
-        }));
-      return years;
+        .map((y) => {
+          const entries = y.entries as (typeof allRealized)[number][];
+          const months = new Map<string, { proceeds: Decimal; gain: Decimal }>();
+          for (const g of entries) {
+            const key = toIsoDate(g.soldAt).slice(0, 7);
+            const m = months.get(key) ?? { proceeds: D(0), gain: D(0) };
+            months.set(key, { proceeds: m.proceeds.add(g.proceeds), gain: m.gain.add(g.gain) });
+          }
+          const sum = (pick: (g: (typeof entries)[number]) => Decimal) =>
+            round2(entries.reduce((s, g) => s.add(pick(g)), D(0)).toNumber());
+          return {
+            year: y.year,
+            proceeds: sum((g) => g.proceeds),
+            costBasis: sum((g) => g.costBasis),
+            gain: round2(y.total.toNumber()),
+            shortTermGain: round2(y.shortTerm.toNumber()),
+            longTermGain: round2(y.longTerm.toNumber()),
+            byMonth: [...months.entries()]
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([month, m]) => ({
+                month,
+                proceeds: round2(m.proceeds.toNumber()),
+                gain: round2(m.gain.toNumber()),
+              })),
+            // Columnar, one row per lot sold from, oldest sale first.
+            columns: ["symbol", "sold", "bought", "quantity", "proceeds", "costBasis", "gain", "term"],
+            sales: entries
+              .sort((a, b) => a.soldAt.getTime() - b.soldAt.getTime())
+              .map((g) => [
+                g.symbol,
+                toIsoDate(g.soldAt),
+                toIsoDate(g.acquiredAt),
+                g.quantity.toNumber(),
+                round2(g.proceeds.toNumber()),
+                round2(g.costBasis.toNumber()),
+                round2(g.gain.toNumber()),
+                g.longTerm ? "long" : "short",
+              ]),
+          };
+        });
+      return {
+        years,
+        note: "Every account, retirement accounts included (their sales aren't taxed); the snapshot's taxProfile ytd gains are the taxable part.",
+      };
     },
 
     async pickNextBuy(amountUsd, symbols) {
@@ -366,6 +406,67 @@ export function makePortfolioApi(userId: string, portfolioId?: string): Portfoli
         benchmarkAnnualReturn: bench?.xirr ?? null,
         difference:
           lastP && lastB ? D(lastP.value).sub(lastB.value).toNumber() : null,
+      };
+    },
+
+    async compareBuysToBenchmark({ benchmarkSymbol, symbols, since }) {
+      const [benchRows, { txns, assets }] = await Promise.all([
+        db.select().from(schema.assets).where(ilike(schema.assets.symbol, benchmarkSymbol)),
+        loadEngineTransactions(db, userId, undefined, undefined, portfolioId),
+      ]);
+      const bench = benchRows[0];
+      if (!bench) {
+        return { error: `Unknown benchmark ${benchmarkSymbol}. Try SPY, VOO, QQQ or BTC.` };
+      }
+      const wanted = symbols?.map((s) => s.toUpperCase());
+      const inScope = (assetId: string) =>
+        !wanted || wanted.includes(assets.get(assetId)!.symbol.toUpperCase());
+      const buys = txns.filter((t) => t.type === "buy" && inScope(t.assetId));
+      if (buys.length === 0) return { error: "No buys match that." };
+      const from = toIsoDate(buys[0]!.tradedAt);
+      const to = toIsoDate(new Date());
+      const market = getMarketData();
+      const held = [...new Set(buys.map((t) => t.assetId))].map((id) => assets.get(id)!);
+      const [latest, benchPrices, benchSplits] = await Promise.all([
+        market.getLatestPrices(held, to),
+        market.getPricesBulk([bench], leadIn(from), to),
+        market.getSplits([bench.id]).catch(() => new Map<string, { date: string; ratio: string }[]>()),
+      ]);
+      const rows = buysVsBenchmark(
+        // Split transactions stay in so later splits scale each buy's units.
+        txns.filter((t) => t.type === "split" || buys.includes(t)),
+        new Map([...latest.entries()].map(([id, p]) => [id, D(p.close)])),
+        adjustForSplits(benchPrices.get(bench.id) ?? new Map(), benchSplits.get(bench.id) ?? []),
+      ).filter((r) => !since || r.date >= since);
+      const priced = rows.filter((r) => r.edge !== null);
+      const total = (pick: (r: (typeof rows)[number]) => Decimal | null) =>
+        round2(priced.reduce((s, r) => s.add(pick(r)!), D(0)).toNumber());
+      // A long DCA history is hundreds of buys; the worst and best ends
+      // answer the question, the totals cover the rest.
+      const shown = rows.length > 40 ? [...rows.slice(0, 20), ...rows.slice(-20)] : rows;
+      return {
+        benchmark: bench.symbol,
+        buys: rows.length,
+        beatBenchmark: priced.filter((r) => r.edge!.gt(0)).length,
+        totals: {
+          cost: total((r) => r.cost),
+          valueNow: total((r) => r.valueNow),
+          benchmarkValueNow: total((r) => r.benchmarkValueNow),
+          edge: total((r) => r.edge),
+        },
+        ...(shown.length < rows.length && {
+          showing: `the 20 worst and 20 best of ${rows.length} buys`,
+        }),
+        columns: ["symbol", "bought", "cost", "valueNow", "benchmarkValueNow", "edge"],
+        rows: shown.map((r) => [
+          assets.get(r.assetId)!.symbol,
+          r.date,
+          round2(r.cost.toNumber()),
+          r.valueNow && round2(r.valueNow.toNumber()),
+          r.benchmarkValueNow && round2(r.benchmarkValueNow.toNumber()),
+          r.edge && round2(r.edge.toNumber()),
+        ]),
+        note: "Each buy is valued as if still held, sales ignored; worst edge first. Edge < 0 means the same dollars in the benchmark that day would be worth more now.",
       };
     },
 

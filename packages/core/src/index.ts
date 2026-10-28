@@ -36,6 +36,7 @@ export {
   type DailyReturn,
 } from "./metrics";
 export { adjustForSplits, splitFactorAfter, type SplitEvent } from "./splits";
+export { buysVsBenchmark, type BuyVsBenchmark } from "./buys-vs-benchmark";
 export {
   extractCashFlows,
   replayDca,
