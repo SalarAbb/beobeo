@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Gauge } from "lucide-react";
 import Link from "next/link";
 import { AssetLogo } from "@/components/asset-logo";
@@ -359,6 +359,9 @@ export default function DashboardPage() {
   // R-002: expert metrics sit one deliberate tap away, never on the first screen.
   const [showDetails, setShowDetails] = useState(false);
   const scope = { portfolioId: portfolioId ?? undefined };
+  const queryClient = useQueryClient();
+  const prefetchPosition = (assetId: string) =>
+    void queryClient.prefetchQuery(trpc.portfolio.position.queryOptions({ assetId, ...scope }));
   const overview = useQuery({
     ...trpc.portfolio.overview.queryOptions({ ...scope, window: pnlWindow }),
     // keep showing the previous window's data while the new one loads
@@ -574,6 +577,9 @@ export default function DashboardPage() {
                       <Link
                         href={`/positions/${h.assetId}`}
                         className="flex items-center gap-2.5"
+                        // The position page replays the asset's history; start it on the way to the click.
+                        onPointerEnter={() => prefetchPosition(h.assetId)}
+                        onFocus={() => prefetchPosition(h.assetId)}
                       >
                         <AssetLogo symbol={h.symbol} assetClass={h.class} size={24} />
                         <span className="font-medium group-hover:underline">

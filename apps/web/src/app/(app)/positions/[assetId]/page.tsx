@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { AssetLogo } from "@/components/asset-logo";
@@ -10,8 +10,7 @@ import { usePortfolio } from "@/components/portfolio-context";
 import { PriceChart } from "@/components/charts/price-chart";
 import { RealizedBars } from "@/components/charts/realized-bars";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import { Skeleton } from "@/components/ui/skeleton";
-import { TabError } from "@/components/tax-center/tab-state";
+import { TabError, TabLoading } from "@/components/tax-center/tab-state";
 import {
   Table,
   TableBody,
@@ -30,6 +29,7 @@ const NUM = "text-right data text-[13px]";
 export default function PositionPage() {
   const { assetId } = useParams<{ assetId: string }>();
   const trpc = useTRPC();
+  const queryClient = useQueryClient();
   const { portfolioId } = usePortfolio();
   const [view, setView] = useState<LotsView>("lots");
   const position = useQuery(
@@ -40,10 +40,29 @@ export default function PositionPage() {
   );
 
   if (position.isLoading) {
+    // The dashboard already knows the symbol; show it at once instead of grey boxes, which a
+    // persona caught mid-load and reported as a blank page (barristan, mission 31).
+    const known = queryClient
+      .getQueriesData<{ holdings: { assetId: string; symbol: string; class: string; name: string }[] }>({
+        queryKey: trpc.portfolio.overview.pathKey(),
+      })
+      .flatMap(([, d]) => d?.holdings ?? [])
+      .find((h) => h.assetId === assetId);
     return (
-      <div className="mx-auto grid max-w-5xl gap-4">
-        <Skeleton className="h-20 w-full" />
-        <Skeleton className="h-96 w-full" />
+      <div className="mx-auto grid w-full max-w-5xl grid-cols-1 gap-8">
+        {known && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <AssetLogo symbol={known.symbol} assetClass={known.class} size={36} />
+            <h1 className="text-3xl">{known.symbol}</h1>
+            {known.name !== known.symbol && (
+              <span className="min-w-0 truncate text-sm text-muted-foreground">{known.name}</span>
+            )}
+          </div>
+        )}
+        <TabLoading
+          label={`Loading ${known?.symbol ?? "this position"}: your purchases, sales and price history…`}
+          className="h-40 px-4 text-center"
+        />
       </div>
     );
   }
