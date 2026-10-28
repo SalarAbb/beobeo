@@ -508,12 +508,13 @@ function FirstHoldingStep({
           onCreated={() => router.push("/dashboard")}
           onSaving={setSaving}
           accountsPending={accountsPending}
+          defaultEntry="total"
           trigger={
             <button type="button" className={card} disabled={busy}>
               <PenLine className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
               <OptionText
                 title="Type in a holding"
-                body="A ticker, how many and what you paid. Today's price fills in."
+                body="A ticker, how many and what you paid in all, as your statement shows it."
               />
               <ArrowRight className="mt-0.5 ml-auto size-4 shrink-0 text-muted-foreground" aria-hidden />
             </button>

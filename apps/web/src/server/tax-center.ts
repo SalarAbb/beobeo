@@ -18,7 +18,7 @@ import {
   type TaxPlan,
   type WashSaleBlock,
 } from "@beobeo/core";
-import { cached, userCacheKey } from "./cache";
+import { cached, sharedRun, userCacheKey } from "./cache";
 import { computeOverview } from "./portfolio";
 import { loadOrCreateTaxProfile, loadTaxLots, toEngineProfile } from "./tax/lots";
 
@@ -39,10 +39,28 @@ function lossCandidates(lots: TaxLot[]): LossLotCandidate[] {
     }));
 }
 
+/**
+ * The page's first batch asks for tax.now, tax.lots and tax.profile at once,
+ * and each needs the same lots and profile row; on the Neon driver three
+ * copies of the same queries queue behind each other. Concurrent callers
+ * share one run (read-only to them; core only sorts copies).
+ */
+function loadScopeLots(userId: string, scope: string, asOf: Date) {
+  return sharedRun(userCacheKey(userId, "tax-lots-load", scope), () =>
+    loadTaxLots(userId, scope, asOf),
+  );
+}
+
+function loadScopeProfileRow(userId: string, scope: string) {
+  return sharedRun(userCacheKey(userId, "tax-profile-row", scope), () =>
+    loadOrCreateTaxProfile(userId, scope),
+  );
+}
+
 async function assembleScope(userId: string, scope: string, asOf: Date) {
   const [bundle, profileRow] = await Promise.all([
-    loadTaxLots(userId, scope, asOf),
-    loadOrCreateTaxProfile(userId, scope),
+    loadScopeLots(userId, scope, asOf),
+    loadScopeProfileRow(userId, scope),
   ]);
   const { lots, recentBuys, ytdShortTermGain, ytdLongTermGain } = bundle;
   const profile = toEngineProfile(profileRow, ytdShortTermGain, ytdLongTermGain);
@@ -155,7 +173,7 @@ export function computeTaxLotsList(userId: string, portfolioId?: string) {
   const scope = portfolioKey(portfolioId);
   return cached(userCacheKey(userId, "tax-lots", scope), TTL.lots, async () => {
     const asOf = new Date();
-    const { lots } = await loadTaxLots(userId, scope, asOf);
+    const { lots } = await loadScopeLots(userId, scope, asOf);
     return lots
       .map((l) => serializeLot(l, asOf))
       .sort((a, b) => b.marketValue - a.marketValue);

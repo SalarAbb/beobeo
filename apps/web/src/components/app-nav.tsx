@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePortfolio } from "@/components/portfolio-context";
+import { useIncome } from "@/components/tax-center/use-income";
 import { useTRPC } from "@/lib/trpc";
 
 const nav = [
@@ -25,6 +26,7 @@ export function AppNav() {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const { portfolioId } = usePortfolio();
+  const { complete: income } = useIncome();
   // Start a page's data on the way to the click, so it arrives with the page
   // instead of after it (the transactions list sat on a loading state).
   const warm: Record<string, () => void> = {
@@ -32,6 +34,13 @@ export function AppNav() {
       const scope = { portfolioId: portfolioId ?? undefined };
       void queryClient.prefetchQuery(trpc.transactions.list.queryOptions({ limit: 200, ...scope }));
       void queryClient.prefetchQuery(trpc.accounts.list.queryOptions(scope));
+    },
+    // The same three queries the page fires on mount (with the device's income).
+    "/tax-center": () => {
+      const scope = { portfolioId: portfolioId ?? undefined };
+      void queryClient.prefetchQuery(trpc.tax.now.queryOptions({ ...scope, income }));
+      void queryClient.prefetchQuery(trpc.tax.lots.queryOptions(scope));
+      void queryClient.prefetchQuery(trpc.tax.profile.queryOptions(scope));
     },
   };
   // On phones the row scrolls; keep the current page's tab visible.

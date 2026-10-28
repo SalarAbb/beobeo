@@ -56,6 +56,7 @@ export function AddTransactionDialog({
   accountsPending,
   defaultOpen = false,
   defaultType = "buy",
+  defaultEntry = "price",
   trigger,
 }: {
   onCreated?: () => void;
@@ -71,6 +72,10 @@ export function AddTransactionDialog({
   defaultOpen?: boolean;
   /** Preselected type (the dashboard's Dividends tile links to ?add=dividend). */
   defaultType?: TxnType;
+  /** "total" opens buys/sells on the total field: setup's holding is something
+   *  already owned, whose statement shows what was paid in all, and a
+   *  prefilled market price had to be switched away from (mission 42). */
+  defaultEntry?: "price" | "total";
 }) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
@@ -91,7 +96,7 @@ export function AddTransactionDialog({
   const [quantity, setQuantity] = useState(defaultType === "dividend" ? "1" : "");
   const [price, setPrice] = useState("");
   const [priceTouched, setPriceTouched] = useState(false);
-  const [entry, setEntry] = useState<"price" | "total">("price");
+  const [entry, setEntry] = useState<"price" | "total">(defaultEntry);
   const [totalInput, setTotalInput] = useState("");
   const [fees, setFees] = useState("");
   const [date, setDate] = useState(() => localIsoDate());
@@ -294,21 +299,14 @@ export function AddTransactionDialog({
               />
             </div>
             <div className="grid content-start gap-1.5">
-              <div className="flex items-baseline justify-between gap-1">
-                {/* The label says which mode is on and the link offers the
-                    other: a bare "Enter price" while in total mode read as
-                    the current state (hermione, mission 40). */}
-                <Label>{type === "dividend" ? "Amount" : byTotal ? totalLabel : "Price"}</Label>
-                {needsPrice(type) && (
-                  <button
-                    type="button"
-                    className="text-xs text-primary hover:underline"
-                    onClick={() => setEntry(byTotal ? "price" : "total")}
-                  >
-                    {byTotal ? "Use unit price" : "Enter total"}
-                  </button>
-                )}
-              </div>
+              {/* The label says which mode is on and the link under the field
+                  offers the other: a bare "Enter price" while in total mode
+                  read as the current state (hermione, mission 40). Beside
+                  the label, the link wrapped it on a phone and dropped this
+                  field below its neighbours. */}
+              <Label className="whitespace-nowrap">
+                {type === "dividend" ? "Amount" : byTotal ? totalLabel : "Price"}
+              </Label>
               {byTotal ? (
                 <Input
                   inputMode="decimal"
@@ -330,6 +328,15 @@ export function AddTransactionDialog({
                   disabled={type === "split"}
                   required={needsPrice(type)}
                 />
+              )}
+              {needsPrice(type) && (
+                <button
+                  type="button"
+                  className="justify-self-start text-xs text-primary hover:underline"
+                  onClick={() => setEntry(byTotal ? "price" : "total")}
+                >
+                  {byTotal ? "Use unit price" : "Enter total"}
+                </button>
               )}
             </div>
             <div className="grid content-start gap-1.5">
