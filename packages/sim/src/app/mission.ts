@@ -59,10 +59,17 @@ export async function observe(page: Page): Promise<Observation> {
   // tsx/esbuild wraps named functions in a `__name` helper that doesn't exist in the page. A string
   // evaluate isn't transpiled, so it can define the helper first.
   await page.evaluate("globalThis.__name ??= (f) => f");
+  // Let closing layers finish their exit animation. A ticker list still fading
+  // out after a pick was read as open, the persona clicked its vanishing row,
+  // and reported "the picker click times out" (missions 39, 46).
+  await page
+    .waitForFunction(() => !document.querySelector("[role=listbox][data-state=closed], [role=menu][data-state=closed], [role=dialog][data-state=closed], [data-radix-popper-content-wrapper] > [data-state=closed]"), undefined, { timeout: 1_000 })
+    .catch(() => undefined);
   const r = await page.evaluate(() => {
     document.querySelectorAll("[data-mref]").forEach((el) => el.removeAttribute("data-mref"));
     // What's in front of the person: an open dropdown/menu (rendered in its own layer), else a dialog, else the page.
-    const visible = (e: Element | null) => !!e && (e as HTMLElement).getBoundingClientRect().height > 0;
+    const visible = (e: Element | null) =>
+      !!e && (e as HTMLElement).getBoundingClientRect().height > 0 && !e.closest("[data-state=closed]");
     const list = [...document.querySelectorAll<HTMLElement>("[role=listbox], [role=menu]")].find(visible) ?? null;
     // The whole popover layer, so a combobox's search box beside its list is reachable too.
     const popup = list?.closest<HTMLElement>("[data-radix-popper-content-wrapper]") ?? list;

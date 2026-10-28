@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Hanken_Grotesk } from "next/font/google";
 import "./globals.css";
+import { Toaster } from "@/components/ui/sonner";
 import { Providers } from "./providers";
 
 // One face for the whole app — logo, titles, text and numbers: Hanken Grotesk.
@@ -37,6 +38,10 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         <Providers>{children}</Providers>
+        {/* One toaster for every route: per-layout ones dropped a toast when
+            the route changed under it, so setup's "VOO buy recorded" vanished
+            as the dashboard opened (hermione, mission 46). */}
+        <Toaster />
       </body>
     </html>
   );

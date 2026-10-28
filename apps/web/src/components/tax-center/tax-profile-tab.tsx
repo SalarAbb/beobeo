@@ -264,13 +264,33 @@ function RatesCheck({
     );
   const at = ratesAtIncome(complete.status, complete.taxableIncomeUsd);
   const matches = ordinary === at.ordinaryRatePct && ltcg === at.ltcgRatePct;
+  // The bracket's edges and the room to the next one, so the rate can be
+  // checked against a tax table, not taken on trust (hermione, mission 47).
+  const bands = bracketOptions(complete.status);
+  const own = bands[at.band]!;
+  const next = bands[at.band + 1];
   return (
     <p className="text-xs text-muted-foreground">
       At about <span className="data">{fmtUsd(complete.taxableIncomeUsd, 0)}</span> of taxable
       income ({FILING_STATUS_LABEL[complete.status].toLowerCase()}), 2026 brackets put you at{" "}
       <span className="data">{at.ordinaryRatePct}%</span> on short-term gains and{" "}
       <span className="data">{at.ltcgRatePct}%</span> on long-term ones
-      {matches ? ", which is what these say." : "."}
+      {matches ? ", which is what these say." : "."}{" "}
+      {next && own.incomeTo !== null && (
+        <>
+          The {own.ordinaryRatePct}% bracket runs{" "}
+          {own.incomeFrom === 0 ? (
+            "up"
+          ) : (
+            <>
+              from <span className="data">{fmtUsd(own.incomeFrom, 0)}</span>
+            </>
+          )}{" "}
+          to <span className="data">{fmtUsd(own.incomeTo, 0)}</span>, so about{" "}
+          <span className="data">{fmtUsd(own.incomeTo - complete.taxableIncomeUsd, 0)}</span>{" "}
+          more taxable income before {next.ordinaryRatePct}%.
+        </>
+      )}
       {!matches && (
         <>
           {" "}

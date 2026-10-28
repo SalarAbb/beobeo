@@ -72,6 +72,15 @@ function payRange(status: FilingStatus, b: BracketOption) {
   return `With the $${d.toLocaleString("en-US")} standard deduction, that's pay of ${range}.`;
 }
 
+/** The same band in pay, shown on every row: tapping a band to learn its pay
+ *  was one step too late, she still read the taxable figures as pay (mission 46). */
+function payLabel(status: FilingStatus, b: BracketOption) {
+  const d = STANDARD_DEDUCTION[status];
+  if (b.incomeFrom === 0) return `pay under ~${k(b.incomeTo! + d)}`;
+  if (b.incomeTo === null) return `pay over ~${k(b.incomeFrom + d)}`;
+  return `pay ~${k(b.incomeFrom + d)} – ${k(b.incomeTo + d)}`;
+}
+
 /** Selected rows/chips: the accent pill look used across the app. */
 const choice = (on: boolean) =>
   `rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
@@ -275,7 +284,10 @@ function TaxStep({
               }}
               className={`${choice(chosen === i)} flex items-center justify-between gap-3`}
             >
-              <span className="data font-medium">{bandLabel(b)}</span>
+              <span className="flex flex-col">
+                <span className="data font-medium">{bandLabel(b)} taxable</span>
+                <span className="data text-xs text-muted-foreground">{payLabel(status, b)}</span>
+              </span>
               <span className="data text-xs text-muted-foreground">
                 {b.ordinaryRatePct}% bracket
               </span>

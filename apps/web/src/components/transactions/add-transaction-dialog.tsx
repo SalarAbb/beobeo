@@ -191,12 +191,14 @@ export function AddTransactionDialog({
     onSaving?.(what);
     try {
       let acctId = effectiveAccountId;
+      let acctName = accounts.data?.find((a) => a.id === acctId)?.name;
       if (!acctId && accountsPending) {
         await accountsPending.catch(() => {});
         const list = await queryClient.fetchQuery(
           trpc.accounts.list.queryOptions({ portfolioId: portfolioId ?? undefined }),
         );
         acctId = list[0]?.id ?? "";
+        acctName = list[0]?.name;
       }
       if (!acctId) {
         const acct = await createAccount.mutateAsync({
@@ -205,6 +207,7 @@ export function AddTransactionDialog({
           portfolioId: portfolioId ?? undefined,
         });
         acctId = acct.id;
+        acctName = acct.name;
         void queryClient.invalidateQueries({ queryKey: trpc.accounts.list.queryKey() });
       }
       await createTxn.mutateAsync({
@@ -221,7 +224,9 @@ export function AddTransactionDialog({
         note: note || undefined,
         source: "manual",
       });
-      toast.success(`${what} recorded`, { id: toastId });
+      // Names the account: a setup user wanted to see VOO landed in IBKR, not
+      // just that something saved (hermione, mission 46).
+      toast.success(`${what} recorded${acctName ? ` in ${acctName}` : ""}`, { id: toastId });
       resetForm();
       onCreated?.();
     } catch (err) {

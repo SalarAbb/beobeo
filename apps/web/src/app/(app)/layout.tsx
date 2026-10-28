@@ -5,7 +5,6 @@ import { auth } from "@/lib/auth";
 import { AppNav } from "@/components/app-nav";
 import { PortfolioProvider } from "@/components/portfolio-context";
 import { PortfolioSwitcher } from "@/components/portfolio-switcher";
-import { Toaster } from "@/components/ui/sonner";
 
 function Avatar({
   name,
@@ -97,7 +96,6 @@ export default async function AppLayout({
         </div>
       </aside>
       <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-6 md:p-8">{children}</main>
-      <Toaster />
     </div>
     </PortfolioProvider>
   );
