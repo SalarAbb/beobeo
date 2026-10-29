@@ -80,6 +80,16 @@ async function assembleScope(userId: string, scope: string, asOf: Date) {
 // ---- JSON-safe serialization (Decimal -> number, Date -> ISO string) ----
 // `asOf` threads through so every isLongTerm check in one request agrees.
 
+/** The first safely long-term sale date: the day after the purchase's anniversary. */
+function longTermOn(openedAt: Date): Date {
+  const d = new Date(openedAt);
+  d.setUTCFullYear(d.getUTCFullYear() + 1);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d;
+}
+
+const DAY_MS = 86_400_000;
+
 const serializeLot = (l: TaxLot, asOf: Date) => ({
   lotId: l.lotId,
   assetId: l.assetId,
@@ -94,6 +104,11 @@ const serializeLot = (l: TaxLot, asOf: Date) => ({
   marketValue: l.quantity.mul(l.price).toNumber(),
   unrealizedGain: l.quantity.mul(l.price).sub(l.costBasis).toNumber(),
   isLongTerm: isLongTerm(l.openedAt, asOf),
+  longTermOn: toIsoDate(longTermOn(l.openedAt)),
+  /** Whole days until it turns long-term (0 once it is). */
+  daysToLongTerm: isLongTerm(l.openedAt, asOf)
+    ? 0
+    : Math.max(1, Math.ceil((longTermOn(l.openedAt).getTime() - asOf.getTime()) / DAY_MS)),
 });
 
 const serializeSale = (s: PlannedSale, asOf: Date) => ({

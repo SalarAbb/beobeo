@@ -187,13 +187,7 @@ export function makePortfolioApi(userId: string, portfolioId?: string): Portfoli
     async getTaxLots({ symbols, onlyLosses, term, turnsLongTermBy }) {
       const wanted = symbols?.map((s) => s.toUpperCase());
       const rows = (await computeTaxLotsList(userId, portfolioId))
-        .map((l) => {
-          // The day after the anniversary is the first safely long-term sale date.
-          const d = new Date(l.openedAt);
-          d.setUTCFullYear(d.getUTCFullYear() + 1);
-          d.setUTCDate(d.getUTCDate() + 1);
-          return { ...l, longTermOn: l.isLongTerm ? null : toIsoDate(d) };
-        })
+        .map((l) => ({ ...l, longTermOn: l.isLongTerm ? null : l.longTermOn }))
         .filter(
           (l) =>
             (!wanted || wanted.includes(l.symbol.toUpperCase())) &&
