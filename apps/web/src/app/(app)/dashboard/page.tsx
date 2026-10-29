@@ -254,9 +254,56 @@ function concentration(holdings: HoldingWeight[]): {
 interface MetricValues {
   xirr: number | null;
   twr: number | null;
+  twrAnnualized: number | null;
   behaviorGap: number | null;
   sharpe: number | null;
   volatility: number | null;
+  from?: string | null;
+}
+
+const fmtDay = (iso: string) =>
+  new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+
+/** What the numbers below cover and how they fit together (petyr, mission 38:
+ *  no dates, and "25.44% vs 12.81% vs 1.17% doesn't reconcile" — the growth of
+ *  the picks is a total for the period, the other two are per year). */
+function PeriodNote({ m, window }: { m: MetricValues | undefined; window?: string }) {
+  const fmt = (v: number) => `${v >= 0 ? "" : "−"}${Math.abs(v).toFixed(2)}%`;
+  return (
+    <p className="max-w-2xl text-sm text-muted-foreground">
+      {/* No end date: the series is keyed by the UTC day, which reads as
+          tomorrow on a US evening. "Since" is true in every time zone. */}
+      {m?.from ? (
+        <>
+          Since <span className="data text-foreground">{fmtDay(m.from)}</span>
+          {window && <> ({window})</>}.{" "}
+        </>
+      ) : (
+        window && <>Over {window}. </>
+      )}
+      The yearly rate counts when each dollar went in. The growth of your picks
+      ignores that timing and is the total for the whole period
+      {m?.twrAnnualized != null && m.twr != null && m.twr !== m.twrAnnualized && (
+        <>
+          , about <span className="data text-foreground">{fmt(m.twrAnnualized)}</span> a
+          year
+        </>
+      )}
+      . The timing effect is the yearly rate minus that.{" "}
+      {!window && (
+        <>
+          None of them is the gain on holdings above, which compares
+          today&apos;s value with what you paid for what you still own.{" "}
+        </>
+      )}
+      Hover or tap any label for what it means.
+    </p>
+  );
 }
 
 /** The expert numbers behind "Performance details" (R-002: one deliberate
@@ -523,13 +570,7 @@ export default function DashboardPage() {
         </button>
         {showDetails && (
           <div id="performance-details" className="grid gap-6">
-            <p className="max-w-2xl text-sm text-muted-foreground">
-              Three ways to measure the same growth
-              {windowed && <> over {windowLabel}</>}: the yearly rate counts when
-              each dollar went in, the growth of your picks ignores that timing,
-              and the timing effect is the gap between the two. Hover or tap any
-              number for what it means.
-            </p>
+            <PeriodNote m={metrics.data} window={windowed ? windowLabel : undefined} />
             {metrics.isLoading ? (
               <Skeleton className="h-24 w-full" />
             ) : metrics.isError && !metrics.data ? (

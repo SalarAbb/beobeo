@@ -21,7 +21,7 @@ export const FEATURES: Feature[] = [
   { id: "dashboard.glance", route: "/dashboard", does: "See what your portfolio is worth and whether you're up or down, at a glance" },
   { id: "dashboard.window", route: "/dashboard", does: "Change the time window (1D, 1W, 1M, YTD, 1Y, All) to see how you did over a specific period" },
   { id: "dashboard.chart", route: "/dashboard", does: "Read the value-over-time chart: change its range, hover to see a past day's value versus what you'd put in" },
-  { id: "dashboard.performance", route: "/dashboard", does: "Open the performance details and understand annual return, total return, risk and timing", fits: ["expert"] },
+  { id: "dashboard.performance", route: "/dashboard", does: "Open the performance details and understand annual return, total return, risk and timing: which dates they cover, and how they fit together; tap a label to see what it means", fits: ["expert"] },
   { id: "dashboard.holdings", route: "/dashboard", does: "Sort your holdings and open one to see its details" },
   { id: "dashboard.allocation", route: "/dashboard", does: "See how your money is split across holdings and compare it with the mix you want", fits: ["dca"] },
   { id: "dashboard.target-mix", route: "/dashboard", does: "Set or change your target mix (the percentages you want in each holding)", fits: ["dca", "expert"] },

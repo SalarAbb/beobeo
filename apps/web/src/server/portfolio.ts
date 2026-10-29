@@ -646,7 +646,7 @@ export function computeMetrics(
   window: PnlWindow = "all",
 ) {
   return cached(
-    userCacheKey(userId, "metrics", portfolioId ?? "all", window),
+    userCacheKey(userId, "metrics2", portfolioId ?? "all", window),
     TTL.metrics,
     () => computeMetricsUncached(userId, portfolioId, window),
   );
@@ -680,6 +680,9 @@ async function computeMetricsUncached(
 
   return {
     window,
+    // Where the period these figures cover starts, stated under "Performance
+    // details" (petyr, mission 38: "I can't tell what period any of these cover").
+    from: points[0]?.date ?? null,
     ...metrics,
     xirr: pct(moneyWeighted),
     behaviorGap,

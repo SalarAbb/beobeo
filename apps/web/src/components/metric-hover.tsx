@@ -1,7 +1,7 @@
 "use client";
 
 import { Ruler } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -37,29 +37,56 @@ export function MetricHover({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  // A clicked card is pinned: Radix closes a tooltip on any scroll around its
+  // trigger, so a click while the page was still settling (trackpad momentum,
+  // a phone's coasting scroll, a browser scrolling the label into view) opened
+  // the card and shut it again within a frame (petyr, mission 38: "my tooltip
+  // clicks showed nothing"). Pinned, only a press elsewhere, Escape or a
+  // second click on the label closes it.
+  const pinned = useRef(false);
+  const trigger = useRef<HTMLButtonElement>(null);
   return (
-    <Tooltip open={open} onOpenChange={setOpen}>
+    <Tooltip
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && pinned.current) return;
+        setOpen(next);
+      }}
+    >
       <TooltipTrigger asChild>
         <button
+          ref={trigger}
           type="button"
           // preventDefault skips Radix's own click handler, which closes it.
-          // A tap or click opens; a tap elsewhere dismisses.
           onClick={(e) => {
             e.preventDefault();
-            setOpen(true);
+            pinned.current = !pinned.current;
+            setOpen(pinned.current);
           }}
           className={cn("cursor-help text-left", className)}
         >
           {children}
         </button>
       </TooltipTrigger>
-      <TooltipContent side="bottom" align="start" className="w-64 p-0">
+      <TooltipContent
+        side="bottom"
+        align="start"
+        className="w-64 p-0"
+        onEscapeKeyDown={() => {
+          pinned.current = false;
+        }}
+        onPointerDownOutside={(e) => {
+          // The label itself toggles in its click handler.
+          if (trigger.current?.contains(e.target as Node)) e.preventDefault();
+          else pinned.current = false;
+        }}
+      >
         <div className={cn("px-3.5 pt-3", !yardstick && "pb-3")}>
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
             {label}
             {term && <span className="opacity-60"> · {term}</span>}
           </p>
-          <p className="mt-1 text-sm font-semibold leading-snug">{insight}</p>
+          <p className="mt-1 text-sm font-semibold leading-snug first-letter:uppercase">{insight}</p>
           <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{meaning}</p>
         </div>
         {yardstick && (
