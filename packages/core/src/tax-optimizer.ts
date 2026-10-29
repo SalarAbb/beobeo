@@ -202,6 +202,76 @@ export function taxOwedSoFar(profile: TaxProfile): Decimal {
     .add(n.longTermGainTaxed.mul(profile.ltcgRate));
 }
 
+/** What selling every lot today would add to this year's tax bill. */
+export interface SellEverything {
+  proceedsUsd: Decimal;
+  costBasisUsd: Decimal;
+  shortTermGainUsd: Decimal;
+  longTermGainUsd: Decimal;
+  /** Bill after the sale − bill now (both via `taxOwedSoFar`); negative when
+   *  the sale's losses cut tax already owed. */
+  taxUsd: Decimal;
+  /** Losses left out: a recent buy in a retirement account disallows them
+   *  for good (a taxable-account rebuy would be sold too, so it counts). */
+  disallowedLossUsd: Decimal;
+  /** The rates the after-sale bill used (income-adjusted when given). */
+  ordinaryRate: number;
+  ltcgRate: number;
+}
+
+/**
+ * "Roughly what would I owe if I sold?" for the whole scope: every lot's
+ * gain by term, added to the year's position (carryforward and cross-netting
+ * included), priced as the difference of two `taxOwedSoFar` bills. With an
+ * income, each bill applies `profileAtIncome` to its own year, so a sale that
+ * pushes the year out of the 0% long-term bracket pays the full rate
+ * (conservative, like `profileAtIncome`). `profile` is the saved one, not one
+ * already adjusted to the income.
+ */
+export function sellEverything(
+  lots: TaxLot[],
+  blocked: WashSaleBlock[],
+  profile: TaxProfile,
+  asOf: Date,
+  opts: { income?: IncomeInfo; federalLtcgRate?: number } = {},
+): SellEverything {
+  const gone = new Set(blocked.filter((b) => b.permanentlyDisallowed).map((b) => b.lotId));
+  let proceeds = ZERO;
+  let cost = ZERO;
+  let st = ZERO;
+  let lt = ZERO;
+  let disallowed = ZERO;
+  for (const l of lots) {
+    const value = l.quantity.mul(l.price);
+    const gain = value.sub(l.costBasis);
+    proceeds = proceeds.add(value);
+    cost = cost.add(l.costBasis);
+    if (gain.lt(0) && gone.has(l.lotId)) {
+      disallowed = disallowed.sub(gain);
+      continue;
+    }
+    if (isLongTerm(l.openedAt, asOf)) lt = lt.add(gain);
+    else st = st.add(gain);
+  }
+  const atIncome = (p: TaxProfile) =>
+    opts.income ? profileAtIncome(p, opts.income, opts.federalLtcgRate ?? 0) : p;
+  const after = atIncome({
+    ...profile,
+    ytdShortTermGain: profile.ytdShortTermGain.add(st),
+    ytdLongTermGain: profile.ytdLongTermGain.add(lt),
+  });
+  return {
+    proceedsUsd: proceeds,
+    costBasisUsd: cost,
+    shortTermGainUsd: st,
+    longTermGainUsd: lt,
+    taxUsd: taxOwedSoFar(after).sub(taxOwedSoFar(atIncome(profile))),
+    disallowedLossUsd: disallowed,
+    ordinaryRate: after.ordinaryRate,
+    ltcgRate: after.ltcgRate,
+  };
+}
+
 export interface PlanSaleOpts {
   targetProceeds: Decimal;
   lots: TaxLot[];

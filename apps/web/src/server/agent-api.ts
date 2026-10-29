@@ -146,6 +146,16 @@ async function loadContextSnapshot(userId: string, portfolioId?: string) {
       incomeDeductionRoomUsd: round2(taxNow.deductionRoomUsd),
       daysLeftInTaxYear: taxNow.daysLeftInTaxYear,
     },
+    // The Now tab's "If you sold everything today": every taxable purchase
+    // sold on top of this year's sales, retirement accounts left out.
+    taxIfSoldEverything: taxNow?.sellAll && {
+      ...taxNow.sellAll,
+      proceedsUsd: round2(taxNow.sellAll.proceedsUsd),
+      costBasisUsd: round2(taxNow.sellAll.costBasisUsd),
+      shortTermGainUsd: round2(taxNow.sellAll.shortTermGainUsd),
+      longTermGainUsd: round2(taxNow.sellAll.longTermGainUsd),
+      taxUsd: round2(taxNow.sellAll.taxUsd),
+    },
   };
 }
 

@@ -11,6 +11,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
+import { toast } from "sonner";
 import { usePortfolio } from "@/components/portfolio-context";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useIncome } from "@/components/tax-center/use-income";
@@ -108,8 +109,27 @@ function ProfileForm({ initial }: { initial: NonNullable<Profile> }) {
     if (stateFlag) setStateLtcg(v);
   }
 
+  // A toast carries the save, like the add-transaction form: a button sitting
+  // on a greyed "Saving…" read as a hang, and nothing said it had landed
+  // (samwell, mission 51). Repeat presses are ignored while one runs.
   function handleSave() {
-    save.mutate({
+    if (save.isPending) return;
+    const toastId = toast.loading("Saving your tax profile…");
+    save
+      .mutateAsync(input())
+      .then(() =>
+        toast.success("Tax profile saved", {
+          id: toastId,
+          description: "Now, Raise Cash and Harvest Losses use these numbers.",
+        }),
+      )
+      .catch((err: unknown) =>
+        toast.error(`Couldn't save your tax profile: ${(err as Error).message}`, { id: toastId }),
+      );
+  }
+
+  function input() {
+    return {
       portfolioId: portfolioId ?? undefined,
       federalOrdinaryRatePct: n(fedOrdinary),
       federalLtcgRatePct: n(fedLtcg),
@@ -121,7 +141,7 @@ function ProfileForm({ initial }: { initial: NonNullable<Profile> }) {
       carryforwardDiscountPct: n(discount),
       ytdShortTermOverride: n(ytdST),
       ytdLongTermOverride: n(ytdLT),
-    });
+    };
   }
 
   return (
@@ -181,13 +201,16 @@ function ProfileForm({ initial }: { initial: NonNullable<Profile> }) {
         </div>
       </Section>
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <Link href="/accounts" className="text-sm text-muted-foreground hover:underline">
           Manage account types (taxable / IRA / 401k) →
         </Link>
-        <Button onClick={handleSave} disabled={save.isPending}>
-          {save.isPending ? "Saving…" : "Save"}
-        </Button>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">
+            Rates, this year&apos;s totals and past losses save with this button
+          </span>
+          <Button onClick={handleSave}>Save</Button>
+        </div>
       </div>
       <p className="text-[11px] text-muted-foreground">
         Estimates based on simplified federal netting rules — not tax advice. Consult a tax

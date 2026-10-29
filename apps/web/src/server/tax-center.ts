@@ -10,6 +10,7 @@ import {
   detectWashSaleBlocks,
   isLongTerm,
   profileAtIncome,
+  sellEverything,
   type IncomeInfo,
   type LossLotCandidate,
   type TaxMove,
@@ -74,6 +75,7 @@ async function assembleScope(userId: string, scope: string, asOf: Date) {
     ytdLongTermGain,
     ytdSales: bundle.ytdSales,
     ytdTaxAdvantagedGain: bundle.ytdTaxAdvantagedGain,
+    accountPositions: bundle.accountPositions,
   };
 }
 
@@ -238,10 +240,12 @@ export function computeAccountHoldings(userId: string, portfolioId?: string) {
 export function computeTaxNow(userId: string, portfolioId?: string, income?: IncomeInfo) {
   const scope = portfolioKey(portfolioId);
   const incomeKey = income ? `${income.status}:${Math.round(income.taxableIncomeUsd)}` : "none";
-  return cached(userCacheKey(userId, "tax-now6", scope, incomeKey), TTL.now, async () => {
+  return cached(userCacheKey(userId, "tax-now7", scope, incomeKey), TTL.now, async () => {
     const asOf = new Date();
-    const [{ lots, profile: saved, blocked, profileRow, ytdSales, ytdTaxAdvantagedGain }, overview] =
-      await Promise.all([
+    const [
+      { lots, profile: saved, blocked, profileRow, ytdSales, ytdTaxAdvantagedGain, accountPositions },
+      overview,
+    ] = await Promise.all([
         assembleScope(userId, scope, asOf),
         // The dashboard's "Gain from sales" tile, so the page can say how its
         // this-year taxable totals relate to it (personas read the all-time
@@ -265,8 +269,44 @@ export function computeTaxNow(userId: string, portfolioId?: string, income?: Inc
     // One ranked list (R-003); the same payload feeds the chat snapshot.
     const tm = taxMoves(lots, blocked, profile, asOf, { income });
 
+    // "What would I owe if I sold?" (samwell, mission 51): every taxable lot
+    // on top of the year so far, plus what the retirement accounts it leaves
+    // out are worth.
+    const all = sellEverything(lots, blocked, saved, asOf, {
+      income,
+      federalLtcgRate: Number(profileRow.federalLtcgRatePct) / 100,
+    });
+    const untaxed = new Map<string, number>();
+    for (const p of accountPositions) {
+      if (p.accountType === "taxable" || !p.price) continue;
+      untaxed.set(
+        p.accountName,
+        (untaxed.get(p.accountName) ?? 0) + p.quantity.mul(p.price).toNumber(),
+      );
+    }
+
     return {
       taxYear: asOf.getUTCFullYear(),
+      sellAll:
+        lots.length === 0
+          ? null
+          : {
+              accounts: [...new Set(lots.map((l) => l.accountName))],
+              proceedsUsd: all.proceedsUsd.toNumber(),
+              costBasisUsd: all.costBasisUsd.toNumber(),
+              shortTermGainUsd: all.shortTermGainUsd.toNumber(),
+              longTermGainUsd: all.longTermGainUsd.toNumber(),
+              taxUsd: all.taxUsd.toNumber(),
+              disallowedLossUsd: all.disallowedLossUsd.toNumber(),
+              ordinaryRatePct: all.ordinaryRate * 100,
+              ltcgRatePct: all.ltcgRate * 100,
+              carryforwardUsd: saved.carryforwardShortTerm
+                .add(saved.carryforwardLongTerm)
+                .toNumber(),
+              untaxedAccounts: [...untaxed]
+                .map(([name, valueUsd]) => ({ name, valueUsd }))
+                .sort((a, b) => b.valueUsd - a.valueUsd),
+            },
       daysLeftInTaxYear,
       // The effective (override-aware) YTD position — this is what actually
       // drives every marginal tax-cost number on this page: a loss offsetting

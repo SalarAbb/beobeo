@@ -16,6 +16,7 @@ import {
   taxMoves,
   zeroRateGains,
   profileAtIncome,
+  sellEverything,
   type TaxLot,
   type TaxProfile,
 } from "../src/tax-optimizer";
@@ -459,6 +460,74 @@ describe("taxOwedSoFar", () => {
 
   it("owes nothing with no sales", () => {
     expect(taxOwedSoFar(baseProfile).toNumber()).toBe(0);
+  });
+});
+
+describe("sellEverything (what selling it all would owe)", () => {
+  // LT: 10 sh, $1,000 basis, $150 -> +$500. ST: 10 sh, $1,300 basis, $150 -> +$200.
+  const ltLot = lot({ lotId: "se-lt", openedAt: daysAgo(400), costBasis: D(1000) });
+  const stLot = lot({ lotId: "se-st", openedAt: daysAgo(30), costBasis: D(1300) });
+
+  it("taxes each term at its own rate, on top of nothing sold yet", () => {
+    // $200 × 32% + $500 × 15% = $64 + $75 = $139; proceeds 2 × $1,500.
+    const r = sellEverything([ltLot, stLot], [], baseProfile, asOf);
+    expect(r.proceedsUsd.toNumber()).toBe(3000);
+    expect(r.costBasisUsd.toNumber()).toBe(2300);
+    expect(r.shortTermGainUsd.toNumber()).toBe(200);
+    expect(r.longTermGainUsd.toNumber()).toBe(500);
+    expect(r.taxUsd.toNumber()).toBeCloseTo(139, 8);
+  });
+
+  it("a long-term carryforward lowers it", () => {
+    // LT $500 − $300 carryforward = $200 × 15% = $30, plus ST $64 -> $94.
+    const p = { ...baseProfile, carryforwardLongTerm: D(300) };
+    expect(sellEverything([ltLot, stLot], [], p, asOf).taxUsd.toNumber()).toBeCloseTo(94, 8);
+  });
+
+  it("a losing sale cuts tax already owed (negative)", () => {
+    // ST −$400 lot (10 sh, $1,900 basis, $150). Before: $1,000 × 32% = $320.
+    // After: $600 × 32% = $192 -> −$128.
+    const loser = lot({ lotId: "se-loss", openedAt: daysAgo(30), costBasis: D(1900) });
+    const p = { ...baseProfile, ytdShortTermGain: D(1000) };
+    expect(sellEverything([loser], [], p, asOf).taxUsd.toNumber()).toBeCloseTo(-128, 8);
+  });
+
+  it("leaves out a loss a retirement-account rebuy disallows for good", () => {
+    const loser = lot({ lotId: "se-loss", openedAt: daysAgo(30), costBasis: D(1900) });
+    const gone: WashSaleBlock = {
+      lotId: "se-loss",
+      assetId: "asset-x",
+      symbol: "XYZ",
+      disallowedLossUsd: D(400),
+      permanentlyDisallowed: true,
+      triggerAccountName: "Roth",
+      triggerDate: daysAgo(5),
+      likelyDividendReinvestment: false,
+      reason: "bought again in Roth",
+    };
+    const p = { ...baseProfile, ytdShortTermGain: D(1000) };
+    const r = sellEverything([loser], [gone], p, asOf);
+    expect(r.taxUsd.toNumber()).toBe(0);
+    expect(r.disallowedLossUsd.toNumber()).toBe(400);
+    expect(r.shortTermGainUsd.toNumber()).toBe(0);
+  });
+
+  it("with an income inside the 0% bracket, long-term gains owe only the state part", () => {
+    // Single, $20,000 taxable + $500 LT stays under $49,450: 15% federal comes off
+    // a 20% combined rate -> $500 × 5% = $25.
+    const p = { ...baseProfile, ltcgRate: 0.2 };
+    const income = { status: "single" as const, taxableIncomeUsd: 20_000 };
+    const r = sellEverything([ltLot], [], p, asOf, { income, federalLtcgRate: 0.15 });
+    expect(r.taxUsd.toNumber()).toBeCloseTo(25, 8);
+    expect(r.ltcgRate).toBeCloseTo(0.05, 8);
+  });
+
+  it("a sale that pushes the year past the 0% bracket pays the full rate", () => {
+    // $49,000 taxable + $500 LT = $49,500 > $49,450 -> $500 × 20% = $100.
+    const p = { ...baseProfile, ltcgRate: 0.2 };
+    const income = { status: "single" as const, taxableIncomeUsd: 49_000 };
+    const r = sellEverything([ltLot], [], p, asOf, { income, federalLtcgRate: 0.15 });
+    expect(r.taxUsd.toNumber()).toBeCloseTo(100, 8);
   });
 });
 

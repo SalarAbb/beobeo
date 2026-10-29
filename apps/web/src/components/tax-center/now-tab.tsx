@@ -214,6 +214,113 @@ function SalesBehindTotals({ data: d }: { data: Now }) {
   );
 }
 
+const list = (names: string[]) =>
+  names.length <= 1
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+
+const pct = (n: number) => `${Math.round(n * 10) / 10}%`;
+
+/**
+ * "Roughly what would I owe if I sold?" (samwell, mission 51: the page only
+ * said he owed nothing, and nothing moved when he saved his rates or a
+ * carryforward). Every taxable purchase sold today, on top of the year so
+ * far; retirement accounts are named as left out.
+ */
+function SellAllSection({ sellAll: s, onProfile }: { sellAll: NonNullable<Now["sellAll"]>; onProfile: () => void }) {
+  const gain = s.shortTermGainUsd + s.longTermGainUsd;
+  const both = Math.abs(s.shortTermGainUsd) >= 0.5 && Math.abs(s.longTermGainUsd) >= 0.5;
+  const terms = both ? (
+    <>
+      {" "}
+      (<span className="data">{fmtUsd(s.shortTermGainUsd, 0)}</span> held a year or less,{" "}
+      <span className="data">{fmtUsd(s.longTermGainUsd, 0)}</span> longer)
+    </>
+  ) : null;
+  const owes = s.taxUsd >= 0.5;
+  const cuts = s.taxUsd <= -0.5;
+  const rateNote = both
+    ?`${pct(s.ordinaryRatePct)} on short-term gains, ${pct(s.ltcgRatePct)} on long-term`
+      : Math.abs(s.shortTermGainUsd) >= 0.5
+        ? `${pct(s.ordinaryRatePct)} on short-term gains`
+        : `${pct(s.ltcgRatePct)} on long-term gains`;
+
+  return (
+    <Section title="If you sold everything today">
+      <p className="-mt-2 max-w-2xl text-sm">
+        Selling everything in {list(s.accounts)} would bring in{" "}
+        <span className="data">{fmtUsd(s.proceedsUsd, 0)}</span>
+        {gain >= 0.5 ? (
+          <>
+            {" "}
+            for a <span className="data">{fmtUsd(gain, 0)}</span> gain{terms}.{" "}
+            {owes ? (
+              <>
+                That&apos;s about <span className="data font-semibold">{fmtUsd(s.taxUsd, 0)}</span>{" "}
+                in tax ({rateNote}), leaving you{" "}
+                <span className="data">{fmtUsd(s.proceedsUsd - s.taxUsd, 0)}</span>.
+              </>
+            ) : (
+              <>It wouldn&apos;t add any tax at your rates.</>
+            )}
+          </>
+        ) : gain <= -0.5 ? (
+          <>
+            {" "}
+            at a <span className="data">{fmtUsd(-gain, 0)}</span> loss{terms}, so no tax on it.
+            {cuts ? (
+              <>
+                {" "}
+                It would cut this year&apos;s bill by about{" "}
+                <span className="data">{fmtUsd(-s.taxUsd, 0)}</span>.
+              </>
+            ) : (
+              " The loss lowers your income tax instead (up to $3,000 a year, the rest carries over)."
+            )}
+          </>
+        ) : (
+          <>, about what you paid, so no tax on it.</>
+        )}
+      </p>
+      <p className="max-w-2xl text-xs text-muted-foreground">
+        {s.untaxedAccounts.length > 0 && (
+          <>
+            Not counted: {list(s.untaxedAccounts.map((a) => a.name))} (
+            <span className="data">
+              {fmtUsd(
+                s.untaxedAccounts.reduce((t, a) => t + a.valueUsd, 0),
+                0,
+              )}
+            </span>
+            ), since sales inside retirement accounts aren&apos;t taxed.{" "}
+          </>
+        )}
+        {s.disallowedLossUsd >= 1 && (
+          <>
+            A <span className="data">{fmtUsd(s.disallowedLossUsd, 0)}</span> loss is left out: a
+            recent buy in a retirement account rules it out for good.{" "}
+          </>
+        )}
+        {s.carryforwardUsd >= 1 && (
+          <>
+            Includes your <span className="data">{fmtUsd(s.carryforwardUsd, 0)}</span> carried-over
+            loss.{" "}
+          </>
+        )}
+        Uses your{" "}
+        <button
+          type="button"
+          onClick={onProfile}
+          className="underline underline-offset-2 hover:text-foreground"
+        >
+          Tax Profile
+        </button>{" "}
+        rates and today&apos;s prices, on top of this year&apos;s sales.
+      </p>
+    </Section>
+  );
+}
+
 /**
  * Zero-input view. Leads with the plain answer ("do I owe anything?"), then
  * only the sections that have something in them — a user who has never sold
@@ -425,6 +532,8 @@ export function NowTab({
           to see how much.
         </p>
       )}
+
+      {d.sellAll && <SellAllSection sellAll={d.sellAll} onProfile={() => onNavigate("profile")} />}
 
       <Section
         title="Need cash?"

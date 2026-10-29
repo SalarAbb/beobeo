@@ -87,6 +87,8 @@ export {
   type HarvestBreakdown,
   zeroRateGains,
   profileAtIncome,
+  sellEverything,
+  type SellEverything,
   type IncomeInfo,
   type ZeroRateGain,
 } from "./tax-optimizer";
