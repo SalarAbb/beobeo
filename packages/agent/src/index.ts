@@ -1,4 +1,10 @@
-export type { BuysVsBenchmarkRequest, PortfolioApi, RaiseCashRequest, TaxLotFilter } from "./api";
+export type {
+  BuysVsBenchmarkRequest,
+  PortfolioApi,
+  ProjectionRequest,
+  RaiseCashRequest,
+  TaxLotFilter,
+} from "./api";
 export { buildPortfolioTools } from "./tools";
 export {
   runPortfolioAgentTurn,

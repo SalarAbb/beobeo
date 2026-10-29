@@ -38,6 +38,12 @@ export {
 export { adjustForSplits, splitFactorAfter, type SplitEvent } from "./splits";
 export { buysVsBenchmark, type BuyVsBenchmark } from "./buys-vs-benchmark";
 export {
+  projectGrowth,
+  type ProjectionInput,
+  type Projection,
+  type ProjectionYear,
+} from "./projection";
+export {
   extractCashFlows,
   replayDca,
   type CashFlow,

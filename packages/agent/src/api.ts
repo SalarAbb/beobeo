@@ -34,6 +34,26 @@ export interface PortfolioApi {
    *  exact optimizer, not a model's ranking), optionally limited to some
    *  symbols or one account. */
   planRaiseCash(request: RaiseCashRequest): Promise<unknown>;
+  /** "Am I on track for $1M?" / "how long does my money last?": the value
+   *  projected at a few stated yearly returns, with every assumption named. */
+  projectGrowth(request: ProjectionRequest): Promise<unknown>;
+}
+
+export interface ProjectionRequest {
+  /** Value to reach, e.g. 1,000,000. */
+  targetUsd?: number;
+  /** Horizon in years (default 20, or the years to a target age the user gave). */
+  years?: number;
+  /** Monthly amount added; negative = taken out. Default: the user's own pace
+   *  over the last 12 months. */
+  monthlyUsd?: number;
+  /** One yearly return to use instead of the default 4% / 6% / 8% range. */
+  yearlyReturnPct?: number;
+  /** Raise the monthly amount this much a year (default 3 for withdrawals,
+   *  to keep up with inflation; 0 for deposits). */
+  yearlyRaisePct?: number;
+  /** Start from this account's value only (name or part of it). */
+  account?: string;
 }
 
 export interface RaiseCashRequest {

@@ -5,6 +5,7 @@ import {
   buildLots,
   buysVsBenchmark,
   D,
+  projectGrowth,
   realizedByYear,
   toIsoDate,
   type Decimal,
@@ -13,6 +14,7 @@ import type { PortfolioApi } from "@beobeo/agent";
 import { getMarketData } from "./market-data";
 import {
   computeDcaComparison,
+  computeMetrics,
   computeOverview,
   computePosition,
   computeTimeseries,
@@ -45,6 +47,28 @@ async function findUserAsset(userId: string, symbol: string) {
   return rows[0]?.asset ?? null;
 }
 
+/** Saving pace from the daily series: first trade and net put in, all time and last 12 months. */
+function contributionsFrom(series: { date: string; invested: number }[]) {
+  const first = series[0];
+  const last = series[series.length - 1];
+  if (!first || !last) return null;
+  const yearAgo = toIsoDate(new Date(Date.now() - 365 * 86_400_000));
+  const atYearAgo = series.findLast((p) => p.date <= yearAgo);
+  return {
+    firstTradeDate: first.date,
+    netInvestedAllTime: last.invested,
+    netInvestedLast12Months: last.invested - (atYearAgo?.invested ?? 0),
+  };
+}
+
+/** "2041-03" from a number of months after today. */
+function monthsFromNow(months: number) {
+  const d = new Date();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() + months);
+  return d.toISOString().slice(0, 7);
+}
+
 /** What the agent reads before its first step (holdings, totals, accounts, tax rates and moves). */
 async function loadContextSnapshot(userId: string, portfolioId?: string) {
   const accountFilter = [eq(schema.accounts.userId, userId)];
@@ -64,15 +88,7 @@ async function loadContextSnapshot(userId: string, portfolioId?: string) {
   const { value } = overview.totals;
   // "Am I on track?" needs the saving pace; without it the agent spent a
   // slow round trip paging through transactions to estimate it.
-  const first = series[0];
-  const last = series[series.length - 1];
-  const yearAgo = toIsoDate(new Date(Date.now() - 365 * 86_400_000));
-  const atYearAgo = series.findLast((p) => p.date <= yearAgo);
-  const contributions = first && last && {
-    firstTradeDate: first.date,
-    netInvestedAllTime: last.invested,
-    netInvestedLast12Months: last.invested - (atYearAgo?.invested ?? 0),
-  };
+  const contributions = contributionsFrom(series);
   // "What would I owe if I sold X?" needs each holding's short/long-term
   // split; without it the agent fetched lots one symbol per round trip.
   const taxable = new Map<string, { shortTerm: number; longTerm: number }>();
@@ -394,6 +410,90 @@ export function makePortfolioApi(userId: string, portfolioId?: string): Portfoli
           round2(s.taxCost),
         ]),
         note: "Same plan as Tax Center → Raise Cash, at the saved tax rates. Tax on a loss is negative (it saves tax).",
+      };
+    },
+
+    async projectGrowth({ targetUsd, years = 20, monthlyUsd, yearlyReturnPct, yearlyRaisePct, account }) {
+      const [overview, series, metrics, accountHoldings] = await Promise.all([
+        computeOverview(userId, portfolioId),
+        computeTimeseries(userId, undefined, portfolioId).catch(() => []),
+        computeMetrics(userId, portfolioId).catch(() => null),
+        account ? computeAccountHoldings(userId, portfolioId).catch(() => []) : Promise.resolve([]),
+      ]);
+      let startValue = overview.totals.value;
+      let startIs = "the whole portfolio's value now";
+      if (account) {
+        const key = account.toLowerCase().replace(/\(taxable\)\s*$/, "").trim();
+        const matched = accountHoldings.filter((a) => a.accountName.toLowerCase().includes(key));
+        if (matched.length === 0) {
+          return { error: `No account matches "${account}".`, accounts: accountHoldings.map((a) => a.accountName) };
+        }
+        startValue = matched.reduce((s, a) => s + a.value, 0);
+        startIs = `the value now of ${matched.map((a) => a.accountName).join(" + ")}`;
+      }
+      // Without a stated amount, the user's own pace: what went in (net of
+      // sales) over the last 12 months. samwell couldn't tell where a quoted
+      // "$389 a week" came from.
+      const pace = contributionsFrom(series);
+      const monthly = monthlyUsd ?? Math.round((pace?.netInvestedLast12Months ?? 0) / 12);
+      const monthlyIs =
+        monthlyUsd !== undefined
+          ? "the amount the user gave"
+          : `the user's pace: $${Math.round(pace?.netInvestedLast12Months ?? 0).toLocaleString("en-US")} put in, net of sales, over the last 12 months ÷ 12`;
+      const raise = yearlyRaisePct ?? (monthly < 0 ? 3 : 0);
+      const rates =
+        yearlyReturnPct !== undefined
+          ? [{ label: "your rate", pct: yearlyReturnPct }]
+          : [
+              { label: "cautious", pct: 4 },
+              { label: "middle", pct: 6 },
+              { label: "strong", pct: 8 },
+            ];
+      const scenarios = rates.map((r) => ({ ...r, firstYearsPct: undefined as number[] | undefined }));
+      // Withdrawing makes the order of returns matter: a fall early on sells
+      // more units at low prices (barristan: "show me if the first years are bad").
+      const middle = rates[Math.floor(rates.length / 2)]!;
+      if (monthly < 0) scenarios.push({ label: "bad start", pct: middle.pct, firstYearsPct: [-20, -10] });
+
+      const when = (months: number | null) =>
+        months === null ? null : { years: round2(months / 12), month: monthsFromNow(months) };
+      return {
+        assumptions: {
+          startValueUsd: round2(startValue),
+          startIs,
+          monthlyUsd: monthly,
+          monthlyIs,
+          monthlyRisesPctPerYear: raise,
+          years,
+          returns:
+            "Yearly returns before tax, fees and inflation, compounded monthly; no dividend yield added on top (the app has no yield data).",
+          // The portfolio's own growth rate, as a reference, not a forecast.
+          yourPastYearlyRatePct:
+            metrics?.twrAnnualized != null && (metrics.spanDays ?? 0) >= 365 ? round2(metrics.twrAnnualized) : null,
+          yourPastSince: metrics?.from ?? null,
+        },
+        ...(targetUsd !== undefined ? { targetUsd } : {}),
+        scenarios: scenarios.map((s) => {
+          const p = projectGrowth({
+            startValue,
+            monthly,
+            yearlyReturnPct: s.pct,
+            years,
+            firstYearsPct: s.firstYearsPct,
+            yearlyRaisePct: raise,
+            target: targetUsd,
+          });
+          return {
+            label: s.label,
+            yearlyReturnPct: s.pct,
+            ...(s.firstYearsPct ? { firstTwoYearsPct: s.firstYearsPct } : {}),
+            valueAfterYearsUsd: Math.round(p.endValue),
+            putInUsd: Math.round(p.putIn),
+            growthUsd: Math.round(p.growth),
+            ...(targetUsd !== undefined ? { reachesTarget: when(p.targetInMonths) ?? "not within 100 years" } : {}),
+            ...(monthly < 0 ? { runsOut: when(p.runsOutInMonths) ?? "lasts over 100 years" } : {}),
+          };
+        }),
       };
     },
 

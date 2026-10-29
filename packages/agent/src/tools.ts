@@ -1,6 +1,12 @@
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
-import type { BuysVsBenchmarkRequest, PortfolioApi, RaiseCashRequest, TaxLotFilter } from "./api";
+import type {
+  BuysVsBenchmarkRequest,
+  PortfolioApi,
+  ProjectionRequest,
+  RaiseCashRequest,
+  TaxLotFilter,
+} from "./api";
 
 const json = (v: unknown) => JSON.stringify(v);
 
@@ -138,6 +144,43 @@ export function buildPortfolioTools(
       }),
       run: timed("get_price_history", async ({ symbol, days }: { symbol: string; days: number }) =>
         json(await api.getPriceHistory(symbol, days)),
+      ),
+    }),
+    betaZodTool({
+      name: "project_growth",
+      description:
+        "'Am I on track for $1M by 55?', 'what will I have in 20 years?', 'how long does my money last if I take $3,500 a month?'. Projects the portfolio (or one account) forward with a monthly deposit or withdrawal at 4%, 6% and 8% a year (or one rate the user gives), compounded monthly; for withdrawals it adds a bad start (−20% then −10% in the first two years). Returns the assumptions it used (start value, monthly amount and where it came from, the portfolio's own past yearly rate) and per rate: value at the horizon, amount put in, growth, when the target is reached, when withdrawals run out. Never project or compound yourself.",
+      inputSchema: z.object({
+        targetUsd: z.number().positive().optional().describe("Value to reach, e.g. 1000000"),
+        years: z
+          .number()
+          .positive()
+          .max(60)
+          .optional()
+          .describe("Horizon in years (e.g. 55 minus their age); default 20"),
+        monthlyUsd: z
+          .number()
+          .optional()
+          .describe("Monthly amount added, negative to take out; omit to use their own pace over the last 12 months"),
+        yearlyReturnPct: z
+          .number()
+          .min(-20)
+          .max(20)
+          .optional()
+          .describe("Only when the user names a return; otherwise omit for the 4/6/8% range"),
+        yearlyRaisePct: z
+          .number()
+          .min(0)
+          .max(10)
+          .optional()
+          .describe("Yearly raise of the monthly amount; default 3 for withdrawals (inflation), 0 for deposits"),
+        account: z
+          .string()
+          .optional()
+          .describe("Start from this account's value only (name or part of it), e.g. when they leave the IRA out"),
+      }),
+      run: timed("project_growth", async (request: ProjectionRequest) =>
+        json(await api.projectGrowth(request)),
       ),
     }),
     betaZodTool({
