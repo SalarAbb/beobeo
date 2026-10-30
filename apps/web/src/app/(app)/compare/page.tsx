@@ -600,6 +600,12 @@ export default function ComparePage() {
               );
             })}
           </StatStrip>
+          {/* The dashboard's value is at live prices; this one isn't, so say why
+              they differ (gilderoy, dashboard.window mission 60: $12,545 vs $12,608). */}
+          <p className="-mt-10 text-xs text-muted-foreground">
+            Priced at the last closing prices, so you and the benchmarks are valued on the same
+            day. The dashboard uses live prices, so its value can differ by a day&apos;s move.
+          </p>
 
           <Section
             title="Over time"
