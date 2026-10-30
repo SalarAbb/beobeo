@@ -1,8 +1,9 @@
-import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, lte } from "drizzle-orm";
 import { splitDuplicates } from "@beobeo/importers";
 import { z } from "zod";
 import { schema } from "@beobeo/db";
 import { invalidateUserComputations } from "../cache";
+import { loadTransactionAssets, loadTransactionList } from "../transactions-list";
 import { protectedProcedure, router } from "../trpc";
 
 const decimalString = z
@@ -47,27 +48,13 @@ export const transactionsRouter = router({
         })
         .default({ limit: 200 }),
     )
-    .query(async ({ ctx, input }) => {
-      const conditions = [eq(schema.transactions.userId, ctx.userId)];
-      if (input.assetId) conditions.push(eq(schema.transactions.assetId, input.assetId));
-      if (input.accountId)
-        conditions.push(eq(schema.transactions.accountId, input.accountId));
-      if (input.portfolioId)
-        conditions.push(eq(schema.accounts.portfolioId, input.portfolioId));
+    .query(({ ctx, input }) => loadTransactionList(ctx.userId, input)),
 
-      return ctx.db
-        .select({
-          txn: schema.transactions,
-          asset: schema.assets,
-          account: schema.accounts,
-        })
-        .from(schema.transactions)
-        .innerJoin(schema.assets, eq(schema.transactions.assetId, schema.assets.id))
-        .innerJoin(schema.accounts, eq(schema.transactions.accountId, schema.accounts.id))
-        .where(and(...conditions))
-        .orderBy(desc(schema.transactions.tradedAt))
-        .limit(input.limit);
-    }),
+  /** Every asset the user has a transaction in (within the portfolio), with
+   *  how many: the list's asset filter, which must reach past its 200 rows. */
+  assets: protectedProcedure
+    .input(z.object({ portfolioId: z.uuid().optional() }).default({}))
+    .query(({ ctx, input }) => loadTransactionAssets(ctx.userId, input.portfolioId)),
 
   create: protectedProcedure
     .input(transactionInput)

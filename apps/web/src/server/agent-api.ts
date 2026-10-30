@@ -10,7 +10,8 @@ import {
   toIsoDate,
   type Decimal,
 } from "@beobeo/core";
-import type { PortfolioApi } from "@beobeo/agent";
+import { primePortfolioAgentCache, type PortfolioApi } from "@beobeo/agent";
+import { cached, userCacheKey } from "./cache";
 import { getMarketData } from "./market-data";
 import {
   computeDcaComparison,
@@ -69,8 +70,20 @@ function monthsFromNow(months: number) {
   return d.toISOString().slice(0, 7);
 }
 
-/** What the agent reads before its first step (holdings, totals, accounts, tax rates and moves). */
-async function loadContextSnapshot(userId: string, portfolioId?: string) {
+/**
+ * What the agent reads before its first step. Cached as one entry (2 min) so
+ * the warm-up's cache prime and the question that follows send the same text:
+ * rebuilt from the 60s overview, a live quote would move a cent between them
+ * and the question would miss the prompt cache.
+ */
+function loadContextSnapshot(userId: string, portfolioId?: string) {
+  return cached(userCacheKey(userId, "chat-snapshot", portfolioId ?? "all"), 120, () =>
+    loadContextSnapshotUncached(userId, portfolioId),
+  );
+}
+
+/** Holdings, totals, accounts, tax rates and moves. */
+async function loadContextSnapshotUncached(userId: string, portfolioId?: string) {
   const accountFilter = [eq(schema.accounts.userId, userId)];
   if (portfolioId) accountFilter.push(eq(schema.accounts.portfolioId, portfolioId));
   const [overview, series, tax, taxLots, taxNow, accountHoldings, accountRows] = await Promise.all([
@@ -175,13 +188,40 @@ async function loadContextSnapshot(userId: string, portfolioId?: string) {
   };
 }
 
+/** When each user's snapshot text was last written to the prompt cache. */
+const globalForPrimes = globalThis as unknown as {
+  __beobeoChatPrimes?: Map<string, { snapshot: string; at: number }>;
+};
+const primes = (globalForPrimes.__beobeoChatPrimes ??= new Map());
+/** The prompt cache lives 5 minutes; prime again a little before that. */
+const PRIME_EVERY_MS = 4 * 60_000;
+
 /**
- * Fill the computation cache the snapshot reads, so a question asked soon
- * after costs no snapshot wait. The chat page calls this on open and while
- * the user types.
+ * Get the next question ready: fill the computation cache the snapshot reads
+ * (no snapshot wait), then write the prompt and the snapshot into the
+ * Anthropic prompt cache (no prefill wait: the snapshot is thousands of
+ * tokens the model otherwise reads before its first word). The chat page
+ * calls this on open and while the user types, at most every 30s; a prime is
+ * skipped while the same snapshot was primed in the last 4 minutes.
  */
 export async function warmContextSnapshot(userId: string, portfolioId?: string) {
-  await loadContextSnapshot(userId, portfolioId);
+  const snapshot = await loadContextSnapshot(userId, portfolioId);
+  if (!process.env.ANTHROPIC_API_KEY) return;
+  const key = `${userId}:${portfolioId ?? "all"}`;
+  const text = JSON.stringify(snapshot);
+  const last = primes.get(key);
+  if (last && last.snapshot === text && Date.now() - last.at < PRIME_EVERY_MS) return;
+  primes.set(key, { snapshot: text, at: Date.now() });
+  const t0 = performance.now();
+  try {
+    const usage = await primePortfolioAgentCache({ api: makePortfolioApi(userId, portfolioId) });
+    console.log(
+      `[chat] primed in ${Math.round(performance.now() - t0)}ms · cache write ${usage.cacheWriteTokens} tok, read ${usage.cacheReadTokens}, uncached ${usage.inputTokens}`,
+    );
+  } catch (err) {
+    primes.delete(key);
+    console.warn(`[chat] prime failed: ${(err as Error).message}`);
+  }
 }
 
 /** Read-only PortfolioApi bound to one authenticated user. */

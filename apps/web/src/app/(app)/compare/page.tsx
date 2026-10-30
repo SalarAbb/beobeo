@@ -572,7 +572,7 @@ export default function ComparePage() {
               className={data.benchmarks.length % 2 === 0 ? "col-span-2 lg:col-span-1" : undefined}
               label={scopeIds.length === 0 ? "Your portfolio" : scopeLabel}
               value={fmtUsd(lastP?.value ?? null)}
-              sub={`invested ${fmtUsd(lastP?.invested ?? null, 0)}`}
+              sub={`put in, minus sales ${fmtUsd(lastP?.invested ?? null, 0)}`}
               subTone="text-muted-foreground"
               hero={data.benchmarks.length < 3}
             />
@@ -600,6 +600,12 @@ export default function ComparePage() {
               );
             })}
           </StatStrip>
+          {/* The dashboard's value is at live prices; this one isn't, so say why
+              they differ (gilderoy, dashboard.window mission 60: $12,545 vs $12,608). */}
+          <p className="-mt-10 text-xs text-muted-foreground">
+            Priced at the last closing prices, so you and the benchmarks are valued on the same
+            day. The dashboard uses live prices, so its value can differ by a day&apos;s move.
+          </p>
 
           <Section
             title="Over time"

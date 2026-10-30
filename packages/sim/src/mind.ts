@@ -9,8 +9,10 @@ import type { Persona } from "./persona";
 /** One piece of feedback about the app, in the persona's own words. */
 export const feedbackItem = z.object({
   page: z.string().describe("Route the feedback is about, e.g. /dashboard, or 'chat', 'signup', 'general'"),
-  kind: z.enum(["bug", "friction", "wish", "aesthetic", "praise", "latency"]),
-  area: z.enum(["ui", "ux", "feature", "perf", "correctness"]),
+  // `.catch`: a value outside the list (a mission debrief once said kind "perf" twice in a row) must not
+  // throw away the whole debrief; it reads as the closest neutral bucket instead.
+  kind: z.enum(["bug", "friction", "wish", "aesthetic", "praise", "latency"]).catch("friction"),
+  area: z.enum(["ui", "ux", "feature", "perf", "correctness"]).catch("ux"),
   severity: z.number().int().min(1).max(5).describe("1 = nit, 3 = annoying, 5 = would make me quit"),
   themeKey: z
     .string()

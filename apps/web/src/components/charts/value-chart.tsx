@@ -32,12 +32,27 @@ type RangeKey = (typeof RANGES)[number]["key"];
 const toTs = (date: string) =>
   (Date.parse(`${date}T00:00:00Z`) / 1000) as UTCTimestamp;
 
-export function ValueChart({ data }: { data: ValuePoint[] }) {
+export function ValueChart({
+  data: series,
+  liveValue,
+}: {
+  data: ValuePoint[];
+  /** The headline's value at live quotes. The series' last point is today, valued at the
+   *  last close; this replaces it so the chart ends where the "Portfolio value" tile says
+   *  (they disagreed by a few dollars on one screen, mission 55). */
+  liveValue?: number;
+}) {
   const theme = useVizTheme();
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const [range, setRange] = useState<RangeKey>("ALL");
   const [hover, setHover] = useState<ValuePoint | null>(null);
+
+  const data = useMemo(() => {
+    const last = series[series.length - 1];
+    if (liveValue == null || !last) return series;
+    return [...series.slice(0, -1), { ...last, value: liveValue }];
+  }, [series, liveValue]);
 
   const sliced = useMemo(() => {
     // Ranges are relative to the latest data point (pure — no clock reads).

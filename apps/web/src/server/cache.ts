@@ -94,16 +94,34 @@ const sharedRuns = (globalForShared.__beobeoSharedRuns ??= new Map());
 /**
  * Share one in-flight run among concurrent callers with the same key, for
  * uncached intermediate loads (the overview and the timeseries both read the
- * user's transactions at the same moment). Nothing is kept after it settles.
- * Callers receive the same object, so they must treat it as read-only. Keys
- * go through `userCacheKey` so invalidation drops them.
+ * user's transactions at the same moment). Nothing is kept after it settles,
+ * unless `lingerMs` keeps a success around that long (a layout warm-up that
+ * finishes before the page's first batch arrives; results that aren't plain
+ * JSON, e.g. rows with Dates, can't go through `cached`). Callers receive the
+ * same object, so they must treat it as read-only. Keys go through
+ * `userCacheKey` so invalidation drops them, lingering ones included.
  */
-export function sharedRun<T>(key: string, fn: () => Promise<T>): Promise<T> {
+export function sharedRun<T>(
+  key: string,
+  fn: () => Promise<T>,
+  { lingerMs = 0 }: { lingerMs?: number } = {},
+): Promise<T> {
   const running = sharedRuns.get(key);
   if (running) return running as Promise<T>;
-  const run = fn().finally(() => {
+  const forget = () => {
     if (sharedRuns.get(key) === run) sharedRuns.delete(key);
-  });
+  };
+  const run = fn().then(
+    (value) => {
+      if (lingerMs > 0) setTimeout(forget, lingerMs);
+      else forget();
+      return value;
+    },
+    (error: unknown) => {
+      forget();
+      throw error;
+    },
+  );
   sharedRuns.set(key, run);
   return run;
 }

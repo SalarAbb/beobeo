@@ -252,14 +252,24 @@ function TaxStep({
           />
         </div>
         {taxable !== null && fromPay && (
-          <p className="text-xs text-muted-foreground">
-            After the <span className="data">${STANDARD_DEDUCTION[status].toLocaleString("en-US")}</span>{" "}
-            standard deduction, that&apos;s about{" "}
-            <span className="data">${Math.round(taxable).toLocaleString("en-US")}</span> of taxable
-            income: the {bands[fromPay.band]!.ordinaryRatePct}% bracket
-            {usesPay
-              ? " below."
-              : `. You picked the ${picked!.ordinaryRatePct}% one below instead, so that's what we'll use.`}
+          // The result leads in full ink: as one muted line, hermione twice read it as
+          // "the bracket only showed up later in Tax Profile" (missions 55, 56).
+          <p className="text-sm">
+            <span className="font-semibold">
+              That&apos;s the {fromPay.ordinaryRatePct}% bracket
+              {usesPay
+                ? `: ${fromPay.ordinaryRatePct}% on sales held a year or less, ${fromPay.ltcgRatePct}% on longer ones.`
+                : "."}
+            </span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              After the <span className="data">${STANDARD_DEDUCTION[status].toLocaleString("en-US")}</span>{" "}
+              standard deduction, about{" "}
+              <span className="data">${Math.round(taxable).toLocaleString("en-US")}</span> of your pay
+              is taxable
+              {usesPay
+                ? " (the row ticked below)."
+                : `. You picked the ${picked!.ordinaryRatePct}% row below instead, so that's what we'll use.`}
+            </span>
           </p>
         )}
       </div>
@@ -296,9 +306,11 @@ function TaxStep({
         </div>
         <p className="text-xs text-muted-foreground">
           {picked && !usesPay && pay === null && `${payRange(status, picked)} `}
-          {rates
-            ? `Sales held a year or less are taxed at ${rates.ordinaryRatePct}%, longer ones at ${rates.ltcgRatePct}%.`
-            : "Not sure? Skip it and we'll assume the 24% bracket (15% on long-term gains)."}
+          {/* With pay typed, the line under the pay box already says this. */}
+          {!rates
+            ? "Not sure? Skip it and we'll assume the 24% bracket (15% on long-term gains)."
+            : !usesPay &&
+              `Sales held a year or less are taxed at ${rates.ordinaryRatePct}%, longer ones at ${rates.ltcgRatePct}%.`}
         </p>
       </div>
       <div className="grid gap-2">

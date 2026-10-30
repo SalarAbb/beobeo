@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { schema } from "@beobeo/db";
 import { invalidateUserComputations } from "../cache";
+import { loadAccountList } from "../transactions-list";
 import { protectedProcedure, router } from "../trpc";
 
 const accountTypeSchema = z.enum([
@@ -15,16 +16,7 @@ const accountTypeSchema = z.enum([
 export const accountsRouter = router({
   list: protectedProcedure
     .input(z.object({ portfolioId: z.uuid().optional() }).default({}))
-    .query(({ ctx, input }) => {
-      const conditions = [eq(schema.accounts.userId, ctx.userId)];
-      if (input.portfolioId)
-        conditions.push(eq(schema.accounts.portfolioId, input.portfolioId));
-      return ctx.db
-        .select()
-        .from(schema.accounts)
-        .where(and(...conditions))
-        .orderBy(schema.accounts.createdAt);
-    }),
+    .query(({ ctx, input }) => loadAccountList(ctx.userId, input.portfolioId)),
 
   create: protectedProcedure
     .input(
