@@ -53,8 +53,17 @@ export class MarketDataService {
   private static readonly FAILED_RANGE_TTL_MS = 5 * 60_000;
   /** Live quotes per asset (null = provider had none or failed). Short TTL so
    *  a burst of reads shares one provider call; failures back off longer. */
-  private liveQuotes = new Map<string, { price: string | null; expires: number }>();
+  private liveQuotes = new Map<string, { price: string | null; at: number; expires: number }>();
+  /** Quote refreshes running now, per asset: a read that needs one joins it
+   *  instead of queueing a second call behind the provider's throttle. */
+  private quoteInflight = new Map<string, Promise<void>>();
   private static readonly QUOTE_TTL_MS = 60_000;
+  /** Past its TTL, a quote younger than this is served at once while a fresh
+   *  one is fetched for the next read. Crypto quotes go one by one through
+   *  Coinbase's throttle, so a crypto holder opening a page more than a
+   *  minute after the last one waited up to the full budget (arya's Tax
+   *  Center, 2.2s, mission 61). */
+  private static readonly QUOTE_SERVE_STALE_MS = 10 * 60_000;
   /** How long a "today" read waits for quotes before serving cached closes.
    *  Quotes that land later still fill the memo for the next read. */
   private static readonly QUOTE_BUDGET_MS = 2_500;
@@ -143,28 +152,55 @@ export class MarketDataService {
   /**
    * Live quotes keyed by asset id, best-effort within QUOTE_BUDGET_MS. Equities
    * go to a provider's batch endpoint when it has one; crypto asks per asset.
+   * A quote past its TTL but under QUOTE_SERVE_STALE_MS old is returned at once
+   * and refreshed in the background; only assets with no usable quote wait.
    */
   async getLiveQuotes(assets: DbAsset[]): Promise<Map<string, string>> {
     const now = Date.now();
     const out = new Map<string, string>();
-    const stale: DbAsset[] = [];
+    const refresh: DbAsset[] = [];
+    const wait: DbAsset[] = [];
     for (const a of assets) {
       if (a.class === "cash") continue;
       const memo = this.liveQuotes.get(a.id);
       if (memo && memo.expires > now) {
         if (memo.price !== null) out.set(a.id, memo.price);
-      } else stale.push(a);
+        continue;
+      }
+      refresh.push(a);
+      if (memo && memo.price !== null && now - memo.at < MarketDataService.QUOTE_SERVE_STALE_MS) {
+        out.set(a.id, memo.price);
+      } else wait.push(a);
     }
-    if (stale.length === 0) return out;
+    if (refresh.length === 0) return out;
 
+    const work = this.refreshQuotes(refresh);
+    if (wait.length === 0) return out;
+    const waited = Promise.all(wait.map((a) => this.quoteInflight.get(a.id) ?? work));
+    await Promise.race([
+      waited,
+      new Promise((resolve) => setTimeout(resolve, MarketDataService.QUOTE_BUDGET_MS)),
+    ]);
+    for (const a of wait) {
+      const memo = this.liveQuotes.get(a.id);
+      if (memo && memo.price !== null) out.set(a.id, memo.price);
+    }
+    return out;
+  }
+
+  /** Fetches quotes for the assets not already being fetched; resolves when
+   *  every asset's refresh (its own or one already running) has finished.
+   *  Never rejects: a failure is remembered as "no quote". */
+  private refreshQuotes(assets: DbAsset[]): Promise<void> {
     const remember = (a: DbAsset, price: string | null) => {
+      const at = Date.now();
       this.liveQuotes.set(a.id, {
         price,
+        at,
         expires:
-          Date.now() +
+          at +
           (price === null ? MarketDataService.FAILED_RANGE_TTL_MS : MarketDataService.QUOTE_TTL_MS),
       });
-      if (price !== null) out.set(a.id, price);
     };
     const quoteOne = async (a: DbAsset, providers: PriceProvider[]) => {
       for (const p of providers) {
@@ -190,15 +226,18 @@ export class MarketDataService {
       }
     };
 
-    const work = Promise.all([
-      quoteEquities(stale.filter((a) => a.class !== "crypto")),
-      ...stale.filter((a) => a.class === "crypto").map((a) => quoteOne(a, this.crypto)),
-    ]);
-    await Promise.race([
-      work,
-      new Promise((resolve) => setTimeout(resolve, MarketDataService.QUOTE_BUDGET_MS)),
-    ]);
-    return new Map(out);
+    const track = (list: DbAsset[], run: () => Promise<void>) => {
+      if (list.length === 0) return;
+      const p = run().finally(() => {
+        for (const a of list) if (this.quoteInflight.get(a.id) === p) this.quoteInflight.delete(a.id);
+      });
+      for (const a of list) this.quoteInflight.set(a.id, p);
+    };
+    const todo = assets.filter((a) => !this.quoteInflight.has(a.id));
+    const equities = todo.filter((a) => a.class !== "crypto");
+    track(equities, () => quoteEquities(equities));
+    for (const a of todo.filter((x) => x.class === "crypto")) track([a], () => quoteOne(a, this.crypto));
+    return Promise.all(assets.map((a) => this.quoteInflight.get(a.id))).then(() => undefined);
   }
 
   private async latestCloses(
