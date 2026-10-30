@@ -27,6 +27,7 @@ import {
 } from "@beobeo/core";
 import { getMarketData } from "./market-data";
 import { cached, sharedRun, userCacheKey } from "./cache";
+import { loadScopedRows } from "./scoped-rows";
 
 /**
  * Short TTLs for the heavy per-request computations (full txn replay +
@@ -83,19 +84,27 @@ async function loadEngineTransactionsUncached(
   assetIds?: string[],
   portfolioId?: string,
 ): Promise<{ txns: EngineTransaction[]; assets: Map<string, AssetRow> }> {
-  const conditions = [eq(schema.transactions.userId, userId)];
-  if (assetId) conditions.push(eq(schema.transactions.assetId, assetId));
-  if (assetIds && assetIds.length > 0)
-    conditions.push(inArray(schema.transactions.assetId, assetIds));
-  if (portfolioId) conditions.push(eq(schema.accounts.portfolioId, portfolioId));
+  const narrowed = Boolean(assetId) || (assetIds !== undefined && assetIds.length > 0);
+  let rows: { txn: typeof schema.transactions.$inferSelect; asset: AssetRow }[];
+  if (!narrowed && db === database) {
+    // A whole scope reads the same rows as the Tax Center's lots, so both share
+    // one query (a cold tax.now needs the overview and the lots at once).
+    rows = await loadScopedRows(userId, portfolioId ?? "all");
+  } else {
+    const conditions = [eq(schema.transactions.userId, userId)];
+    if (assetId) conditions.push(eq(schema.transactions.assetId, assetId));
+    if (assetIds && assetIds.length > 0)
+      conditions.push(inArray(schema.transactions.assetId, assetIds));
+    if (portfolioId) conditions.push(eq(schema.accounts.portfolioId, portfolioId));
 
-  const rows = await db
-    .select({ txn: schema.transactions, asset: schema.assets })
-    .from(schema.transactions)
-    .innerJoin(schema.assets, eq(schema.transactions.assetId, schema.assets.id))
-    .innerJoin(schema.accounts, eq(schema.transactions.accountId, schema.accounts.id))
-    .where(and(...conditions))
-    .orderBy(asc(schema.transactions.tradedAt), asc(schema.transactions.createdAt));
+    rows = await db
+      .select({ txn: schema.transactions, asset: schema.assets })
+      .from(schema.transactions)
+      .innerJoin(schema.assets, eq(schema.transactions.assetId, schema.assets.id))
+      .innerJoin(schema.accounts, eq(schema.transactions.accountId, schema.accounts.id))
+      .where(and(...conditions))
+      .orderBy(asc(schema.transactions.tradedAt), asc(schema.transactions.createdAt));
+  }
 
   const assets = new Map<string, AssetRow>();
   const txns: EngineTransaction[] = rows.map(({ txn, asset }) => {

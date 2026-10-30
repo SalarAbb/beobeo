@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db, schema } from "@beobeo/db";
 import {
   buildLots,
@@ -13,6 +13,7 @@ import {
 } from "@beobeo/core";
 import { getMarketData } from "../market-data";
 import { loadKnownSplits, mergeKnownSplits } from "../portfolio";
+import { loadScopedRows, type ScopedTxnRow } from "../scoped-rows";
 
 const DAY_MS = 86_400_000;
 /** Wash-sale window (30d) plus slack for the DRIP date-correlation heuristic. */
@@ -60,27 +61,7 @@ export interface YtdSale {
   longTermGain: ReturnType<typeof D>;
 }
 
-export interface ScopedTxnRow {
-  txn: typeof schema.transactions.$inferSelect;
-  asset: typeof schema.assets.$inferSelect;
-  account: typeof schema.accounts.$inferSelect;
-}
-
-/** Every transaction in a scope ("all" or a portfolio id) with its asset and
- *  account, oldest first. One query. */
-export function loadScopedRows(userId: string, portfolioKey: string): Promise<ScopedTxnRow[]> {
-  const conditions = [eq(schema.transactions.userId, userId)];
-  if (portfolioKey !== "all") {
-    conditions.push(eq(schema.accounts.portfolioId, portfolioKey));
-  }
-  return db
-    .select({ txn: schema.transactions, asset: schema.assets, account: schema.accounts })
-    .from(schema.transactions)
-    .innerJoin(schema.assets, eq(schema.transactions.assetId, schema.assets.id))
-    .innerJoin(schema.accounts, eq(schema.transactions.accountId, schema.accounts.id))
-    .where(and(...conditions))
-    .orderBy(asc(schema.transactions.tradedAt), asc(schema.transactions.createdAt));
-}
+export { loadScopedRows, type ScopedTxnRow };
 
 /**
  * Replay each (account, asset) pair through the lot engine. Rows must be
