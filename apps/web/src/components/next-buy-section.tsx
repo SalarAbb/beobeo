@@ -180,7 +180,10 @@ export function NextBuySection({
           <p className="flex flex-wrap items-center gap-x-1.5 text-lg">
             {/* The typed amount, never the one still being weighed: "$150" under a
                 freshly typed $100 read as the box ignoring it (luna, mission 29). */}
-            Put <span className="data font-semibold">{fmtUsd(amountUsd)}</span> into
+            {/* "Put $100 into VOO" on the runner-up read as the recommendation
+                (luna, mission 67), so a lower pick says it's the other way. */}
+            {index % picks.length === 0 ? "Put" : "Or, next best: put"}{" "}
+            <span className="data font-semibold">{fmtUsd(amountUsd)}</span> into
             <AssetLogo symbol={pick.key} assetClass={pick.assetClass} size={20} />
             <span className="font-semibold">{pick.key}</span>
             {/* Numbered from the first, so "choice 2 of 2" isn't the only marker
