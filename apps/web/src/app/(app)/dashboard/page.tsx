@@ -420,9 +420,6 @@ export default function DashboardPage() {
     placeholderData: samePortfolio,
   });
 
-  const windowed = pnlWindow !== "all";
-  const windowLabel = WINDOWS.find((w) => w.value === pnlWindow)!.label;
-
   const toggleSort = (key: SortKey) =>
     setSort((s) =>
       s.key === key
@@ -470,6 +467,15 @@ export default function DashboardPage() {
   }
 
   const { totals } = data;
+  // Labels follow the window the numbers on screen were computed for, not
+  // the tapped one: while 1M loaded, 1W's figures sat under "Change · 1M"
+  // and read as the same window changing (gilderoy, dashboard.window mission 60).
+  const windowed = data.window !== "all";
+  const windowLabel = WINDOWS.find((w) => w.value === data.window)!.label;
+  const loadingLabel = overview.isPlaceholderData
+    ? WINDOWS.find((w) => w.value === pnlWindow)!.label
+    : null;
+  const stale = loadingLabel ? "opacity-50 transition-opacity" : "transition-opacity";
 
   return (
     <div className="mx-auto grid w-full max-w-5xl grid-cols-1 gap-12">
@@ -479,6 +485,11 @@ export default function DashboardPage() {
         <div className="ml-auto">
           <SegmentedControl value={pnlWindow} onChange={setPnlWindow} options={WINDOWS} />
         </div>
+        {loadingLabel && (
+          <p role="status" className="basis-full text-right text-xs text-muted-foreground">
+            Working out {loadingLabel}… showing {windowLabel} until it&apos;s in.
+          </p>
+        )}
       </div>
 
       {data.dataIssues.length > 0 && (
@@ -489,7 +500,7 @@ export default function DashboardPage() {
         </p>
       )}
 
-      <StatStrip className="-mt-6">
+      <StatStrip className={`-mt-6 ${stale}`}>
         <StatTile
           label="Portfolio value"
           value={fmtUsd(totals.value)}
@@ -570,7 +581,14 @@ export default function DashboardPage() {
         </button>
         {showDetails && (
           <div id="performance-details" className="grid gap-6">
-            <PeriodNote m={metrics.data} window={windowed ? windowLabel : undefined} />
+            <PeriodNote
+              m={metrics.data}
+              window={
+                metrics.data && metrics.data.window !== "all"
+                  ? WINDOWS.find((w) => w.value === metrics.data!.window)!.label
+                  : undefined
+              }
+            />
             {metrics.isLoading ? (
               <Skeleton className="h-24 w-full" />
             ) : metrics.isError && !metrics.data ? (
@@ -583,7 +601,7 @@ export default function DashboardPage() {
       </div>
 
       <Section title="Holdings">
-            <Table>
+            <Table className={stale}>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <SortableHead
