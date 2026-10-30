@@ -39,7 +39,7 @@ const WINDOWS: { value: PnlWindow; label: string }[] = [
   { value: "all", label: "All" },
 ];
 
-type SortKey = "symbol" | "quantity" | "price" | "marketValue" | "pl";
+type SortKey = "symbol" | "quantity" | "price" | "marketValue" | "pl" | "plPct";
 type SortState = { key: SortKey; dir: "asc" | "desc" };
 
 interface SortableHolding {
@@ -48,7 +48,9 @@ interface SortableHolding {
   price: number | null;
   marketValue: number | null;
   unrealizedGain: number | null;
+  unrealizedGainPct: number | null;
   periodGain: number | null;
+  periodGainPct: number | null;
 }
 
 function sortHoldings<T extends SortableHolding>(
@@ -57,7 +59,15 @@ function sortHoldings<T extends SortableHolding>(
   windowed: boolean,
 ): T[] {
   const val = (h: SortableHolding): string | number | null =>
-    sort.key === "pl" ? (windowed ? h.periodGain : h.unrealizedGain) : h[sort.key];
+    sort.key === "pl"
+      ? windowed
+        ? h.periodGain
+        : h.unrealizedGain
+      : sort.key === "plPct"
+        ? windowed
+          ? h.periodGainPct
+          : h.unrealizedGainPct
+        : h[sort.key];
   return [...holdings].sort((a, b) => {
     const av = val(a);
     const bv = val(b);
@@ -70,13 +80,41 @@ function sortHoldings<T extends SortableHolding>(
   });
 }
 
-function SortableHead({
+function SortButton({
   label,
   sortKey,
   sort,
   onSort,
+  ariaLabel,
+}: {
+  label: string;
+  sortKey: SortKey;
+  sort: SortState;
+  onSort: (k: SortKey) => void;
+  ariaLabel?: string;
+}) {
+  const active = sort.key === sortKey;
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(sortKey)}
+      aria-label={ariaLabel}
+      className={`inline-flex items-center gap-1 text-xs hover:text-foreground ${
+        active ? "text-foreground" : "text-muted-foreground"
+      }`}
+    >
+      {label}
+      <span aria-hidden className="w-2.5 text-[9px]">
+        {active ? (sort.dir === "desc" ? "▼" : "▲") : ""}
+      </span>
+    </button>
+  );
+}
+
+function SortableHead({
   className,
   align = "right",
+  ...button
 }: {
   label: string;
   sortKey: SortKey;
@@ -85,21 +123,9 @@ function SortableHead({
   className?: string;
   align?: "left" | "right";
 }) {
-  const active = sort.key === sortKey;
   return (
     <TableHead className={`${align === "right" ? "text-right" : ""} ${className ?? ""}`}>
-      <button
-        type="button"
-        onClick={() => onSort(sortKey)}
-        className={`inline-flex items-center gap-1 text-xs hover:text-foreground ${
-          active ? "text-foreground" : "text-muted-foreground"
-        }`}
-      >
-        {label}
-        <span aria-hidden className="w-2.5 text-[9px]">
-          {active ? (sort.dir === "desc" ? "▼" : "▲") : ""}
-        </span>
-      </button>
+      <SortButton {...button} />
     </TableHead>
   );
 }
@@ -627,13 +653,26 @@ export default function DashboardPage() {
                     className="hidden sm:table-cell"
                   />
                   <SortableHead label="Value" sortKey="marketValue" sort={sort} onSort={toggleSort} />
-                  <SortableHead
-                    label={windowed ? `Change · ${windowLabel}` : "Gain"}
-                    sortKey="pl"
-                    sort={sort}
-                    onSort={toggleSort}
-                    className="pr-1"
-                  />
+                  {/* The cell shows dollars and percent, so either can order the
+                      list: a small holding up 37% sorted under a big one up 5%. */}
+                  <TableHead className="pr-1 text-right">
+                    <span className="inline-flex items-center gap-2">
+                      <SortButton
+                        label={windowed ? `Change · ${windowLabel}` : "Gain"}
+                        sortKey="pl"
+                        sort={sort}
+                        onSort={toggleSort}
+                        ariaLabel={`Sort by ${windowed ? "change" : "gain"} in dollars`}
+                      />
+                      <SortButton
+                        label="%"
+                        sortKey="plPct"
+                        sort={sort}
+                        onSort={toggleSort}
+                        ariaLabel={`Sort by ${windowed ? "change" : "gain"} in percent`}
+                      />
+                    </span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
