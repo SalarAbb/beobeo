@@ -13,6 +13,7 @@ import { RealizedBars } from "@/components/charts/realized-bars";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { TabError, TabLoading } from "@/components/tax-center/tab-state";
+import { useIncome } from "@/components/tax-center/use-income";
 import {
   Table,
   TableBody,
@@ -78,6 +79,67 @@ function Explained({
     <MetricHover label={label} term={term} insight={insight} meaning={meaning} className="uppercase">
       <span className={METRIC_LABEL_CLASS}>{label}</span>
     </MetricHover>
+  );
+}
+
+/**
+ * What selling this whole holding would cost in tax today, from the Tax
+ * Center's own math (`tax.now`'s `sellAllByAsset`): arya wanted the cost of
+ * trimming NVDA and worked it out by hand from purchase dates (mission 61).
+ * Renders nothing until it loads, or when no shares sit in a taxable account.
+ */
+function SellAllNote({
+  assetId,
+  symbol,
+  heldUnits,
+}: {
+  assetId: string;
+  symbol: string;
+  heldUnits: number;
+}) {
+  const trpc = useTRPC();
+  const { portfolioId } = usePortfolio();
+  const { complete: income } = useIncome();
+  const now = useQuery(trpc.tax.now.queryOptions({ portfolioId: portfolioId ?? undefined, income }));
+  const s = now.data?.sellAllByAsset[assetId];
+  if (!s) return null;
+
+  const gain = s.shortTermGainUsd + s.longTermGainUsd;
+  const where = s.accounts.length === 1 ? s.accounts[0] : "your taxable accounts";
+  const unitsLabel = `${fmtQty(s.units)} ${s.units === 1 ? "unit" : "units"}`;
+  const split =
+    s.shortTermGainUsd !== 0 && s.longTermGainUsd !== 0
+      ? ` (${fmtUsd(s.shortTermGainUsd)} on purchases held a year or less, ${fmtUsd(s.longTermGainUsd)} on older ones)`
+      : s.shortTermGainUsd !== 0
+        ? ", all on purchases held a year or less"
+        : "";
+  const tax =
+    s.taxUsd > 0.5
+      ? `about ${fmtUsd(s.taxUsd)} in tax at your Tax Profile's rates`
+      : s.taxUsd < -0.5
+        ? `which would cut this year's tax by about ${fmtUsd(-s.taxUsd)}`
+        : "no tax this year";
+  const retirementUnits = heldUnits - s.units;
+
+  return (
+    <Section title="If you sold all of it today">
+      <p className="max-w-3xl text-sm leading-relaxed">
+        Selling all {unitsLabel} of {symbol} in {where} would bring in about{" "}
+        <span className="data">{fmtUsd(s.proceedsUsd)}</span>:{" "}
+        a <span className={`data ${gainClass(gain)}`}>{fmtUsd(gain)}</span>{" "}
+        {gain < 0 ? "loss" : "gain"}
+        {split}, {tax}.
+        {retirementUnits > 1e-9 &&
+          ` The other ${fmtQty(retirementUnits)} in retirement accounts aren't taxed when sold.`}
+      </p>
+      <p className="max-w-3xl text-sm text-muted-foreground">
+        To sell only part of it, Tax Center →{" "}
+        <Link href="/tax-center?tab=cash" className="underline underline-offset-2">
+          Raise Cash
+        </Link>{" "}
+        picks the purchases that cost the least tax.
+      </p>
+    </Section>
   );
 }
 
@@ -223,6 +285,8 @@ export default function PositionPage() {
           tone={gainClass(realized)}
         />
       </StatStrip>
+
+      <SellAllNote assetId={assetId} symbol={asset.symbol} heldUnits={pos.quantity} />
 
       <Section title="Price & your trades">
         <PriceChart

@@ -240,7 +240,7 @@ export function computeAccountHoldings(userId: string, portfolioId?: string) {
 export function computeTaxNow(userId: string, portfolioId?: string, income?: IncomeInfo) {
   const scope = portfolioKey(portfolioId);
   const incomeKey = income ? `${income.status}:${Math.round(income.taxableIncomeUsd)}` : "none";
-  return cached(userCacheKey(userId, "tax-now7", scope, incomeKey), TTL.now, async () => {
+  return cached(userCacheKey(userId, "tax-now8", scope, incomeKey), TTL.now, async () => {
     const asOf = new Date();
     const [
       { lots, profile: saved, blocked, profileRow, ytdSales, ytdTaxAdvantagedGain, accountPositions },
@@ -276,6 +276,36 @@ export function computeTaxNow(userId: string, portfolioId?: string, income?: Inc
       income,
       federalLtcgRate: Number(profileRow.federalLtcgRatePct) / 100,
     });
+    // The same estimate per asset, for the position page's "If you sold all
+    // of it today" (arya, mission 61: no trim tax cost anywhere). Each asset
+    // is priced alone on top of the year so far, so they don't sum to `all`.
+    const lotsByAsset = new Map<string, typeof lots>();
+    for (const l of lots) lotsByAsset.set(l.assetId, [...(lotsByAsset.get(l.assetId) ?? []), l]);
+    const sellAllByAsset: Record<
+      string,
+      {
+        units: number;
+        accounts: string[];
+        proceedsUsd: number;
+        shortTermGainUsd: number;
+        longTermGainUsd: number;
+        taxUsd: number;
+      }
+    > = {};
+    for (const [assetId, assetLots] of lotsByAsset) {
+      const one = sellEverything(assetLots, blocked, saved, asOf, {
+        income,
+        federalLtcgRate: Number(profileRow.federalLtcgRatePct) / 100,
+      });
+      sellAllByAsset[assetId] = {
+        units: assetLots.reduce((s, l) => s + l.quantity.toNumber(), 0),
+        accounts: [...new Set(assetLots.map((l) => l.accountName))],
+        proceedsUsd: one.proceedsUsd.toNumber(),
+        shortTermGainUsd: one.shortTermGainUsd.toNumber(),
+        longTermGainUsd: one.longTermGainUsd.toNumber(),
+        taxUsd: one.taxUsd.toNumber(),
+      };
+    }
     const untaxed = new Map<string, number>();
     for (const p of accountPositions) {
       if (p.accountType === "taxable" || !p.price) continue;
@@ -307,6 +337,7 @@ export function computeTaxNow(userId: string, portfolioId?: string, income?: Inc
                 .map(([name, valueUsd]) => ({ name, valueUsd }))
                 .sort((a, b) => b.valueUsd - a.valueUsd),
             },
+      sellAllByAsset,
       daysLeftInTaxYear,
       // The effective (override-aware) YTD position — this is what actually
       // drives every marginal tax-cost number on this page: a loss offsetting
