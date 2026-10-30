@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AssetLogo } from "@/components/asset-logo";
 import { usePortfolio } from "@/components/portfolio-context";
@@ -25,7 +25,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useTRPC } from "@/lib/trpc";
+import { cn } from "@/lib/utils";
 
 /** Quiet type pills: the indigo accent marks buys, sells stay neutral (a sell
  *  isn't bad news), and income gets the soft good tint. */
@@ -67,12 +75,28 @@ export default function TransactionsPage({
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const { portfolioId } = usePortfolio();
-  const list = useQuery(
-    trpc.transactions.list.queryOptions({
+  // One asset's history, server-side so it reaches past the newest 200 rows:
+  // fred hunted a duplicate SOL buy by eye through every coin's trades (mission 58).
+  const [assetPick, setAssetPick] = useState<string | null>(null);
+  const assets = useQuery(
+    trpc.transactions.assets.queryOptions({ portfolioId: portfolioId ?? undefined }),
+  );
+  // A pick the current portfolio doesn't hold reads as "All assets".
+  const assetFilter = assets.data?.find((a) => a.id === assetPick) ?? null;
+  const list = useQuery({
+    ...trpc.transactions.list.queryOptions({
       limit: 200,
       portfolioId: portfolioId ?? undefined,
+      assetId: assetFilter?.id,
     }),
-  );
+    // Switching the asset keeps the old rows (dimmed) instead of flashing a
+    // loading line, but never across portfolios.
+    placeholderData: (prev, prevQuery) => {
+      const input = (prevQuery?.queryKey[1] as { input?: { portfolioId?: string } } | undefined)
+        ?.input;
+      return input?.portfolioId === (portfolioId ?? undefined) ? keepPreviousData(prev) : undefined;
+    },
+  });
   const remove = useMutation(trpc.transactions.remove.mutationOptions());
   const restore = useMutation(trpc.transactions.restore.mutationOptions());
   const update = useMutation(trpc.transactions.update.mutationOptions());
@@ -91,7 +115,7 @@ export default function TransactionsPage({
   // Everything derived from transactions: the list, holdings, charts, tax.
   const refreshAll = () =>
     Promise.all([
-      queryClient.invalidateQueries({ queryKey: trpc.transactions.list.queryKey() }),
+      queryClient.invalidateQueries({ queryKey: trpc.transactions.pathKey() }),
       queryClient.invalidateQueries({ queryKey: trpc.portfolio.pathKey() }),
       queryClient.invalidateQueries({ queryKey: trpc.tax.pathKey() }),
       queryClient.invalidateQueries({ queryKey: trpc.compare.pathKey() }),
@@ -194,7 +218,10 @@ export default function TransactionsPage({
   }
 
   const refresh = () =>
-    queryClient.invalidateQueries({ queryKey: trpc.transactions.list.queryKey() });
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: trpc.transactions.list.queryKey() }),
+      queryClient.invalidateQueries({ queryKey: trpc.transactions.assets.queryKey() }),
+    ]);
 
   // A sell and a buy of the same size, same asset, same day: a swap, tagged so
   // the pair doesn't read as a double entry.
@@ -226,14 +253,58 @@ export default function TransactionsPage({
         }
       />
 
-      <div className="min-w-0 border-t">
+      {(assets.data?.length ?? 0) > 1 && (
+        <div className="-mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span id="txn-asset" className="eyebrow">
+            Show
+          </span>
+          <Select
+            value={assetFilter?.id ?? "all"}
+            onValueChange={(v) => setAssetPick(v === "all" ? null : v)}
+          >
+            <SelectTrigger
+              aria-labelledby="txn-asset"
+              className={cn("w-48", assetFilter && "bg-accent text-primary")}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All assets</SelectItem>
+              {assets.data!.map((a) => (
+                <SelectItem key={a.id} value={a.id}>
+                  {a.symbol}
+                  <span className="data text-muted-foreground"> · {a.count}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {assetFilter && (
+            <span className="text-sm text-muted-foreground">
+              {assetFilter.count > 200
+                ? `The newest 200 of ${assetFilter.count} ${assetFilter.symbol} transactions.`
+                : `${assetFilter.count} ${assetFilter.symbol} transaction${assetFilter.count === 1 ? "" : "s"}, newest first.`}{" "}
+              <button
+                type="button"
+                className="text-primary underline-offset-4 hover:underline"
+                onClick={() => setAssetPick(null)}
+              >
+                Show all
+              </button>
+            </span>
+          )}
+        </div>
+      )}
+
+      <div className={cn("min-w-0 border-t transition-opacity", list.isPlaceholderData && "opacity-60")}>
         {list.isLoading ? (
           <TabLoading label="Loading your transactions…" className="my-4 h-24" />
         ) : list.isError && !list.data ? (
           <TabError what="your transactions" onRetry={() => void list.refetch()} />
         ) : (list.data?.length ?? 0) === 0 ? (
           <div className="py-12 text-center text-sm text-muted-foreground">
-            No transactions yet. Add one manually or import a broker CSV.
+            {assetFilter
+              ? `No ${assetFilter.symbol} transactions left.`
+              : "No transactions yet. Add one manually or import a broker CSV."}
           </div>
         ) : (
           <Table>
@@ -289,10 +360,13 @@ export default function TransactionsPage({
                     </span>
                     {swapIds.has(txn.id) && (
                       <span
-                        className="ml-1.5 text-xs text-muted-foreground"
-                        title="Sold and bought back the same day"
+                        className="ml-1.5 rounded-full border px-1.5 py-0.5 text-[11px] whitespace-nowrap text-muted-foreground"
+                        title="Sold and bought back the same day, so not a duplicate"
                       >
                         swap
+                        <span className="hidden sm:inline">
+                          {txn.type === "sell" ? ": sold" : ": bought back"}
+                        </span>
                       </span>
                     )}
                   </TableCell>
