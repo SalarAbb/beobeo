@@ -1,8 +1,9 @@
 "use client";
 
 import type { FilingStatus } from "@beobeo/core/tax-brackets";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { usePortfolio } from "@/components/portfolio-context";
+import { setIncomeCookie } from "@/lib/income-cookie";
 import { useStoredState } from "@/lib/use-stored-state";
 
 export interface StoredIncome {
@@ -26,7 +27,8 @@ export const incomeKey = (userId: string) => `beobeo.tax.income.${userId}`;
  * human-run `db:push`. Welcome step 1 saves the status; Tax Profile → Your
  * income takes the number. Together (`complete`, a stable reference while
  * unchanged) they size the 0% long-term gain room on the Now tab (R-003).
- * The chat can't see them.
+ * The chat can't see them. A cookie mirrors the complete pair so the Tax
+ * Center's layout can warm `tax.now` with it (`lib/income-cookie.ts`).
  */
 export function useIncome() {
   const { userId } = usePortfolio();
@@ -38,5 +40,6 @@ export function useIncome() {
         : undefined,
     [income],
   );
+  useEffect(() => setIncomeCookie(userId, complete), [userId, complete]);
   return { income, setIncome, complete };
 }
