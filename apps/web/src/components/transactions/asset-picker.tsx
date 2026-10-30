@@ -155,6 +155,11 @@ export function AssetPicker({
   );
   const hasResults =
     local.length > 0 || popularRows.length > 0 || known.length > 0 || remoteRows.length > 0;
+  // Once the typed ticker itself is listed, the wider search can only add
+  // lesser matches below it, so it runs quietly: an "updating…" row under the
+  // VOO someone was about to tap read as "not ready yet" (hermione, missions 55–57).
+  const typed = query.trim().toUpperCase();
+  const exactShown = [...popularRows, ...local].some((a) => a.symbol.toUpperCase() === typed);
 
   function pickLocal(a: PickedAsset) {
     setFailed(null);
@@ -288,9 +293,9 @@ export function AssetPicker({
                     ))}
                   </CommandGroup>
                 )}
-                {hasResults && searching && (
+                {hasResults && searching && !exactShown && (
                   <p className="flex items-center justify-center gap-2 border-t py-1.5 text-xs text-muted-foreground">
-                    <Loader2 className="size-3 animate-spin" /> updating…
+                    <Loader2 className="size-3 animate-spin" /> Looking for more matches…
                   </p>
                 )}
               </>
