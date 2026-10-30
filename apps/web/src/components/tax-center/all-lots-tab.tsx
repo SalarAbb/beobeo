@@ -6,6 +6,7 @@ import Link from "next/link";
 import { AssetLogo } from "@/components/asset-logo";
 import { usePortfolio } from "@/components/portfolio-context";
 import { TabError, TabLoading } from "@/components/tax-center/tab-state";
+import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   Table,
@@ -25,6 +26,19 @@ type SortKey = "symbol" | "costBasis" | "marketValue" | "unrealizedGain" | "open
 type SortState = { key: SortKey; dir: "asc" | "desc" };
 
 const ALL = "__all";
+
+type Show = typeof ALL | "gains" | "losses";
+const SHOW_OPTIONS: { value: Show; label: string }[] = [
+  { value: ALL, label: "Gains and losses" },
+  { value: "gains", label: "Gains" },
+  { value: "losses", label: "Losses" },
+];
+
+/** A typed "$500" / "1,000" → a positive dollar floor, else null (no floor). */
+function parseFloor(input: string): number | null {
+  const n = Number(input.replace(/[^0-9.]/g, ""));
+  return input.trim() !== "" && Number.isFinite(n) && n > 0 ? n : null;
+}
 
 /** Module-level (not created during render) — required by the React
  *  Compiler lint; matches the dashboard's SortableHead pattern. */
@@ -78,13 +92,29 @@ export function AllLotsTab() {
   const trpc = useTRPC();
   const { portfolioId } = usePortfolio();
   const lots = useQuery(trpc.tax.lots.queryOptions({ portfolioId: portfolioId ?? undefined }));
-  const [sort, setSort] = useState<SortState>({ key: "marketValue", dir: "desc" });
   const [assetFilter, setAssetFilter] = useStoredState<string>("beobeo.tax.lots.asset", ALL);
+  // Gains or losses only, with a dollar floor ("losses over $500", hermione).
+  const [{ show, overInput }, setShowState] = useStoredState<{ show: Show; overInput: string }>(
+    "beobeo.tax.lots.show",
+    { show: ALL, overInput: "" },
+  );
+  // null = the default for what's shown: biggest loss or gain first, else largest value.
+  const [sortPick, setSort] = useState<SortState | null>(null);
+  const sort: SortState =
+    sortPick ??
+    (show === ALL
+      ? { key: "marketValue", dir: "desc" }
+      : { key: "unrealizedGain", dir: show === "losses" ? "asc" : "desc" });
+
+  function pickShow(next: Show) {
+    setShowState((s) => ({ ...s, show: next }));
+    setSort(null);
+  }
 
   function toggleSort(key: SortKey) {
-    setSort((s) =>
-      s.key === key
-        ? { key, dir: s.dir === "desc" ? "asc" : "desc" }
+    setSort(
+      sort.key === key
+        ? { key, dir: sort.dir === "desc" ? "asc" : "desc" }
         : { key, dir: key === "symbol" ? "asc" : "desc" },
     );
   }
@@ -105,7 +135,24 @@ export function AllLotsTab() {
   // Assets in this scope, alphabetical; a remembered pick this scope doesn't hold shows everything.
   const symbols = [...new Set(lots.data.map((l) => l.symbol))].sort();
   const filter = symbols.includes(assetFilter) ? assetFilter : ALL;
-  const shown = filter === ALL ? lots.data : lots.data.filter((l) => l.symbol === filter);
+  const ofAsset = filter === ALL ? lots.data : lots.data.filter((l) => l.symbol === filter);
+  const floor = show === ALL ? null : parseFloor(overInput);
+  // A purchase within a cent of even is neither a gain nor a loss.
+  const shown = ofAsset.filter((l) =>
+    show === "losses"
+      ? l.unrealizedGain <= -(floor ?? 0.005)
+      : show === "gains"
+        ? l.unrealizedGain >= (floor ?? 0.005)
+        : true,
+  );
+  const word = show === "losses" ? "loss" : "gain";
+  // Nothing passes the filter: name the closest thing there is, so the empty table still answers.
+  const nearest =
+    show === ALL
+      ? undefined
+      : [...ofAsset].sort((a, b) =>
+          show === "losses" ? a.unrealizedGain - b.unrealizedGain : b.unrealizedGain - a.unrealizedGain,
+        )[0];
 
   const sorted = [...shown].sort((a, b) => {
     const av = sort.key === "openedAt" ? Date.parse(a.openedAt) : a[sort.key];
@@ -162,23 +209,71 @@ export function AllLotsTab() {
           />
         </div>
       )}
-      <p className="text-sm">
-        {shown.length.toLocaleString()} {shown.length === 1 ? "purchase" : "purchases"}
-        {filter !== ALL && <> of {fmtUnits(total.units)} {filter}</>}: you paid{" "}
-        <span className="data">{fmtUsd(total.cost)}</span>, worth{" "}
-        <span className="data">{fmtUsd(total.value)}</span> now,{" "}
-        <span className={cn("data", gainClass(total.gain))}>
-          {fmtUsd(total.gain)} ({fmtPct(gainPct(total.gain, total.cost))})
-        </span>{" "}
-        if sold.
-        {turningSoon > 0 && (
-          <span className="text-muted-foreground">
-            {" "}
-            {turningSoon} {turningSoon === 1 ? "turns" : "turn"} long-term within 45 days.
-          </span>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <SegmentedControl value={show} onChange={pickShow} options={SHOW_OPTIONS} />
+        {show !== ALL && (
+          <div className="flex items-center gap-2 text-sm">
+            <label htmlFor="lots-over" className="text-muted-foreground">
+              {show === "losses" ? "Losses" : "Gains"} bigger than
+            </label>
+            <span className="text-muted-foreground">$</span>
+            <Input
+              id="lots-over"
+              value={overInput}
+              onChange={(e) => {
+                const v = e.target.value;
+                setShowState((s) => ({ ...s, overInput: v }));
+              }}
+              placeholder="any"
+              inputMode="decimal"
+              className="data h-8 w-24"
+            />
+          </div>
         )}
-      </p>
-      <div className="min-w-0 border-t">
+      </div>
+      {shown.length === 0 && (
+        <p className="border-y py-10 text-center text-sm text-muted-foreground">
+          No purchase{filter !== ALL && <> of {filter}</>} is at a {word}
+          {floor !== null && <> bigger than {fmtUsd(floor)}</>} right now.
+          {nearest &&
+            (show === "losses" ? nearest.unrealizedGain < 0 : nearest.unrealizedGain > 0) && (
+              <>
+                {" "}
+                The biggest {word} is {nearest.symbol} bought {nearest.openedAt.slice(0, 10)}:{" "}
+                <span className={cn("data", gainClass(nearest.unrealizedGain))}>
+                  {fmtUsd(nearest.unrealizedGain)}
+                </span>
+                .
+              </>
+            )}
+        </p>
+      )}
+      {shown.length > 0 && (
+        <p className="text-sm">
+          {shown.length.toLocaleString()} {shown.length === 1 ? "purchase" : "purchases"}
+          {filter !== ALL && <> of {fmtUnits(total.units)} {filter}</>}
+          {show !== ALL && (
+            <>
+              {" "}
+              at a {word}
+              {floor !== null && <> bigger than {fmtUsd(floor)}</>}
+            </>
+          )}
+          : you paid <span className="data">{fmtUsd(total.cost)}</span>, worth{" "}
+          <span className="data">{fmtUsd(total.value)}</span> now,{" "}
+          <span className={cn("data", gainClass(total.gain))}>
+            {fmtUsd(total.gain)} ({fmtPct(gainPct(total.gain, total.cost))})
+          </span>{" "}
+          if sold.
+          {turningSoon > 0 && (
+            <span className="text-muted-foreground">
+              {" "}
+              {turningSoon} {turningSoon === 1 ? "turns" : "turn"} long-term within 45 days.
+            </span>
+          )}
+        </p>
+      )}
+      <div className={cn("min-w-0 border-t", shown.length === 0 && "hidden")}>
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
