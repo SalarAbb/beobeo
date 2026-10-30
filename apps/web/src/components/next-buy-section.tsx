@@ -14,7 +14,6 @@ import {
 } from "@/components/transactions/asset-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { TabLoading } from "@/components/tax-center/tab-state";
 import { defaultNextBuyAmount } from "@/lib/next-buy-defaults";
 import { useTRPC } from "@/lib/trpc";
@@ -47,6 +46,7 @@ export function NextBuySection({
   const [picked, setPicked] = useState<PickedAsset[] | null>(null);
   const [adding, setAdding] = useState(false);
   const [shown, setShown] = useState({ key: "", index: 0 });
+  const [howOpen, setHowOpen] = useState(false);
 
   const options = picked ?? holdings.slice(0, 3);
   const defaultAmount = defaultNextBuyAmount(lastDeposit ?? null);
@@ -198,16 +198,7 @@ export function NextBuySection({
               the way Allocation shows above.
             </p>
           )}
-          {pick.account && (
-            <p className="text-sm text-muted-foreground">
-              Buy it in {pick.account.name}
-              {pick.account.why
-                ? pick.account.why.startsWith("where")
-                  ? `, ${pick.account.why}.`
-                  : `: ${pick.account.why}.`
-                : "."}
-            </p>
-          )}
+          {pick.account && <p className="text-sm text-muted-foreground">{accountLine(pick.account)}</p>}
           <div className="mt-1 flex flex-wrap items-center gap-2">
             {picks.length > 1 && (
               <Button
@@ -219,8 +210,27 @@ export function NextBuySection({
                 {(index + 1) % picks.length === 0 ? "Back to the first pick" : "Show me another"}
               </Button>
             )}
-            <HowPicked pick={pick} />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-muted-foreground"
+              aria-expanded={howOpen}
+              aria-controls="next-buy-how"
+              onClick={() => setHowOpen((o) => !o)}
+            >
+              {howOpen ? "Hide how this was picked" : "How this was picked"}
+            </Button>
           </div>
+          {/* In place, not a popover: one laid over the pick kept closing and hid what
+              it explained (luna, mission 64). It stays open through "Show me another". */}
+          {howOpen && (
+            <HowPicked
+              id="next-buy-how"
+              pick={pick}
+              amountUsd={debouncedAmount}
+              portfolioValue={query.data?.portfolioValue ?? 0}
+            />
+          )}
         </div>
       )}
 
@@ -231,9 +241,40 @@ export function NextBuySection({
   );
 }
 
+const ACCOUNT_KIND = {
+  taxable: "taxable account",
+  traditional_ira: "Traditional IRA",
+  roth_ira: "Roth IRA",
+  "401k": "401(k)",
+  other_tax_advantaged: "tax-advantaged account",
+} as const;
+
+/** "Buy it in Robinhood, your taxable account." The kind is said unless the
+ *  name already says it ("Roth IRA"): luna couldn't tell from "Buy it in
+ *  Robinhood" which kind of account that was (mission 64). */
+function accountLine(account: {
+  name: string;
+  type: keyof typeof ACCOUNT_KIND;
+  why: string | null;
+}): string {
+  const kind = ACCOUNT_KIND[account.type];
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const named = norm(account.name).includes(norm(kind.replace(" account", "")));
+  if (!account.why) return `Buy it in ${account.name}${named ? "" : `, your ${kind}`}.`;
+  const where = named ? account.name : `${account.name} (your ${kind})`;
+  return account.why.startsWith("where")
+    ? `Buy it in ${where}, ${account.why}.`
+    : `Buy it in ${where}: ${account.why}.`;
+}
+
+/** The pick's numbers in the user's own dollars, then the rule in plain words. */
 function HowPicked({
+  id,
   pick,
+  amountUsd,
+  portfolioValue,
 }: {
+  id: string;
   pick: {
     key: string;
     weightNow: number;
@@ -243,9 +284,14 @@ function HowPicked({
     offHigh: number | null;
     vsCost: number | null;
   };
+  amountUsd: number;
+  portfolioValue: number;
 }) {
+  const held = pick.weightNow * portfolioValue;
   const lines: string[] = [
-    `${pick.key} is ${pctText(pick.weightNow)} of this portfolio now, ${pctText(pick.weightAfter)} after this buy.`,
+    portfolioValue > 0
+      ? `You have ${fmtUsd(held)} of ${pick.key} out of ${fmtUsd(portfolioValue)} in all (${pctText(pick.weightNow)}). After this ${fmtUsd(amountUsd)} it would be ${fmtUsd(held + amountUsd)} of ${fmtUsd(portfolioValue + amountUsd)} (${pctText(pick.weightAfter)}).`
+      : `${pick.key} would be ${pctText(pick.weightAfter)} of your money after this buy.`,
   ];
   if (pick.target !== null && pick.gapUsd !== null)
     lines.push(
@@ -260,37 +306,31 @@ function HowPicked({
         : "It has no share in your target mix.",
     );
   lines.push(
-    pick.offHigh === null
-      ? "No price history yet to compare against its 1-year range."
+    (pick.offHigh === null
+      ? "There's no price history yet to compare it with its past year"
       : pick.offHigh > -0.005
-        ? "It trades at its 1-year high."
-        : `It trades ${pctText(pick.offHigh)} below its 1-year high.`,
+        ? "Its price is at its highest of the past year"
+        : `Its price is ${pctText(pick.offHigh)} below its highest of the past year`) +
+      (pick.vsCost === null
+        ? "."
+        : `, and ${pctText(pick.vsCost)} ${pick.vsCost < 0 ? "below" : "above"} what you paid for it on average.`),
   );
-  if (pick.vsCost !== null)
-    lines.push(
-      `That's ${pctText(pick.vsCost)} ${pick.vsCost < 0 ? "under" : "over"} what you paid on average.`,
-    );
 
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-8 text-muted-foreground">
-          How this was picked
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="grid w-80 gap-2 text-sm">
-        <ul className="grid gap-1">
-          {lines.map((l) => (
-            <li key={l}>{l}</li>
-          ))}
-        </ul>
-        {/* Mirrors NEXT_BUY_WEIGHTS / NEXT_BUY_TARGET_WEIGHTS in @beobeo/core. */}
-        <p className="border-t pt-2 text-xs text-muted-foreground">
-          {pick.target !== null
-            ? "With a target mix, the option furthest short of its target comes first (90% of the score). How far it sits below its 1-year high and your cost only settles close calls (10%)."
-            : "Each option is scored 60% on how spread out your money would be and 40% on how far it sits below its 1-year high and your cost. A single company or coin counts twice as much here: it can fall on its own in a way a fund holding many companies rarely does."}
-        </p>
-      </PopoverContent>
-    </Popover>
+    <div id={id} className="mt-1 grid max-w-xl gap-2 border-l-2 border-accent pl-3 text-sm">
+      <ul className="grid gap-1">
+        {lines.map((l) => (
+          <li key={l}>{l}</li>
+        ))}
+      </ul>
+      {/* Mirrors NEXT_BUY_WEIGHTS / NEXT_BUY_TARGET_WEIGHTS and SINGLE_NAME_WEIGHT in
+          @beobeo/core. Plain words: "60/40 score" and "counts double" read as
+          homework (luna, mission 64). */}
+      <p className="text-muted-foreground">
+        {pick.target !== null
+          ? "What decides it, mostly (90%): which option is furthest short of your target mix. Price only settles close calls (10%): one further below its past-year high, or below what you paid, gets a small edge."
+          : "What decides it, mostly (60%): not putting too much of your money in one place. A single company or coin weighs twice as much here, because it can drop on its own in a way a fund of hundreds of companies rarely does. The rest (40%) is price: one further below its past-year high, or below what you paid, gets an edge."}
+      </p>
+    </div>
   );
 }

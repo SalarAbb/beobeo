@@ -305,10 +305,16 @@ describe("placeAccount", () => {
   const all = [brokerage, coinbase, roth, ira];
 
   it("puts crypto in a taxable account, the one already holding it first", () => {
-    expect(placeAccount({ assetClass: "crypto" }, all)).toEqual({ id: "t1", name: "Brokerage", why: null });
+    expect(placeAccount({ assetClass: "crypto" }, all)).toEqual({
+      id: "t1",
+      name: "Brokerage",
+      type: "taxable",
+      why: null,
+    });
     expect(placeAccount({ assetClass: "crypto", heldIn: ["t2"] }, all)).toEqual({
       id: "t2",
       name: "Coinbase",
+      type: "taxable",
       why: "where you already hold it",
     });
   });
@@ -317,6 +323,7 @@ describe("placeAccount", () => {
     expect(placeAccount({ assetClass: "etf", incomeHeavy: true }, all)).toEqual({
       id: "i",
       name: "IRA",
+      type: "traditional_ira",
       why: "its interest would be taxed every year in a regular account",
     });
     expect(placeAccount({ assetClass: "etf", incomeHeavy: true }, [brokerage, roth])!.id).toBe("r");
@@ -328,11 +335,13 @@ describe("placeAccount", () => {
     expect(placeAccount({ assetClass: "stock", heldIn: ["r"] }, all)).toEqual({
       id: "r",
       name: "Roth",
+      type: "roth_ira",
       why: "where you already hold it",
     });
     expect(placeAccount({ assetClass: "stock" }, [roth, brokerage])).toEqual({
       id: "t1",
       name: "Brokerage",
+      type: "taxable",
       why: null,
     });
     // Unknown held-in ids (another portfolio) are ignored.
@@ -343,6 +352,7 @@ describe("placeAccount", () => {
     expect(placeAccount({ assetClass: "etf", incomeHeavy: true }, [roth])).toEqual({
       id: "r",
       name: "Roth",
+      type: "roth_ira",
       why: null,
     });
     expect(placeAccount({ assetClass: "stock" }, [])).toBeNull();

@@ -100,7 +100,8 @@ export interface NextBuyPick {
   vsCost: number | null;
   /** One plain sentence: the strongest reason behind the score. */
   reason: string;
-  account: { id: string; name: string; why: string | null } | null;
+  /** `type` lets the UI say what kind of account it is ("your taxable account"). */
+  account: { id: string; name: string; type: NextBuyAccountType; why: string | null } | null;
 }
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
@@ -328,6 +329,7 @@ export function placeAccount(
   const out = (a: NextBuyAccount, why: string | null) => ({
     id: a.id,
     name: a.name,
+    type: a.type,
     why: accounts.length === 1 ? null : why,
   });
   const taxable = accounts.filter((a) => a.type === "taxable");

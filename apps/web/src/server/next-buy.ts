@@ -42,7 +42,7 @@ export interface NextBuyInput {
  */
 export async function computeNextBuy(userId: string, input: NextBuyInput) {
   const ids = [...new Set(input.assetIds)].sort();
-  if (ids.length === 0 || !(input.amountUsd > 0)) return { picks: [] };
+  if (ids.length === 0 || !(input.amountUsd > 0)) return { picks: [], portfolioValue: 0 };
   const { portfolioValue, candidates, meta, accounts } = await loadNextBuyCandidates(
     userId,
     input.portfolioId,
@@ -55,7 +55,8 @@ export async function computeNextBuy(userId: string, input: NextBuyInput) {
     targets: input.targets,
     accounts,
   });
-  return { picks: picks.map((p) => ({ ...p, ...meta[p.key]! })) };
+  // portfolioValue lets "How this was picked" speak in the user's dollars.
+  return { picks: picks.map((p) => ({ ...p, ...meta[p.key]! })), portfolioValue };
 }
 
 /**
