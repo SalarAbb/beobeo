@@ -323,8 +323,10 @@ export default function PositionPage() {
                   <TableRow className="hover:bg-transparent">
                     <TableHead className="pl-1">Bought</TableHead>
                     <TableHead className="text-right">Units</TableHead>
-                    <TableHead className="text-right">Price paid</TableHead>
-                    <TableHead className="pr-1 text-right">Cost</TableHead>
+                    <TableHead className="hidden text-right sm:table-cell">Price paid</TableHead>
+                    <TableHead className="hidden text-right sm:table-cell">Cost</TableHead>
+                    <TableHead className="text-right">Gain if sold</TableHead>
+                    <TableHead className="pr-1 text-right">Owned</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -334,8 +336,19 @@ export default function PositionPage() {
                         {l.openedAt}
                       </TableCell>
                       <TableCell className={NUM}>{fmtQty(l.quantity)}</TableCell>
-                      <TableCell className={NUM}>{fmtUsd(l.avgCost)}</TableCell>
-                      <TableCell className={`pr-1 ${NUM}`}>{fmtUsd(l.costBasis)}</TableCell>
+                      <TableCell className={`hidden sm:table-cell ${NUM}`}>{fmtUsd(l.avgCost)}</TableCell>
+                      <TableCell className={`hidden sm:table-cell ${NUM}`}>{fmtUsd(l.costBasis)}</TableCell>
+                      <TableCell className={`${NUM} ${gainClass(l.gain)}`}>{fmtUsd(l.gain)}</TableCell>
+                      <TableCell className="pr-1 text-right text-xs text-muted-foreground">
+                        {l.longTerm ? (
+                          "Over a year"
+                        ) : (
+                          <>
+                            Under a year
+                            <span className="data block text-[11px]">until {l.longTermOn}</span>
+                          </>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

@@ -9,6 +9,7 @@ import {
   D,
   dailyReturns,
   extractCashFlows,
+  isLongTerm,
   materialDrawdown,
   portfolioTimeSeries,
   positionFromLots,
@@ -721,7 +722,7 @@ export function computePosition(
   portfolioId?: string,
 ) {
   return cached(
-    userCacheKey(userId, "position", portfolioId ?? "all", assetId),
+    userCacheKey(userId, "position2", portfolioId ?? "all", assetId),
     TTL.position,
     () => computePositionUncached(userId, assetId, portfolioId),
   );
@@ -790,12 +791,24 @@ async function computePositionUncached(
       unrealizedGainPct: pos.unrealizedGainPct?.toNumber() ?? null,
       dividends: dividendIncome.toNumber(),
     },
-    lots: openLots.map((l) => ({
-      openedAt: toIsoDate(l.openedAt),
-      quantity: l.quantity.toNumber(),
-      costBasis: l.costBasis.toNumber(),
-      avgCost: l.costBasis.div(l.quantity).toNumber(),
-    })),
+    lots: openLots.map((l) => {
+      // The day after the anniversary, like the Tax Center's All Lots: arya
+      // couldn't see per purchase what it would make or when it turns
+      // long-term without leaving the page (mission 61).
+      const ltOn = new Date(l.openedAt);
+      ltOn.setUTCFullYear(ltOn.getUTCFullYear() + 1);
+      ltOn.setUTCDate(ltOn.getUTCDate() + 1);
+      return {
+        openedAt: toIsoDate(l.openedAt),
+        quantity: l.quantity.toNumber(),
+        costBasis: l.costBasis.toNumber(),
+        avgCost: l.costBasis.div(l.quantity).toNumber(),
+        /** Gain if sold at the latest price (null without one). */
+        gain: latest ? l.quantity.mul(D(latest.close)).sub(l.costBasis).toNumber() : null,
+        longTerm: isLongTerm(l.openedAt, new Date()),
+        longTermOn: toIsoDate(ltOn),
+      };
+    }),
     realizedYears: realizedByYear(realized).map((y) => ({
       year: y.year,
       shortTerm: y.shortTerm.toNumber(),
