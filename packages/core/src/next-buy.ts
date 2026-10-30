@@ -9,6 +9,10 @@
  *         the deposit grows the portfolio); untargeted or already-full
  *         candidates get 0. Without a target mix, 1 − its weight after the
  *         buy, so spreading money wins over piling onto the biggest holding.
+ *         A single company or coin counts its weight double (1 − 2 × weight
+ *         after, floored at 0): one company can fall alone in a way a fund of
+ *         many can't. Counted equally, luna (67% VOO, 33% NVDA) was told NVDA
+ *         "keeps your money more spread out" than an S&P 500 fund (mission 62).
  *   dip — how far it sits below its own trailing-year range (70%) and below
  *         what you paid for it (30%, full marks at 20% under your cost).
  * score = 0.6 × fit + 0.4 × dip without a target mix. With one, 0.9 × fit +
@@ -36,6 +40,11 @@ const FULL_COST_DIP = 0.2;
 const DIP_REASON_MIN = 0.05;
 /** Under this weight a holding reads as small ("just 6% of your portfolio"). */
 const SMALL_WEIGHT = 0.25;
+/** Without a target mix, a single company or coin's weight counts this many
+ *  times toward how lopsided the portfolio gets. */
+export const SINGLE_NAME_WEIGHT = 2;
+/** Classes that are one company or one coin, not a fund of many. */
+const SINGLE_NAME_CLASSES = new Set(["stock", "crypto"]);
 
 export type NextBuyAccountType =
   | "taxable"
@@ -77,6 +86,8 @@ export interface NextBuyPick {
   /** Share of the portfolio now and after putting the whole amount in. */
   weightNow: number;
   weightAfter: number;
+  /** One company (a stock) or one coin, not a fund of many. */
+  singleName: boolean;
   /** Target weight (fraction) when a target mix exists, else null. */
   target: number | null;
   /** Dollars still short of target after the deposit grows the total. */
@@ -117,6 +128,7 @@ export function pickNextBuy(input: {
   const picks = candidates.map((c): NextBuyPick => {
     const weightNow = portfolioValue > 0 ? c.heldValue / portfolioValue : 0;
     const weightAfter = (c.heldValue + amountUsd) / totalAfter;
+    const singleName = SINGLE_NAME_CLASSES.has(c.assetClass);
 
     let target: number | null = null;
     let gapUsd: number | null = null;
@@ -126,7 +138,7 @@ export function pickNextBuy(input: {
       gapUsd = target * totalAfter - c.heldValue;
       fit = target > 0 ? clamp01(gapUsd / amountUsd) : 0;
     } else {
-      fit = 1 - weightAfter;
+      fit = clamp01(1 - (singleName ? SINGLE_NAME_WEIGHT : 1) * weightAfter);
     }
 
     let rangePosition: number | null = null;
@@ -154,6 +166,7 @@ export function pickNextBuy(input: {
       dip,
       weightNow,
       weightAfter,
+      singleName,
       target,
       gapUsd,
       offHigh,
@@ -172,16 +185,32 @@ export function pickNextBuy(input: {
   );
   // "Already 67% of your portfolio" alone reads as a reason against a pick;
   // with other options, compare: the top pick spreads money more than the
-  // runner-up, every other pick less than the top.
+  // runner-up, every other pick less than the top. When a fund beats a single
+  // company or coin, that's the reason, so it's what the sentence says.
   const [top, second] = picks;
   if (top && second) {
+    const one = (p: NextBuyPick) =>
+      candidates.find((c) => c.key === p.key)?.assetClass === "crypto"
+        ? "a single coin"
+        : "a single company";
+    const fund = (p: NextBuyPick) =>
+      candidates.find((c) => c.key === p.key)?.incomeHeavy
+        ? "a fund of many bonds"
+        : "a fund of many companies";
     picks.forEach((p, i) => {
       if (!p.reason.includes("; this buy takes it to")) return;
       const share = `${p.key} is ${pctOf(p.weightNow)} of your portfolio (${pctOf(p.weightAfter)} after this buy)`;
-      p.reason =
-        i === 0
-          ? `${share}, so it keeps your money more spread out than ${second.key} would.`
-          : `${share}, so it spreads your money less than ${top.key}.`;
+      if (i === 0) {
+        p.reason =
+          !p.singleName && second.singleName
+            ? `${p.key} is ${fund(p)}, so it keeps your money more spread out than ${second.key}, ${one(second)} that would be ${pctOf(second.weightAfter)} of your portfolio after this buy.`
+            : `${share}, so it keeps your money more spread out than ${second.key} would.`;
+      } else {
+        p.reason =
+          p.singleName && !top.singleName
+            ? `${p.key} is ${one(p)}, and this buy would make it ${pctOf(p.weightAfter)} of your portfolio, so it spreads your money less than ${top.key}, ${fund(top)}.`
+            : `${share}, so it spreads your money less than ${top.key}.`;
+      }
     });
   }
   if (top) compareShortfalls(picks, amountUsd);

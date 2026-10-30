@@ -51,19 +51,74 @@ describe("pickNextBuy", () => {
   });
 
   it("a held top pick says it spreads money more than the runner-up", () => {
-    // $100 into $445 → 545 after. No price data, so the dip parts tie and fit decides.
-    // VOO: 300 → 400/545 = 73.4%, fit 0.266. NVDA: 145 → 245/545 = 45.0%, fit 0.550.
+    // Two funds. $100 into $445 → 545 after. No price data, so the dip parts tie and fit decides.
+    // VOO: 300 → 400/545 = 73.4%, fit 0.266. VXUS: 145 → 245/545 = 45.0%, fit 0.550.
     const [top, second] = pickNextBuy({
       amountUsd: 100,
       portfolioValue: 445,
-      candidates: [cand({ key: "VOO", heldValue: 300 }), cand({ key: "NVDA", heldValue: 145 })],
+      candidates: [cand({ key: "VOO", heldValue: 300 }), cand({ key: "VXUS", heldValue: 145 })],
     });
-    expect(top!.key).toBe("NVDA");
+    expect(top!.key).toBe("VXUS");
     expect(top!.reason).toBe(
-      "NVDA is 32.6% of your portfolio (45% after this buy), so it keeps your money more spread out than VOO would.",
+      "VXUS is 32.6% of your portfolio (45% after this buy), so it keeps your money more spread out than VOO would.",
     );
     expect(second!.reason).toBe(
-      "VOO is 67.4% of your portfolio (73.4% after this buy), so it spreads your money less than NVDA.",
+      "VOO is 67.4% of your portfolio (73.4% after this buy), so it spreads your money less than VXUS.",
+    );
+  });
+
+  it("a single company counts double, so an index fund beats piling into one stock", () => {
+    // Mission 62 (luna): VOO 300 + NVDA 145; $100 → 545. No price data.
+    // VOO (fund): 400/545 = 0.733945 → fit 0.266055, score 0.6 × 0.266055 = 0.159633.
+    // NVDA (stock): 245/545 = 0.449541, counted double 0.899083 → fit 0.100917,
+    //   score 0.060550. Counted once it was 0.550 and NVDA won.
+    const [top, second] = pickNextBuy({
+      amountUsd: 100,
+      portfolioValue: 445,
+      candidates: [
+        cand({ key: "VOO", heldValue: 300 }),
+        cand({ key: "NVDA", assetClass: "stock", heldValue: 145 }),
+      ],
+    });
+    expect(top!.key).toBe("VOO");
+    expect(top!.singleName).toBe(false);
+    expect(top!.score).toBeCloseTo(0.159633, 6);
+    expect(second!.singleName).toBe(true);
+    expect(second!.fit).toBeCloseTo(0.100917, 6);
+    expect(second!.score).toBeCloseTo(0.06055, 6);
+    expect(top!.reason).toBe(
+      "VOO is a fund of many companies, so it keeps your money more spread out than NVDA, a single company that would be 45% of your portfolio after this buy.",
+    );
+    expect(second!.reason).toBe(
+      "NVDA is a single company, and this buy would make it 45% of your portfolio, so it spreads your money less than VOO, a fund of many companies.",
+    );
+  });
+
+  it("a coin past half the portfolio scores no fit, and a small stock still beats a heavy fund", () => {
+    // $1,000 into 10,000 → 11,000.
+    // BTC (crypto): 5,000 → 6,000/11,000 = 0.545455, ×2 = 1.09 → fit 0 (floored).
+    // AAPL (stock): 500 → 1,500/11,000 = 0.136364, ×2 = 0.272727 → fit 0.727273.
+    // VTI (fund): 4,500 → 5,500/11,000 = 0.5 → fit 0.5.
+    // No prices → scores 0.6 × fit: AAPL 0.436364, VTI 0.3, BTC 0.
+    const picks = pickNextBuy({
+      amountUsd: 1000,
+      portfolioValue: 10000,
+      candidates: [
+        cand({ key: "BTC", assetClass: "crypto", heldValue: 5000 }),
+        cand({ key: "VTI", heldValue: 4500 }),
+        cand({ key: "AAPL", assetClass: "stock", heldValue: 500 }),
+      ],
+    });
+    expect(picks.map((p) => p.key)).toEqual(["AAPL", "VTI", "BTC"]);
+    expect(picks[0]!.score).toBeCloseTo(0.436364, 6);
+    expect(picks[1]!.score).toBeCloseTo(0.3, 12);
+    expect(picks[2]!.fit).toBe(0);
+    // The top pick is a single company too, so the plain weight comparison speaks.
+    expect(picks[1]!.reason).toBe(
+      "VTI is 45% of your portfolio (50% after this buy), so it spreads your money less than AAPL.",
+    );
+    expect(picks[2]!.reason).toBe(
+      "BTC is 50% of your portfolio (54.5% after this buy), so it spreads your money less than AAPL.",
     );
   });
 
