@@ -183,7 +183,9 @@ export function NextBuySection({
             Put <span className="data font-semibold">{fmtUsd(amountUsd)}</span> into
             <AssetLogo symbol={pick.key} assetClass={pick.assetClass} size={20} />
             <span className="font-semibold">{pick.key}</span>
-            {picks.length > 1 && index % picks.length > 0 && (
+            {/* Numbered from the first, so "choice 2 of 2" isn't the only marker
+                (luna couldn't tell which pick came first, mission 66). */}
+            {picks.length > 1 && (
               <span className="text-sm text-muted-foreground">
                 (choice {(index % picks.length) + 1} of {picks.length})
               </span>

@@ -114,6 +114,39 @@ describe("pickNextBuy", () => {
     );
   });
 
+  it("when the dip lifts a single company over a fund, both reasons say so", () => {
+    // Mission 66 (luna, $100): same weights, VOO fit 0.266055 at its high → score 0.159633.
+    // NVDA at 85 in 80–100 → position 0.25, range score 0.75 → 0.525;
+    //   15% under its 100 cost → cost score 0.75 → 0.225; dip 0.75.
+    //   score 0.06055 + 0.4 × 0.75 = 0.36055, so NVDA is on top.
+    // VOO used to say it "spreads your money less than NVDA": backwards.
+    const [top, second] = pickNextBuy({
+      amountUsd: 100,
+      portfolioValue: 445,
+      candidates: [
+        cand({ key: "VOO", price: 100, rangeLow: 80, rangeHigh: 100, heldValue: 300 }),
+        cand({
+          key: "NVDA",
+          assetClass: "stock",
+          price: 85,
+          rangeLow: 80,
+          rangeHigh: 100,
+          avgCost: 100,
+          heldValue: 145,
+        }),
+      ],
+    });
+    expect(top!.key).toBe("NVDA");
+    expect(top!.dip).toBeCloseTo(0.75, 9);
+    expect(top!.score).toBeCloseTo(0.36055, 6);
+    expect(top!.reason).toBe(
+      "NVDA is 15% below its 1-year high, and 15% under what you paid. That outweighed VOO, a fund of many companies, keeping your money more spread out: NVDA is a single company that would be 45% of your portfolio after this buy.",
+    );
+    expect(second!.reason).toBe(
+      "VOO is a fund of many companies, so it would keep your money more spread out than NVDA, but NVDA's lower price tipped the pick.",
+    );
+  });
+
   it("a coin past half the portfolio scores no fit, and a small stock still beats a heavy fund", () => {
     // $1,000 into 10,000 → 11,000.
     // BTC (crypto): 5,000 → 6,000/11,000 = 0.545455, ×2 = 1.09 → fit 0 (floored).

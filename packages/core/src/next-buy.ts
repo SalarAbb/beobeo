@@ -199,6 +199,25 @@ export function pickNextBuy(input: {
         ? "a fund of many bonds"
         : "a fund of many companies";
     picks.forEach((p, i) => {
+      // A dip-led top pick that piles more into one place than the runner-up
+      // says what it outweighed, and a lower pick that spreads money more never
+      // claims to spread it less: luna at $100 got NVDA on its dip while VOO
+      // said it "spreads your money less than NVDA" (mission 66).
+      if (p.target === null && second.fit > top.fit) {
+        if (i === 0 && p.reason.includes("below its 1-year high")) {
+          const after = `${pctOf(p.weightAfter)} of your portfolio after this buy`;
+          p.reason +=
+            p.singleName && !second.singleName
+              ? ` That outweighed ${second.key}, ${fund(second)}, keeping your money more spread out: ${p.key} is ${one(p)} that would be ${after}.`
+              : ` That outweighed ${second.key} keeping your money more spread out: ${p.key} would be ${after}.`;
+          return;
+        }
+        if (i > 0 && p.fit > top.fit && p.reason.includes("; this buy takes it to")) {
+          const what = !p.singleName && top.singleName ? `${p.key} is ${fund(p)}, so it` : `${p.key}`;
+          p.reason = `${what} would keep your money more spread out than ${top.key}, but ${top.key}'s lower price tipped the pick.`;
+          return;
+        }
+      }
       // A lower pick whose dip speaks still has to say why it ranks lower
       // ("NVDA is 9% below its 1-year high." under VOO read as a non-answer, mission 64).
       if (i > 0 && p.target === null && p.reason.includes("below its 1-year high")) {
