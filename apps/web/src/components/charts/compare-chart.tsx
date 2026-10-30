@@ -167,7 +167,7 @@ export function CompareChart({
             className="inline-block w-4 border-t-2 border-dashed"
             style={{ borderColor: theme.muted }}
           />
-          <span className="text-muted-foreground">Invested</span>
+          <span className="text-muted-foreground">Put in, minus sales</span>
         </span>
         {hover && (
           <span className="data text-muted-foreground">{hover.date}</span>

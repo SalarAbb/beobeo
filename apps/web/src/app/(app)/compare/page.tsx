@@ -572,7 +572,7 @@ export default function ComparePage() {
               className={data.benchmarks.length % 2 === 0 ? "col-span-2 lg:col-span-1" : undefined}
               label={scopeIds.length === 0 ? "Your portfolio" : scopeLabel}
               value={fmtUsd(lastP?.value ?? null)}
-              sub={`invested ${fmtUsd(lastP?.invested ?? null, 0)}`}
+              sub={`put in, minus sales ${fmtUsd(lastP?.invested ?? null, 0)}`}
               subTone="text-muted-foreground"
               hero={data.benchmarks.length < 3}
             />
