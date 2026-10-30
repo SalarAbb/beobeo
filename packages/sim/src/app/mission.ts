@@ -206,7 +206,7 @@ export const planSchema = z.object({
 export type Plan = z.infer<typeof planSchema>;
 
 export const debriefSchema = z.object({
-  status: z.enum(["achieved", "struggled", "failed"]).describe("achieved = done without real trouble; struggled = done but it was hard or you're not sure it's right; failed = couldn't do it or gave up"),
+  status: z.enum(["achieved", "struggled", "failed"]).catch("struggled").describe("achieved = done without real trouble; struggled = done but it was hard or you're not sure it's right; failed = couldn't do it or gave up"),
   difficulty: z.number().int().min(1).max(5).describe("1 = effortless, 5 = gave up"),
   summary: z.string().describe("Two sentences in your voice: what you tried and how it went."),
   trusted: z.boolean().describe("Do you trust the numbers you ended up with? Did your checks pass?"),

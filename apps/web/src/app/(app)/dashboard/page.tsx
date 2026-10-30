@@ -549,7 +549,7 @@ export default function DashboardPage() {
         ) : timeseries.isError && !timeseries.data ? (
           <TabError what="the chart" onRetry={() => void timeseries.refetch()} />
         ) : (
-          <ValueChart data={timeseries.data ?? []} />
+          <ValueChart data={timeseries.data ?? []} liveValue={totals.value} />
         )}
       </Section>
 

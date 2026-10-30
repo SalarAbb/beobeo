@@ -98,7 +98,9 @@ export async function runOneMission(
   const rng = mulberry32(seedFrom(`mission-view:${p.id}:${date}`));
   const viewport = feature.id === "app.mobile" || (p.techSavviness <= 2 && rng() < 0.3) ? "mobile" : "desktop";
   const scheme = /dark mode/i.test(p.aesthetic) ? "dark" : "light";
-  const ctx = await newContext(browser, { viewport, scheme, cookies: client.cookieList, storage: deviceStorage(p, twin.userId) });
+  // A brand-new sign-up has an empty device too: a seeded target mix read as "where did that come from?" (mission 55).
+  const storage = freshNote ? undefined : deviceStorage(p, twin.userId);
+  const ctx = await newContext(browser, { viewport, scheme, cookies: client.cookieList, storage });
   const result = await runMission(ctx, {
     persona: p, feature, holdingsBrief: brief, themes: themesBrief(journal), csvFile,
     viewport, scheme, outDir: o.outDir, date, journal, runId,
