@@ -24,6 +24,13 @@ export interface ExploreResult {
   shots: Shot[];
 }
 
+/** Playwright's first line is just "Timeout 3000ms exceeded"; the reason is in its call log. */
+function clickFailure(e: Error): string {
+  const lines = e.message.replace(/\x1b\[[0-9;]*m/g, "").split("\n");
+  const why = lines.find((l) => /intercepts pointer events|not visible|not stable|not enabled|detached|outside of the viewport/.test(l));
+  return `${lines[0]}${why ? ` (${why.replace(/^\s*-\s*/, "").trim()})` : ""}`.slice(0, 200);
+}
+
 interface Candidate {
   id: number;
   kind: "click" | "fill";
@@ -36,17 +43,35 @@ interface Candidate {
 
 /** Tag every visible interactive element and describe it; also count unlabeled buttons. */
 async function scan(page: Page): Promise<{ candidates: Candidate[]; unlabeled: number }> {
+  // tsx wraps named functions in a `__name` helper the page doesn't have (see mission.ts).
+  await page.evaluate("globalThis.__name ??= (f) => f");
+  // A dialog or menu that's closing is still animating; its page isn't clickable until it's gone.
+  await page
+    .waitForFunction(() => !document.querySelector("[role=listbox][data-state=closed], [role=menu][data-state=closed], [role=dialog][data-state=closed], [data-radix-popper-content-wrapper] > [data-state=closed]"), undefined, { timeout: 1_000 })
+    .catch(() => undefined);
   return page.evaluate(() => {
     const out: Candidate[] = [];
     let unlabeled = 0;
-    const els = document.querySelectorAll<HTMLElement>(
-      "a[href], button, [role=tab], [role=button], [role=menuitem], summary, input, textarea, select",
+    // Only what's in front: an open dropdown/menu layer, else a dialog or popover,
+    // else the page. With a dialog open the page behind it takes no clicks, and
+    // picking from it made 41 of 108 clicks time out ("couldn't click").
+    const open = (e: Element | null) =>
+      !!e && (e as HTMLElement).getBoundingClientRect().height > 0 && !e.closest("[data-state=closed]");
+    const list = [...document.querySelectorAll<HTMLElement>("[role=listbox], [role=menu]")].find(open) ?? null;
+    const popup = list?.closest<HTMLElement>("[data-radix-popper-content-wrapper]") ?? list;
+    const dialog = [...document.querySelectorAll<HTMLElement>("[role=dialog], [role=alertdialog]")].find(open) ?? null;
+    const scope: ParentNode = popup ?? dialog ?? document;
+    document.querySelectorAll("[data-sim-id]").forEach((el) => el.removeAttribute("data-sim-id"));
+    const els = scope.querySelectorAll<HTMLElement>(
+      "a[href], button, [role=tab], [role=button], [role=menuitem], [role=option], summary, input, textarea, select",
     );
     let id = 0;
     for (const el of els) {
       const r = el.getBoundingClientRect();
       const style = getComputedStyle(el);
       if (r.width === 0 || r.height === 0 || style.visibility === "hidden" || (el as HTMLButtonElement).disabled) continue;
+      // Inert copies a person can't reach (aria-hidden layers, pointer-events: none).
+      if (style.pointerEvents === "none" || (scope === document && el.closest("[aria-hidden=true], [inert]"))) continue;
       const tag = el.tagName.toLowerCase();
       const isInput = tag === "input" || tag === "textarea";
       const inputType = isInput ? ((el as HTMLInputElement).type || "text") : null;
@@ -157,7 +182,7 @@ export async function explore(
         await after({ i, action: "click", target: c.name, from }, t0);
       }
     } catch (e) {
-      res.steps.push({ i, action: "click", target: "(failed)", from, to: from, ms: Math.round(performance.now() - t0), error: (e as Error).message.split("\n")[0]!.slice(0, 200) });
+      res.steps.push({ i, action: "click", target: "(failed)", from, to: from, ms: Math.round(performance.now() - t0), error: clickFailure(e as Error) });
     }
   }
   await page.close();

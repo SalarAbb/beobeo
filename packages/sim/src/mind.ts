@@ -59,7 +59,7 @@ export const decisionSchema = z.object({
   question: z
     .string()
     .nullable()
-    .describe("Something you'd type into the app's assistant today, or null. Ask about YOUR situation in your own words."),
+    .describe("Something you'd type into the app's assistant today, or null (most days). Ask about YOUR situation in your own words."),
 });
 export type Decision = z.infer<typeof decisionSchema>;
 
@@ -71,6 +71,8 @@ export interface DayContext {
   discretionaryLeftUsd: number;
   recentThoughts: string;
   recentQuestions: string;
+  /** Days with a question in the 7 days before today. */
+  askedThisWeek: number;
   accountNames: string[];
 }
 
@@ -101,11 +103,12 @@ ${ctx.habitsToday || "(nothing scheduled today)"}
 Discretionary cash you could still put to work this month: $${ctx.discretionaryLeftUsd.toFixed(0)}.
 Recent days, in your own words: ${ctx.recentThoughts || "(nothing yet)"}
 
-WHAT YOU ALREADY ASKED THE APP'S ASSISTANT
+WHAT YOU ALREADY ASKED THE APP'S ASSISTANT (on ${ctx.askedThisWeek} of the last 7 days)
 ${ctx.recentQuestions || "(nothing yet)"}
 
 Decide what (if anything) you do today beyond your habits, and whether you'd ask the app anything. Use only symbols from the market list and your own account names (just the name, e.g. "${ctx.accountNames[0] ?? "Brokerage"}").
-A real person doesn't type the same question every day. If you already got a good answer, you move on to whatever is actually on your mind today (today's market move, a habit that just fired, another of your goals). If the answer was bad, you might try once more in different words, ask something narrower, or give up and ask nothing. Only repeat a question word for word if you're deliberately checking whether they fixed it.`,
+A real person doesn't type the same question every day. If you already got a good answer, you move on to whatever is actually on your mind today (today's market move, a habit that just fired, another of your goals). If the answer was bad, you might try once more in different words, ask something narrower, or give up and ask nothing. Only repeat a question word for word if you're deliberately checking whether they fixed it.
+Most days you don't open the assistant at all: you check the app, maybe do your habit, and close it. Ask only when something specific is on your mind that the screens didn't answer; for most people that's once or twice a week, so the question is usually null.`,
   });
 }
 

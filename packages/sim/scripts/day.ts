@@ -213,6 +213,15 @@ for (const p of personas) {
     )
     .map((q) => `${q.sim_date}: you asked "${q.question}"${q.rating ? ` and rated the answer ${q.rating}/5 (${(q.note ?? "").slice(0, 160)})` : ""}`)
     .join("\n");
+  // Chat was the one surface every persona hit every day (65 questions in 7 days,
+  // 35% of all feedback), so the mind sees how often it has asked lately.
+  const askedThisWeek =
+    journal.all<{ n: number }>(
+      "SELECT count(*) AS n FROM questions q JOIN runs r ON r.id = q.run_id WHERE q.persona_id = ? AND r.sim_date > ? AND r.sim_date < ?",
+      p.id,
+      addDays(date, -7),
+      date,
+    )[0]?.n ?? 0;
   const decision = await guard("decide", () =>
     decide(
       p,
@@ -224,6 +233,7 @@ for (const p of personas) {
         discretionaryLeftUsd: Math.max(0, p.discretionaryUsdPerMonth - spentThisMonth),
         recentThoughts: recent,
         recentQuestions: asked,
+        askedThisWeek,
         accountNames: p.accounts.map((a) => a.name),
       },
       { journal, runId },
