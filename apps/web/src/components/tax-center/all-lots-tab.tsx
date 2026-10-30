@@ -303,7 +303,7 @@ export function AllLotsTab() {
                 sort={sort}
                 onSort={toggleSort}
               />
-              <TableHead className="hidden pr-1 text-right md:table-cell">Long-term</TableHead>
+              <TableHead className="hidden pr-1 text-right md:table-cell">Owned</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -344,13 +344,13 @@ export function AllLotsTab() {
                 </TableCell>
                 <TableCell className="hidden whitespace-nowrap pr-1 text-right md:table-cell">
                   {l.isLongTerm ? (
-                    <span className="text-xs text-muted-foreground">since {l.longTermOn}</span>
+                    <span className="text-xs text-muted-foreground">Over a year</span>
                   ) : (
                     <span className="text-xs">
-                      <span className="data">{l.longTermOn}</span>
-                      <span className="text-muted-foreground">
-                        {" "}
-                        · in {l.daysToLongTerm} {l.daysToLongTerm === 1 ? "day" : "days"}
+                      Under a year
+                      <span className="data block text-[11px] text-muted-foreground">
+                        until {l.longTermOn} · {l.daysToLongTerm}{" "}
+                        {l.daysToLongTerm === 1 ? "day" : "days"}
                       </span>
                     </span>
                   )}
