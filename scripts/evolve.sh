@@ -172,7 +172,7 @@ run_claude() {
     || echo "claude exited non-zero for: $1"
   echo "$out"
   LIMITED=0
-  grep -qiE "hit your (session|usage) limit|usage limit reached" <<<"$out" && LIMITED=1
+  grep -qiE "hit your (session|usage|weekly) limit|usage limit reached" <<<"$out" && LIMITED=1
   # "resets 1:20pm (America/Los_Angeles)" → epoch of that time today (or tomorrow if already past)
   LIMIT_RESET=""
   local t; t="$(grep -oiE 'resets [0-9]{1,2}(:[0-9]{2})?(am|pm)' <<<"$out" | head -1 | awk '{print toupper($2)}')"
