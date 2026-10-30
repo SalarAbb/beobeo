@@ -51,6 +51,13 @@ export class MarketDataService {
   private skipRanges = new Map<string, number>();
   private static readonly EMPTY_RANGE_TTL_MS = 12 * 3_600_000;
   private static readonly FAILED_RANGE_TTL_MS = 5 * 60_000;
+  /** Live quotes per asset (null = provider had none or failed). Short TTL so
+   *  a burst of reads shares one provider call; failures back off longer. */
+  private liveQuotes = new Map<string, { price: string | null; expires: number }>();
+  private static readonly QUOTE_TTL_MS = 60_000;
+  /** How long a "today" read waits for quotes before serving cached closes.
+   *  Quotes that land later still fill the memo for the next read. */
+  private static readonly QUOTE_BUDGET_MS = 2_500;
 
   constructor(
     private readonly db: Db,
@@ -113,12 +120,91 @@ export class MarketDataService {
     return latest.get(asset.id) ?? null;
   }
 
-  /** Latest close on or before `to` for MANY assets — one DISTINCT ON query. */
+  /**
+   * Latest price on or before `to` for MANY assets — one DISTINCT ON query.
+   * When `to` is today, a live quote replaces the cached close (dated today):
+   * a daily close is up to a day old for crypto, which trades around the clock,
+   * and a dashboard once showed BTC at $80k while it traded at $77k.
+   */
   async getLatestPrices(
     assets: DbAsset[],
     to: IsoDate,
   ): Promise<Map<string, { date: IsoDate; close: string }>> {
     if (assets.length === 0) return new Map();
+    const today = new Date().toISOString().slice(0, 10) as IsoDate;
+    const [closes, live] = await Promise.all([
+      this.latestCloses(assets, to),
+      to >= today ? this.getLiveQuotes(assets) : new Map<string, string>(),
+    ]);
+    for (const [assetId, price] of live) closes.set(assetId, { date: today, close: price });
+    return closes;
+  }
+
+  /**
+   * Live quotes keyed by asset id, best-effort within QUOTE_BUDGET_MS. Equities
+   * go to a provider's batch endpoint when it has one; crypto asks per asset.
+   */
+  async getLiveQuotes(assets: DbAsset[]): Promise<Map<string, string>> {
+    const now = Date.now();
+    const out = new Map<string, string>();
+    const stale: DbAsset[] = [];
+    for (const a of assets) {
+      if (a.class === "cash") continue;
+      const memo = this.liveQuotes.get(a.id);
+      if (memo && memo.expires > now) {
+        if (memo.price !== null) out.set(a.id, memo.price);
+      } else stale.push(a);
+    }
+    if (stale.length === 0) return out;
+
+    const remember = (a: DbAsset, price: string | null) => {
+      this.liveQuotes.set(a.id, {
+        price,
+        expires:
+          Date.now() +
+          (price === null ? MarketDataService.FAILED_RANGE_TTL_MS : MarketDataService.QUOTE_TTL_MS),
+      });
+      if (price !== null) out.set(a.id, price);
+    };
+    const quoteOne = async (a: DbAsset, providers: PriceProvider[]) => {
+      for (const p of providers) {
+        if (!p.getIntradayQuote) continue;
+        try {
+          const price = await p.getIntradayQuote(a);
+          if (price !== null) return remember(a, price);
+        } catch {
+          // next provider
+        }
+      }
+      remember(a, null);
+    };
+    const quoteEquities = async (list: DbAsset[]) => {
+      if (list.length === 0) return;
+      const batcher = this.equity.find((p) => p.getIntradayQuotes);
+      if (!batcher) return void (await Promise.all(list.map((a) => quoteOne(a, this.equity))));
+      try {
+        const got = await batcher.getIntradayQuotes!(list);
+        for (const a of list) remember(a, got.get(a.symbol.toUpperCase()) ?? null);
+      } catch {
+        for (const a of list) remember(a, null);
+      }
+    };
+
+    const work = Promise.all([
+      quoteEquities(stale.filter((a) => a.class !== "crypto")),
+      ...stale.filter((a) => a.class === "crypto").map((a) => quoteOne(a, this.crypto)),
+    ]);
+    await Promise.race([
+      work,
+      new Promise((resolve) => setTimeout(resolve, MarketDataService.QUOTE_BUDGET_MS)),
+    ]);
+    return new Map(out);
+  }
+
+  private async latestCloses(
+    assets: DbAsset[],
+    to: IsoDate,
+  ): Promise<Map<string, { date: IsoDate; close: string }>> {
     // Refresh a trailing window, not the single day — `to` may be a weekend
     // or holiday (and a lone-day fetch on a fresh asset caches nothing).
     const windowStart = new Date(Date.parse(`${to}T00:00:00Z`) - 10 * 86_400_000)
@@ -311,7 +397,10 @@ export class MarketDataService {
         // not the portfolio-wide window.
         const assetFrom =
           asset.seriesFrom && asset.seriesFrom > from ? asset.seriesFrom : from;
-        const ranges = planFetch(coverage.get(asset.id) ?? null, assetFrom, to);
+        // Crypto trades every day, so its cache is behind after one missing day;
+        // equities tolerate weekends and holidays.
+        const staleDays = asset.class === "crypto" ? 1 : 4;
+        const ranges = planFetch(coverage.get(asset.id) ?? null, assetFrom, to, staleDays);
         if (ranges.length === 0) return;
 
         const providers = asset.class === "crypto" ? this.crypto : this.equity;
@@ -343,13 +432,20 @@ export class MarketDataService {
         this.skipRanges.delete(skipKey);
       }
       try {
-        const closes = await this.fetchWithFallback(providers, asset, range.from, range.to);
-        if (closes.length === 0) {
+        const fetched = await this.fetchWithFallback(providers, asset, range.from, range.to);
+        if (fetched.length === 0) {
           // Provider answered and has nothing here (pre-listing history) —
           // the gap can't fill, so stop asking for a while.
           this.setSkip(skipKey, MarketDataService.EMPTY_RANGE_TTL_MS);
           continue;
         }
+        // A crypto candle for today keeps moving until UTC midnight. Stored with
+        // onConflictDoNothing it would freeze as the day's close; live quotes
+        // cover today instead. (Equity providers publish a bar once the day closes.)
+        const today = new Date().toISOString().slice(0, 10);
+        const closes =
+          asset.class === "crypto" ? fetched.filter((c) => c.date < today) : fetched;
+        if (closes.length === 0) continue;
         await this.db
           .insert(schema.priceHistory)
           .values(closes.map((c) => ({ assetId: asset.id, date: c.date, close: c.close })))

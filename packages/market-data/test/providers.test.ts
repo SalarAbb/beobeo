@@ -41,6 +41,24 @@ describe("TiingoProvider", () => {
     ).rejects.toMatchObject({ kind: "RATE_LIMITED" });
   });
 
+  it("quotes many tickers in one request, skipping ones without a price", async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      jsonResponse([
+        { ticker: "VTI", last: 377.5, tngoLast: 377.4 },
+        { ticker: "BND", last: null, tngoLast: 72.1 },
+        { ticker: "XYZ", last: null, tngoLast: null },
+      ]),
+    );
+    const quotes = await new TiingoProvider("key", mockFetch).getIntradayQuotes([
+      { symbol: "VTI", class: "etf" },
+      { symbol: "BND", class: "etf" },
+      { symbol: "XYZ", class: "stock" },
+    ]);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0]![0]).toContain("tickers=vti,bnd,xyz");
+    expect(quotes).toEqual(new Map([["VTI", "377.5"], ["BND", "72.1"]]));
+  });
+
   it("gives every request a deadline, so a hung call can't hold the throttle", async () => {
     const mockFetch = vi.fn().mockResolvedValue(jsonResponse([]));
     await new TiingoProvider("key", mockFetch).search("app");

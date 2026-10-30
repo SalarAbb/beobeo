@@ -31,6 +31,8 @@ export interface PriceProvider {
   search?(query: string): Promise<SearchResult[]>;
   /** Latest intraday/last-trade price (decimal string), for "today" lookups. */
   getIntradayQuote?(asset: AssetRef): Promise<string | null>;
+  /** Many quotes in one request, keyed by upper-case symbol (missing = no quote). */
+  getIntradayQuotes?(assets: AssetRef[]): Promise<Map<string, string>>;
 }
 
 export class ProviderError extends Error {

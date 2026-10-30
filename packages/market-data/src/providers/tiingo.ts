@@ -71,13 +71,30 @@ export class TiingoProvider implements PriceProvider {
 
   /** Last trade price from the IEX endpoint (real-time-ish during market hours). */
   async getIntradayQuote(asset: AssetRef): Promise<string | null> {
-    const url = `https://api.tiingo.com/iex/?tickers=${encodeURIComponent(asset.symbol.toLowerCase())}&token=${this.apiKey}`;
+    return (await this.getIntradayQuotes([asset])).get(asset.symbol.toUpperCase()) ?? null;
+  }
+
+  /** IEX takes a comma-separated ticker list, so a whole portfolio costs one request. */
+  async getIntradayQuotes(assets: AssetRef[]): Promise<Map<string, string>> {
+    if (assets.length === 0) return new Map();
+    const tickers = assets.map((a) => encodeURIComponent(a.symbol.toLowerCase())).join(",");
+    const url = `https://api.tiingo.com/iex/?tickers=${tickers}&token=${this.apiKey}`;
     const raw = await this.request(url, this.interactiveThrottle);
     const rows = z
-      .array(z.object({ last: z.number().nullable(), tngoLast: z.number().nullable() }))
+      .array(
+        z.object({
+          ticker: z.string(),
+          last: z.number().nullable().optional(),
+          tngoLast: z.number().nullable().optional(),
+        }),
+      )
       .parse(raw);
-    const price = rows[0]?.last ?? rows[0]?.tngoLast ?? null;
-    return price === null ? null : String(price);
+    const out = new Map<string, string>();
+    for (const r of rows) {
+      const price = r.last ?? r.tngoLast ?? null;
+      if (price !== null) out.set(r.ticker.toUpperCase(), String(price));
+    }
+    return out;
   }
 
   private async request(
