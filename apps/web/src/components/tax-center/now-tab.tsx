@@ -387,6 +387,9 @@ export function NowTab({
   const netYtd = d.ytdShortTermGain + d.ytdLongTermGain;
   const hasSales = Math.abs(d.ytdShortTermGain) >= 0.5 || Math.abs(d.ytdLongTermGain) >= 0.5;
   const owes = d.taxOwedSoFarUsd >= 0.5;
+  const soldUsd = d.ytdSales.reduce((s, x) => s + x.proceeds, 0);
+  // The year truncated the labels in a 2-column phone strip; the verdict says "this year".
+  const yearTag = <span className="hidden sm:inline"> · {d.taxYear}</span>;
   // A few dollars of tax is less than the spread on a sell-and-rebuy, and a
   // "Don't sell before…" row worth ~$1 is homework for a dollar (luna). An
   // on-hold row that clears next year can't be priced, so its loss decides.
@@ -410,7 +413,7 @@ export function NowTab({
             <>
               Your sales this year mean about{" "}
               <span className="data">{fmtUsd(d.taxOwedSoFarUsd, 0)}</span> in capital-gains
-              tax so far.
+              tax so far, settled when you file your {d.taxYear} return in April.
             </>
           ) : hasSales && netYtd < 0 ? (
             <>
@@ -434,10 +437,23 @@ export function NowTab({
         </p>
 
         {hasSales && (
-          <StatStrip cols="grid-cols-1 sm:grid-cols-3">
+          <StatStrip
+            cols={d.ytdSales.length > 0 ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-1 sm:grid-cols-3"}
+          >
+            {/* What the year's sales brought in (barristan: "I wanted dollars
+                withdrawn and what I'll owe in April"). */}
+            {d.ytdSales.length > 0 && (
+              <StatTile
+                hero={false}
+                label={<>Sales brought in{yearTag}</>}
+                value={fmtUsd(soldUsd)}
+                subTone="text-muted-foreground"
+                sub={`from ${plural(d.ytdSales.length, "sale")} in taxable accounts`}
+              />
+            )}
             <StatTile
               hero={false}
-              label={`Short-term gains · ${d.taxYear}`}
+              label={<>Short-term gains{yearTag}</>}
               value={fmtUsd(d.ytdShortTermGain)}
               tone={gainClass(d.ytdShortTermGain)}
               subTone="text-muted-foreground"
@@ -445,7 +461,7 @@ export function NowTab({
             />
             <StatTile
               hero={false}
-              label={`Long-term gains · ${d.taxYear}`}
+              label={<>Long-term gains{yearTag}</>}
               value={fmtUsd(d.ytdLongTermGain)}
               tone={gainClass(d.ytdLongTermGain)}
               subTone="text-muted-foreground"
