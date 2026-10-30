@@ -42,6 +42,7 @@ export function AppNav() {
       const scope = { portfolioId: portfolioId ?? undefined };
       void queryClient.prefetchQuery(trpc.transactions.list.queryOptions({ limit: 200, ...scope }));
       void queryClient.prefetchQuery(trpc.accounts.list.queryOptions(scope));
+      void queryClient.prefetchQuery(trpc.transactions.assets.queryOptions(scope));
     },
     // The same three queries the page fires on mount (with the device's income).
     "/tax-center": () => {
