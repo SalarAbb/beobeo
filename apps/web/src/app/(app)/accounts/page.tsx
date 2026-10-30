@@ -55,7 +55,7 @@ export default function AccountsPage() {
         subtitle={
           "Flag which accounts are taxable brokerages vs. tax-advantaged (IRA, 401k) — " +
           "the Tax Center only sells from taxable accounts, and checks every account " +
-          "here for wash-sale conflicts."
+          "here for a recent buy that would stop a loss from counting."
         }
       />
 

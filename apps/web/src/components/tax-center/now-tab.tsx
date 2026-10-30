@@ -5,10 +5,12 @@ import type { inferRouterOutputs } from "@trpc/server";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AssetLogo } from "@/components/asset-logo";
+import { METRIC_LABEL_CLASS, MetricHover } from "@/components/metric-hover";
 import { Section, StatStrip, StatTile } from "@/components/page-section";
 import { usePortfolio } from "@/components/portfolio-context";
 import { Button } from "@/components/ui/button";
 import { TabError, TabLoading } from "@/components/tax-center/tab-state";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { fmtQty, fmtUsd, gainClass } from "@/lib/viz";
@@ -30,6 +32,25 @@ const day = (iso: string | null | undefined) =>
         timeZone: "UTC",
       })
     : "";
+
+/**
+ * The 30-day rule in plain words, with its name in a tap card (R-002): "(wash-sale
+ * rule)" in a row read as homework to a beginner (luna: "'Wash-sale rule' and
+ * 'then saves ~$1' make no sense to me"), while an expert can still reach the term.
+ */
+function ThirtyDayRule({ children, insight }: { children: ReactNode; insight: string }) {
+  return (
+    <MetricHover
+      label="The 30-day rule"
+      term="wash-sale rule"
+      insight={insight}
+      meaning="Buy the same stock or fund within 30 days before or after selling it at a loss, and the loss doesn't count yet: it's added to the new shares' cost instead. Crypto isn't covered."
+      className={METRIC_LABEL_CLASS}
+    >
+      {children}
+    </MetricHover>
+  );
+}
 
 /** What to do on one line, and why in a muted line under it. */
 function MoveText({ move: m }: { move: Move }) {
@@ -63,7 +84,12 @@ function MoveText({ move: m }: { move: Move }) {
       why = (
         <>
           books a <span className="data">{fmtUsd(m.lossUsd, 0)}</span>{" "}loss · don&apos;t buy it
-          back before <span className="data">{day(m.rebuyAfter)}</span> (wash-sale rule)
+          back before <span className="data">{day(m.rebuyAfter)}</span>,{" "}
+          <ThirtyDayRule
+            insight={`Buy ${m.symbol} back on ${day(m.rebuyAfter)} or later and the ${fmtUsd(m.lossUsd, 0)} loss counts this year.`}
+          >
+            or the loss won&apos;t count
+          </ThirtyDayRule>
         </>
       );
       break;
@@ -80,8 +106,14 @@ function MoveText({ move: m }: { move: Move }) {
         </>
       ) : (
         <>
-          a recent buy puts its <span className="data">{fmtUsd(m.lossUsd, 0)}</span>{" "}loss on hold
-          (wash-sale rule); buying more restarts the wait
+          you bought more in the last 30 days, so its{" "}
+          <span className="data">{fmtUsd(m.lossUsd, 0)}</span>{" "}loss{" "}
+          <ThirtyDayRule
+            insight={`Sell on ${day(m.clearsOn)} or later and the ${fmtUsd(m.lossUsd, 0)} loss counts.`}
+          >
+            wouldn&apos;t count yet
+          </ThirtyDayRule>
+          ; buying more pushes the date out
         </>
       );
       break;
@@ -355,9 +387,11 @@ export function NowTab({
   const netYtd = d.ytdShortTermGain + d.ytdLongTermGain;
   const hasSales = Math.abs(d.ytdShortTermGain) >= 0.5 || Math.abs(d.ytdLongTermGain) >= 0.5;
   const owes = d.taxOwedSoFarUsd >= 0.5;
-  // A few dollars of tax is less than the spread on a sell-and-rebuy.
+  // A few dollars of tax is less than the spread on a sell-and-rebuy, and a
+  // "Don't sell before…" row worth ~$1 is homework for a dollar (luna). An
+  // on-hold row that clears next year can't be priced, so its loss decides.
   const moves = d.moves.filter((m) =>
-    m.kind === "on_hold" ? m.lossUsd >= 5 : (m.taxSavedUsd ?? 0) >= 5,
+    m.kind === "on_hold" && m.taxSavedUsd === null ? m.lossUsd >= 5 : (m.taxSavedUsd ?? 0) >= 5,
   );
   const canHarvest = d.movesTaxSavedUsd >= 5;
   const hasLocks = moves.some((m) => m.kind === "lock");
@@ -463,28 +497,30 @@ export function NowTab({
             )}
             .
           </p>
-          <ul className="grid grid-cols-1 divide-y border-y">
-            {moves.map((m) => (
-              <li
-                key={`${m.kind}-${m.assetId}`}
-                className="flex items-center gap-3 py-2.5 text-sm"
-              >
-                <AssetLogo symbol={m.symbol} assetClass={m.assetClass} size={22} />
-                <MoveText move={m} />
-                <span className="ml-auto shrink-0 text-right">
-                  {m.taxSavedUsd === null ? (
-                    <span className="text-muted-foreground">clears next year</span>
-                  ) : (
-                    <span className="text-gain">
-                      {m.kind === "on_hold" ? "then saves" : "saves"}{" "}
-                      <span className="data">~{fmtUsd(m.taxSavedUsd, 0)}</span>
-                      {m.kind === "zero_gain" && " later"}
-                    </span>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <TooltipProvider delayDuration={150}>
+            <ul className="grid grid-cols-1 divide-y border-y">
+              {moves.map((m) => (
+                <li
+                  key={`${m.kind}-${m.assetId}`}
+                  className="flex items-center gap-3 py-2.5 text-sm"
+                >
+                  <AssetLogo symbol={m.symbol} assetClass={m.assetClass} size={22} />
+                  <MoveText move={m} />
+                  <span className="ml-auto shrink-0 text-right">
+                    {m.taxSavedUsd === null ? (
+                      <span className="text-muted-foreground">clears next year</span>
+                    ) : (
+                      <span className="text-gain">
+                        saves <span className="data">~{fmtUsd(m.taxSavedUsd, 0)}</span>
+                        {m.kind === "zero_gain" && " later"}
+                        {m.kind === "on_hold" && " by waiting"}
+                      </span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </TooltipProvider>
           {canHarvest && (
             <div className="grid gap-3">
               <p className="text-sm">
@@ -504,7 +540,7 @@ export function NowTab({
           )}
           <p className="text-xs text-muted-foreground">
             {hasLocks &&
-              "Crypto has no wash-sale rule under current US law, so you can buy it straight back. That resets your cost lower, which moves tax to a later sale rather than erasing it. "}
+              "Under current US law the 30-day rule for stocks and funds doesn't cover crypto, so you can buy it straight back. That resets your cost lower, which moves tax to a later sale rather than erasing it. "}
             {hasZeroGains && (
               <>
                 The 0% lines use the{" "}
