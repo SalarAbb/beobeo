@@ -94,6 +94,26 @@ describe("pickNextBuy", () => {
     );
   });
 
+  it("a lower single company whose dip speaks still says why it ranks lower", () => {
+    // Mission 64. Same weights as above: VOO fit 0.266055, NVDA fit 0.100917.
+    // VOO at its 1-year high (80–100 at 100) → dip 0, score 0.159633.
+    // NVDA at 95 in 80–100 → position 0.75, dip 0.7 × 0.25 = 0.175;
+    //   score 0.06055 + 0.07 = 0.13055. Its dip part (0.07) beats its fit part.
+    const [top, second] = pickNextBuy({
+      amountUsd: 100,
+      portfolioValue: 445,
+      candidates: [
+        cand({ key: "VOO", price: 100, rangeLow: 80, rangeHigh: 100, heldValue: 300 }),
+        cand({ key: "NVDA", assetClass: "stock", price: 95, rangeLow: 80, rangeHigh: 100, heldValue: 145 }),
+      ],
+    });
+    expect(top!.key).toBe("VOO");
+    expect(second!.score).toBeCloseTo(0.13055, 6);
+    expect(second!.reason).toBe(
+      "NVDA is 5% below its 1-year high, but it's a single company that would be 45% of your portfolio after this buy, so VOO, a fund of many companies, spreads your money more.",
+    );
+  });
+
   it("a coin past half the portfolio scores no fit, and a small stock still beats a heavy fund", () => {
     // $1,000 into 10,000 → 11,000.
     // BTC (crypto): 5,000 → 6,000/11,000 = 0.545455, ×2 = 1.09 → fit 0 (floored).

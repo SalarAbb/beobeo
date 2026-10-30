@@ -198,6 +198,16 @@ export function pickNextBuy(input: {
         ? "a fund of many bonds"
         : "a fund of many companies";
     picks.forEach((p, i) => {
+      // A lower pick whose dip speaks still has to say why it ranks lower
+      // ("NVDA is 9% below its 1-year high." under VOO read as a non-answer, mission 64).
+      if (i > 0 && p.target === null && p.reason.includes("below its 1-year high")) {
+        const after = `${pctOf(p.weightAfter)} of your portfolio after this buy`;
+        if (p.singleName && !top.singleName)
+          p.reason = `${p.reason.slice(0, -1)}, but it's ${one(p)} that would be ${after}, so ${top.key}, ${fund(top)}, spreads your money more.`;
+        else if (p.weightAfter > top.weightAfter)
+          p.reason = `${p.reason.slice(0, -1)}, but it would be ${after}, so ${top.key} spreads your money more.`;
+        return;
+      }
       if (!p.reason.includes("; this buy takes it to")) return;
       const share = `${p.key} is ${pctOf(p.weightNow)} of your portfolio (${pctOf(p.weightAfter)} after this buy)`;
       if (i === 0) {

@@ -288,7 +288,7 @@ function HowPicked({
         <p className="border-t pt-2 text-xs text-muted-foreground">
           {pick.target !== null
             ? "With a target mix, the option furthest short of its target comes first (90% of the score). How far it sits below its 1-year high and your cost only settles close calls (10%)."
-            : "Each option is scored 60% on how spread out your money would be and 40% on how far it sits below its 1-year high and your cost. A single company or coin counts double toward spread, since one company can fall alone in a way a fund of many can't."}
+            : "Each option is scored 60% on how spread out your money would be and 40% on how far it sits below its 1-year high and your cost. A single company or coin counts twice as much here: it can fall on its own in a way a fund holding many companies rarely does."}
         </p>
       </PopoverContent>
     </Popover>
