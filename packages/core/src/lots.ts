@@ -137,6 +137,39 @@ export function buildLots(txns: EngineTransaction[]): LotEngineResult {
   return { openLots, realized, dividendIncome, standaloneFees };
 }
 
+/**
+ * `buildLots` per account, merged: a sale only uses the purchases of the
+ * account it happened in, the way a broker (and the Tax Center) matches it.
+ * One FIFO queue across accounts let a taxable sale use an IRA's older,
+ * cheaper shares, so the dashboard's gain from sales and cost differed from
+ * the Tax Center and the exports (petyr, mission 63: −$1,482 vs −$1,522.90).
+ * A transaction with no `accountId` (a provider split) applies to every
+ * account. Open lots come back oldest first, realized slices by sale date
+ * (stable, so one sale's slices stay together and in FIFO order).
+ * Throws like `buildLots` when one account's history oversells.
+ */
+export function buildLotsByAccount(txns: EngineTransaction[]): LotEngineResult {
+  const accounts: string[] = [];
+  for (const t of txns) {
+    if (t.accountId !== undefined && !accounts.includes(t.accountId)) accounts.push(t.accountId);
+  }
+  if (accounts.length <= 1) return buildLots(txns);
+
+  const results = accounts.map((a) =>
+    buildLots(txns.filter((t) => t.accountId === undefined || t.accountId === a)),
+  );
+  return {
+    openLots: results
+      .flatMap((r) => r.openLots)
+      .sort((a, b) => a.openedAt.getTime() - b.openedAt.getTime()),
+    realized: results
+      .flatMap((r) => r.realized)
+      .sort((a, b) => a.soldAt.getTime() - b.soldAt.getTime()),
+    dividendIncome: results.reduce((s, r) => s.add(r.dividendIncome), ZERO),
+    standaloneFees: results.reduce((s, r) => s.add(r.standaloneFees), ZERO),
+  };
+}
+
 interface MatchedSlice {
   openedAt: Date;
   quantity: Decimal;

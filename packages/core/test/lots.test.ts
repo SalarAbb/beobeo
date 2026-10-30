@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildLots, isLongTerm } from "../src/lots";
+import { buildLots, buildLotsByAccount, isLongTerm } from "../src/lots";
 import { positionFromLots } from "../src/position";
 import { realizedByYear } from "../src/realized";
 import { D, EngineError } from "../src/types";
@@ -190,5 +190,68 @@ describe("buildLots — real-world import edge cases", () => {
       txn({ type: "sell", qty: "555", price: 12, at: "2024-06-01" }),
     ]);
     expect(openLots[0]!.quantity.eq("0.03")).toBe(true);
+  });
+});
+
+describe("buildLotsByAccount — a sale only uses its own account's purchases", () => {
+  const inAcct = (accountId: string | undefined, t: ReturnType<typeof txn>) => ({ ...t, accountId });
+
+  it("matches a taxable sale against the taxable lot, not the IRA's older one", () => {
+    const txns = [
+      inAcct("ira", txn({ type: "buy", qty: 10, price: 50, at: "2023-01-01" })),
+      inAcct("taxable", txn({ type: "buy", qty: 10, price: 100, at: "2024-01-01" })),
+      inAcct("taxable", txn({ type: "sell", qty: 5, price: 90, at: "2024-06-01" })),
+    ];
+    const r = buildLotsByAccount(txns);
+    // Taxable: proceeds 5 × 90 = 450, basis 5 × 100 = 500 → −50, short-term.
+    expect(r.realized).toHaveLength(1);
+    expect(r.realized[0]!.gain.eq(-50)).toBe(true);
+    expect(r.realized[0]!.longTerm).toBe(false);
+    // Open: IRA 10 @ 50 = 500 (oldest first), taxable 5 left @ 100 = 500.
+    expect(r.openLots.map((l) => l.quantity.toNumber())).toEqual([10, 5]);
+    expect(r.openLots.map((l) => l.costBasis.toNumber())).toEqual([500, 500]);
+    // One queue across accounts would have sold the IRA's $50 shares: 450 − 250 = +200, long-term.
+    const pooled = buildLots(txns);
+    expect(pooled.realized[0]!.gain.eq(200)).toBe(true);
+    expect(pooled.realized[0]!.longTerm).toBe(true);
+  });
+
+  it("applies an account-less split to every account and sums dividends once", () => {
+    const r = buildLotsByAccount([
+      inAcct("ira", txn({ type: "buy", qty: 2, price: 100, at: "2024-01-01" })),
+      inAcct("taxable", txn({ type: "buy", qty: 3, price: 100, at: "2024-02-01" })),
+      inAcct(undefined, txn({ type: "split", qty: 2, at: "2024-03-01" })),
+      inAcct("ira", txn({ type: "dividend", qty: 1, price: 10, at: "2024-03-15" })),
+      inAcct("taxable", txn({ type: "dividend", qty: 1, price: 5, at: "2024-03-15" })),
+      inAcct("taxable", txn({ type: "sell", qty: 6, price: 60, at: "2024-04-01" })),
+    ]);
+    // Taxable: 3 → 6 units after the split, basis 300; 6 × 60 = 360 → +60.
+    expect(r.realized).toHaveLength(1);
+    expect(r.realized[0]!.gain.eq(60)).toBe(true);
+    // IRA: 2 → 4 units, basis 200.
+    expect(r.openLots).toHaveLength(1);
+    expect(r.openLots[0]!.quantity.eq(4)).toBe(true);
+    expect(r.openLots[0]!.costBasis.eq(200)).toBe(true);
+    expect(r.dividendIncome.eq(15)).toBe(true);
+  });
+
+  it("throws OVERSELL when an account sells shares only another account holds", () => {
+    expect(() =>
+      buildLotsByAccount([
+        inAcct("ira", txn({ type: "buy", qty: 10, price: 50, at: "2024-01-01" })),
+        inAcct("taxable", txn({ type: "sell", qty: 5, price: 60, at: "2024-02-01" })),
+      ]),
+    ).toThrowError(EngineError);
+  });
+
+  it("is buildLots when there's one account or none", () => {
+    const txns = [
+      txn({ type: "buy", qty: 10, price: 100, at: "2024-01-01" }),
+      txn({ type: "sell", qty: 4, price: 120, at: "2024-02-01" }),
+    ];
+    // 4 × 120 = 480 − 4 × 100 = 80; 6 units left at $600.
+    const b = buildLotsByAccount(txns.map((t) => inAcct("one", t)));
+    expect(b.realized[0]!.gain.eq(80)).toBe(true);
+    expect(buildLotsByAccount(txns).openLots[0]!.costBasis.eq(600)).toBe(true);
   });
 });

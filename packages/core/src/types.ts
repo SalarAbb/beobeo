@@ -39,6 +39,10 @@ export interface EngineTransaction {
   pricePerUnit: Decimal | null;
   fees: Decimal;
   tradedAt: Date;
+  /** The account it happened in. `buildLotsByAccount` matches sells only
+   *  against the same account's lots; absent = applies to every account (a
+   *  provider-known split). `buildLots` ignores it. */
+  accountId?: string;
 }
 
 /** An open tax lot. */

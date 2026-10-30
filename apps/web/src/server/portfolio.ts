@@ -4,6 +4,7 @@ import {
   adjustForSplits,
   annualize,
   buildLots,
+  buildLotsByAccount,
   chainReturns,
   D,
   dailyReturns,
@@ -107,6 +108,7 @@ async function loadEngineTransactionsUncached(
       pricePerUnit: txn.pricePerUnit === null ? null : D(txn.pricePerUnit),
       fees: D(txn.fees),
       tradedAt: txn.tradedAt,
+      accountId: txn.accountId,
     };
   });
 
@@ -198,6 +200,21 @@ export function mergeKnownSplits(
   return [...txns, ...synthetic].sort(
     (a, b) => a.tradedAt.getTime() - b.tradedAt.getTime(),
   );
+}
+
+/**
+ * One asset's lots with each sale matched inside its own account, as brokers,
+ * the Tax Center and the exports do (`buildLotsByAccount`). When an account
+ * sells more than it ever held (a trade recorded under the wrong account), the
+ * whole asset falls back to one FIFO queue across accounts rather than
+ * dropping off the dashboard; that still throws on a true oversell.
+ */
+export function replayAsset(txns: EngineTransaction[]) {
+  try {
+    return buildLotsByAccount(txns);
+  } catch {
+    return buildLots(txns);
+  }
 }
 
 const byAsset = (txns: EngineTransaction[]): Map<string, EngineTransaction[]> => {
@@ -312,7 +329,7 @@ async function computeOverviewUncached(
         asset,
         latest,
         txns: assetTxns,
-        lots: buildLots(assetTxns),
+        lots: replayAsset(assetTxns),
         error: null,
       };
     } catch (e) {
@@ -474,7 +491,7 @@ function periodStats(opts: {
     }
   }
   // Prefix replay can't oversell if the full history didn't (fewer sells).
-  const qtyAt = positionFromLots(buildLots(before).openLots).quantity;
+  const qtyAt = positionFromLots(replayAsset(before).openLots).quantity;
   let valueAt = D(0);
   if (!qtyAt.isZero()) {
     if (!opts.baselineClose) return null;
@@ -712,7 +729,7 @@ async function computePositionUncached(
   const asset = assets.get(assetId);
   if (!asset || txns.length === 0) return null;
 
-  const { openLots, realized, dividendIncome } = buildLots(txns);
+  const { openLots, realized, dividendIncome } = replayAsset(txns);
   const today = toIsoDate(new Date());
   const market = getMarketData();
   const latest = await market.getLatestPrice(asset, today).catch(() => null);
@@ -739,7 +756,7 @@ async function computePositionUncached(
   // Stepwise average-cost-per-unit line (recomputed after each transaction).
   const costBasisSteps: { date: IsoDate; avgCost: number }[] = [];
   for (let i = 0; i < txns.length; i++) {
-    const { openLots: lotsAt } = buildLots(txns.slice(0, i + 1));
+    const { openLots: lotsAt } = replayAsset(txns.slice(0, i + 1));
     const snap = positionFromLots(lotsAt);
     if (snap.avgCostPerUnit) {
       const date = toIsoDate(txns[i]!.tradedAt);

@@ -2,7 +2,6 @@ import { and, desc, eq, ilike } from "drizzle-orm";
 import { db, schema } from "@beobeo/db";
 import {
   adjustForSplits,
-  buildLots,
   buysVsBenchmark,
   D,
   projectGrowth,
@@ -21,6 +20,7 @@ import {
   computeTimeseries,
   leadIn,
   loadEngineTransactions,
+  replayAsset,
 } from "./portfolio";
 import {
   computeAccountHoldings,
@@ -318,7 +318,7 @@ export function makePortfolioApi(userId: string, portfolioId?: string): Portfoli
         else perAsset.set(t.assetId, [t]);
       }
       const allRealized = [...perAsset.entries()].flatMap(([assetId, assetTxns]) =>
-        buildLots(assetTxns).realized.map((g) => ({
+        replayAsset(assetTxns).realized.map((g) => ({
           ...g,
           symbol: assets.get(assetId)!.symbol,
         })),
