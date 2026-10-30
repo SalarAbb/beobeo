@@ -7,6 +7,7 @@ export type {
 } from "./api";
 export { buildPortfolioTools } from "./tools";
 export {
+  primePortfolioAgentCache,
   runPortfolioAgentTurn,
   type AgentStreamEvent,
   type AgentTurnTimings,

@@ -96,7 +96,9 @@ export async function POST(req: Request) {
             const calls = t.modelMs
               .map((ms, i) => {
                 const stop = t.modelStops[i];
-                return stop ? `${ms}ms (${stop.stopReason}, ${stop.outputTokens} tok)` : `${ms}ms`;
+                return stop
+                  ? `${ms}ms (${stop.stopReason}, ${stop.outputTokens} tok, in ${stop.inputTokens} + cached ${stop.cacheReadTokens} + written ${stop.cacheWriteTokens})`
+                  : `${ms}ms`;
               })
               .join(" + ");
             console.info(
