@@ -398,9 +398,9 @@ export class MarketDataService {
         const assetFrom =
           asset.seriesFrom && asset.seriesFrom > from ? asset.seriesFrom : from;
         // Crypto trades every day, so its cache is behind after one missing day;
-        // equities tolerate weekends and holidays.
-        const staleDays = asset.class === "crypto" ? 1 : 4;
-        const ranges = planFetch(coverage.get(asset.id) ?? null, assetFrom, to, staleDays);
+        // equities after a missing weekday.
+        const calendar = asset.class === "crypto" ? "daily" : "weekdays";
+        const ranges = planFetch(coverage.get(asset.id) ?? null, assetFrom, to, calendar);
         if (ranges.length === 0) return;
 
         const providers = asset.class === "crypto" ? this.crypto : this.equity;

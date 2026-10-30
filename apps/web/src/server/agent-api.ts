@@ -632,12 +632,60 @@ export function makePortfolioApi(userId: string, portfolioId?: string): Portfoli
     async getPriceHistory(symbol, days) {
       const asset = await findUserAsset(userId, symbol);
       if (!asset) return { error: `No asset found for ${symbol}` };
+      const md = getMarketData();
       const to = toIsoDate(new Date());
       const from = toIsoDate(new Date(Date.now() - days * 86_400_000));
-      const prices = await getMarketData().getPrices(asset, from, to);
-      return [...prices.entries()]
-        .sort(([a], [b]) => (a < b ? -1 : 1))
-        .map(([date, close]) => ({ date, close: close.toNumber() }));
+      const [prices, latest, splits] = await Promise.all([
+        md.getPrices(asset, from, to),
+        md.getLatestPrices([asset], to),
+        md.getSplits([asset.id]),
+      ]);
+      // Present-day units, so a change across a split isn't a fake crash.
+      const closes = [...adjustForSplits(prices, splits.get(asset.id) ?? []).entries()].sort(
+        ([a], [b]) => (a < b ? -1 : 1),
+      );
+      if (closes.length === 0) return { symbol: asset.symbol, error: "No prices cached yet" };
+      const last = closes.at(-1)!;
+      const quote = latest.get(asset.id);
+      const live = quote && quote.date > last[0] ? quote : null;
+      // The changes run from the latest price (today's quote when there is
+      // one) back to the close N trading days before it, so the model quotes
+      // them instead of working percentages out of the closes in its head
+      // (a "did it drop 5% over 5 days?" turn spent 7s thinking).
+      const points: [string, Decimal][] = live ? [...closes, [live.date, D(live.close)]] : closes;
+      const [nowDate, now] = points.at(-1)!;
+      const pct = (base: Decimal) => round2(now.div(base).minus(1).times(100).toNumber());
+      const changes = (
+        [
+          ["1 trading day", 1],
+          ["5 trading days", 5],
+          ["1 month (21 trading days)", 21],
+          ["3 months (63 trading days)", 63],
+          ["1 year (252 trading days)", 252],
+        ] as const
+      ).flatMap(([label, n]) => {
+        const ref = points[points.length - 1 - n];
+        return ref ? [{ over: label, fromDate: ref[0], fromClose: ref[1].toNumber(), pct: pct(ref[1]) }] : [];
+      });
+      const high = points.reduce((a, b) => (b[1].gt(a[1]) ? b : a));
+      const low = points.reduce((a, b) => (b[1].lt(a[1]) ? b : a));
+      return {
+        symbol: asset.symbol,
+        latest: {
+          price: now.toNumber(),
+          date: nowDate,
+          kind: live ? "today's quote (moves until the close)" : "last daily close",
+        },
+        lastClose: { date: last[0], close: last[1].toNumber() },
+        changes,
+        rangeInWindow: {
+          high: { date: high[0], close: high[1].toNumber(), pctBelow: -pct(high[1]) },
+          low: { date: low[0], close: low[1].toNumber(), pctAbove: pct(low[1]) },
+        },
+        columns: ["date", "close"],
+        closes: closes.map(([date, close]) => [date, close.toNumber()]),
+        note: "Changes are latest price ÷ the close N trading days earlier − 1, already computed; quote them, don't recompute. Closes are split-adjusted.",
+      };
     },
   };
 }

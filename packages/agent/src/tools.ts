@@ -137,7 +137,7 @@ export function buildPortfolioTools(
     betaZodTool({
       name: "get_price_history",
       description:
-        "Daily closing prices for an asset the user holds, for trend questions. Returns up to `days` most recent closes.",
+        "Price moves for an asset the user holds: 'is it down 5% over 5 days?', 'how far off its high?', 'why did it drop?'. Returns the latest price (today's quote when markets have one, else the last close), the % change over 1 and 5 trading days, 1 month, 3 months and 1 year already computed with the reference close and its date, the high and low in the window, and the daily closes (split-adjusted) for the last `days` calendar days. Ask for days ≥ 100 for a 3-month change, ≥ 370 for a year. Quote the computed changes; never work percentages out of the closes yourself.",
       inputSchema: z.object({
         symbol: z.string().describe("Ticker symbol"),
         days: z.number().int().min(7).max(730).default(90),
