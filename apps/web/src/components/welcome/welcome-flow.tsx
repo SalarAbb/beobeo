@@ -500,6 +500,10 @@ function FirstHoldingStep({
   // land?" (hermione, mission 35). The dashboard is prefetched so it opens
   // as soon as the save is in.
   const [saving, setSaving] = useState<string | null>(null);
+  // Once it's in, the line says so: "Saving…" under a "VOO buy recorded"
+  // toast, while the dashboard loaded, read as a wait of unknown length
+  // (hermione, mission 72).
+  const [saved, setSaved] = useState(false);
   useEffect(() => router.prefetch("/dashboard"), [router]);
   // The accounts still saving don't block anything: the import's account
   // pick comes after a file is chosen, and the add form waits on its Save.
@@ -516,8 +520,10 @@ function FirstHoldingStep({
     >
       {saving && (
         <p role="status" className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Loader2 className="size-3.5 animate-spin" aria-hidden /> Saving your {saving}. Your
-          dashboard opens as soon as it&apos;s in.
+          <Loader2 className="size-3.5 animate-spin" aria-hidden />
+          {saved
+            ? `Your ${saving} is recorded. Opening your dashboard…`
+            : `Saving your ${saving}. Your dashboard opens as soon as it's in.`}
         </p>
       )}
       {accountsError && (
@@ -530,7 +536,10 @@ function FirstHoldingStep({
         {/* The form opens right here (it used to send you to /transactions,
             which read as being dropped out of setup), then lands on the dashboard. */}
         <AddTransactionDialog
-          onCreated={() => router.push("/dashboard")}
+          onCreated={() => {
+            setSaved(true);
+            router.push("/dashboard");
+          }}
           onSaving={setSaving}
           accountsPending={accountsPending}
           defaultEntry="total"

@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { usePortfolio } from "@/components/portfolio-context";
 import { useIncome } from "@/components/tax-center/use-income";
 import {
@@ -69,6 +69,23 @@ export function AppNav() {
         .catch(() => {}); // the page loads it itself
     },
   };
+  // Once the dashboard has finished loading and sat idle, start the Tax
+  // Center's data too (once per scope: only while nothing is cached), so the
+  // usual next stop opens with its answer. Right after setup it opened on
+  // "Working out your tax picture…" (hermione, mission 72); a hover only
+  // starts it a moment before the click.
+  const fetching = useIsFetching();
+  useEffect(() => {
+    if (pathname !== "/dashboard" || fetching > 0) return;
+    const input = { portfolioId: portfolioId ?? undefined, income };
+    if (queryClient.getQueryState(trpc.tax.now.queryKey(input))) return;
+    const timer = setTimeout(() => {
+      void queryClient.prefetchQuery(trpc.tax.now.queryOptions(input));
+      void queryClient.prefetchQuery(trpc.tax.lots.queryOptions({ portfolioId: input.portfolioId }));
+      void queryClient.prefetchQuery(trpc.tax.profile.queryOptions({ portfolioId: input.portfolioId }));
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [pathname, fetching, portfolioId, income, queryClient, trpc]);
   // On phones the row scrolls; keep the current page's tab visible.
   useEffect(() => {
     navRef.current
