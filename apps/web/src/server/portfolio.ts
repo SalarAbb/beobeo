@@ -37,7 +37,7 @@ import { loadScopedRows } from "./scoped-rows";
  * background price refreshes. All results are plain JSON (Decimal→number
  * happens inside), so they round-trip through any cache backend.
  */
-const TTL = { overview: 60, timeseries: 300, position: 60, dca: 300, metrics: 300 } as const;
+const TTL = { overview: 60, timeseries: 300, position: 60, sales: 60, dca: 300, metrics: 300 } as const;
 
 /**
  * Flat annual risk-free rate for Sharpe ratios (≈ 3-month T-bill, mid-2026).
@@ -716,6 +716,36 @@ async function computeMetricsUncached(
   };
 }
 
+const serializeRealized = (g: ReturnType<typeof replayAsset>["realized"][number]) => ({
+  soldAt: toIsoDate(g.soldAt),
+  acquiredAt: toIsoDate(g.acquiredAt),
+  quantity: g.quantity.toNumber(),
+  proceeds: g.proceeds.toNumber(),
+  costBasis: g.costBasis.toNumber(),
+  gain: g.gain.toNumber(),
+  longTerm: g.longTerm,
+  /** The sell transaction, so a sale on /transactions can show its own lots. */
+  sourceTxnId: g.sourceTxnId,
+});
+
+/** One asset's sales matched to the purchases they used: the position page's
+ *  replay without its prices. A sale's details on /transactions need only
+ *  this; waiting on the whole position (latest quote, price series, the
+ *  average-cost steps) left the dialog on "Working out which purchases…"
+ *  (petyr, missions 70/71). */
+export function computeSales(userId: string, assetId: string, portfolioId?: string) {
+  return cached(
+    userCacheKey(userId, "sales", portfolioId ?? "all", assetId),
+    TTL.sales,
+    async () => {
+      const { txns } = await loadEngineTransactions(
+        database, userId, assetId, undefined, portfolioId,
+      );
+      return replayAsset(txns).realized.map(serializeRealized);
+    },
+  );
+}
+
 export function computePosition(
   userId: string,
   assetId: string,
@@ -742,13 +772,14 @@ async function computePositionUncached(
   const { openLots, realized, dividendIncome } = replayAsset(txns);
   const today = toIsoDate(new Date());
   const market = getMarketData();
-  const latest = await market.getLatestPrice(asset, today).catch(() => null);
-  const pos = positionFromLots(openLots, latest ? D(latest.close) : undefined);
-
   const from = toIsoDate(txns[0]!.tradedAt);
-  const prices: PriceSeries = await market
-    .getPrices(asset, leadIn(from), today)
-    .catch(() => new Map());
+  // Side by side: the latest price can wait on a live quote while the series
+  // reads the cache, and neither needs the other.
+  const [latest, prices] = await Promise.all([
+    market.getLatestPrice(asset, today).catch(() => null),
+    market.getPrices(asset, leadIn(from), today).catch((): PriceSeries => new Map()),
+  ]);
+  const pos = positionFromLots(openLots, latest ? D(latest.close) : undefined);
 
   // Chart in present-day units: the raw series is unadjusted, so pre-split
   // closes, trade markers, and avg-cost steps are scaled by the splits the
@@ -815,17 +846,7 @@ async function computePositionUncached(
       longTerm: y.longTerm.toNumber(),
       total: y.total.toNumber(),
     })),
-    realizedEntries: realized.map((g) => ({
-      soldAt: toIsoDate(g.soldAt),
-      acquiredAt: toIsoDate(g.acquiredAt),
-      quantity: g.quantity.toNumber(),
-      proceeds: g.proceeds.toNumber(),
-      costBasis: g.costBasis.toNumber(),
-      gain: g.gain.toNumber(),
-      longTerm: g.longTerm,
-      /** The sell transaction, so a sale on /transactions can show its own lots. */
-      sourceTxnId: g.sourceTxnId,
-    })),
+    realizedEntries: realized.map(serializeRealized),
     priceSeries: [...displayPrices.entries()]
       .sort(([a], [b]) => (a < b ? -1 : 1))
       .map(([date, close]) => ({ date, close: close.toNumber() })),

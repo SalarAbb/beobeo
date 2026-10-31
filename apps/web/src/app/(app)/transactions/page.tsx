@@ -325,12 +325,12 @@ export default function TransactionsPage({
                   key={txn.id}
                   className="cursor-pointer"
                   onClick={() => setOpened({ txn, asset, account })}
-                  // A sale's details replay the position; start it on the way to the click.
+                  // A sale's details replay the asset's sales; start it on the way to the click.
                   onPointerEnter={
                     txn.type === "sell"
                       ? () =>
                           void queryClient.prefetchQuery(
-                            trpc.portfolio.position.queryOptions({
+                            trpc.portfolio.sales.queryOptions({
                               assetId: asset.id,
                               portfolioId: portfolioId ?? undefined,
                             }),

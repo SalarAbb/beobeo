@@ -3,6 +3,7 @@ import {
   computeMetrics,
   computeOverview,
   computePosition,
+  computeSales,
   computeTimeseries,
 } from "@/server/portfolio";
 import { computeNextBuy } from "@/server/next-buy";
@@ -39,6 +40,13 @@ export const portfolioRouter = router({
     .input(z.object({ assetId: z.uuid(), portfolioId: z.uuid().optional() }))
     .query(({ ctx, input }) =>
       computePosition(ctx.userId, input.assetId, input.portfolioId),
+    ),
+
+  /** One asset's sales and the purchases each used (a sale's details on /transactions). */
+  sales: protectedProcedure
+    .input(z.object({ assetId: z.uuid(), portfolioId: z.uuid().optional() }))
+    .query(({ ctx, input }) =>
+      computeSales(ctx.userId, input.assetId, input.portfolioId),
     ),
 
   /** "I have $n — where should it go?" — ranked picks among the user's candidates. */

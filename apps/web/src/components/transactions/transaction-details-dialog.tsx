@@ -413,7 +413,8 @@ function EditForm({
 }
 
 /** The purchases a sale used (first in, first out) and what it realized, from
- *  the same replay as the position page. */
+ *  the same replay as the position page (`portfolio.sales`: that replay
+ *  without the position's prices, so it doesn't wait on a quote). */
 function SaleLots({
   txnId,
   assetId,
@@ -424,17 +425,17 @@ function SaleLots({
   portfolioId: string | undefined;
 }) {
   const trpc = useTRPC();
-  const position = useQuery(trpc.portfolio.position.queryOptions({ assetId, portfolioId }));
-  // Words, not a bare gray box: a cold replay takes a few seconds and an empty
+  const sales = useQuery(trpc.portfolio.sales.queryOptions({ assetId, portfolioId }));
+  // Words, not a bare gray box: a cold replay takes a moment and an empty
   // skeleton read as "no details here" (barristan, mission 13).
-  if (position.isLoading)
+  if (sales.isLoading)
     return (
       <div className="grid gap-2">
         <p className="text-sm text-muted-foreground">Working out which purchases this sale used…</p>
         <Skeleton className="h-12 w-full" />
       </div>
     );
-  const lots = position.data?.realizedEntries.filter((g) => g.sourceTxnId === txnId) ?? [];
+  const lots = sales.data?.filter((g) => g.sourceTxnId === txnId) ?? [];
   if (lots.length === 0) return null;
 
   const total = lots.reduce((s, g) => s + g.gain, 0);
