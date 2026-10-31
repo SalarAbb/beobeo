@@ -21,12 +21,14 @@ export async function GET(req: Request, ctx: { params: Promise<{ kind: string }>
   );
   if (!kind.success || !portfolio.success) return new Response("Not found", { status: 404 });
 
-  const body = await buildExport(session.user.id, kind.data, portfolio.data);
+  const { body, summary } = await buildExport(session.user.id, kind.data, portfolio.data);
   const name = `beobeo-${FILE[kind.data]}-${toIsoDate(new Date())}.csv`;
   return new Response(body, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="${name}"`,
+      // Read by `downloadExport` for its toast (row count + column totals).
+      "X-Export-Summary": encodeURIComponent(JSON.stringify(summary)),
       "Cache-Control": "no-store",
     },
   });

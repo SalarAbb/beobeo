@@ -6,6 +6,7 @@ import Link from "next/link";
 import { AssetLogo } from "@/components/asset-logo";
 import { usePortfolio } from "@/components/portfolio-context";
 import { TabError, TabLoading } from "@/components/tax-center/tab-state";
+import { downloadExport } from "@/components/transactions/export-menu";
 import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
@@ -183,21 +184,21 @@ export function AllLotsTab() {
         </Link>
         : tap a sale to see the purchases it used and its gain. To check them against your
         broker, download{" "}
-        <a
-          href={`/api/export/lots${portfolioId ? `?portfolio=${portfolioId}` : ""}`}
-          download
+        <button
+          type="button"
+          onClick={() => void downloadExport("lots", portfolioId)}
           className="text-primary hover:underline"
         >
           every purchase you hold
-        </a>{" "}
+        </button>{" "}
         or{" "}
-        <a
-          href={`/api/export/realized${portfolioId ? `?portfolio=${portfolioId}` : ""}`}
-          download
+        <button
+          type="button"
+          onClick={() => void downloadExport("realized", portfolioId)}
           className="text-primary hover:underline"
         >
           every sale
-        </a>{" "}
+        </button>{" "}
         as a spreadsheet (CSV).
       </p>
       {symbols.length > 1 && (
