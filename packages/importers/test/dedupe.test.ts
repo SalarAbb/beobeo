@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { splitDuplicates, type DedupeRow } from "../src/dedupe";
+import { matchImportRows, pickImportAsset, splitDuplicates, type DedupeRow } from "../src/dedupe";
 
 const row = (o: Partial<DedupeRow> = {}): DedupeRow => ({
   accountId: "acc",
@@ -56,5 +56,53 @@ describe("splitDuplicates", () => {
     const { fresh, duplicates } = splitDuplicates([row(), row()], [row()]);
     expect(duplicates).toHaveLength(1);
     expect(fresh).toHaveLength(1);
+  });
+});
+
+describe("matchImportRows", () => {
+  const incoming = ({ accountId: _, ...r }: DedupeRow) => r;
+
+  it("names the account that already holds each row, the chosen one first", () => {
+    const a = row({ quantity: "1" });
+    const b = row({ quantity: "2" });
+    const c = row({ quantity: "3" });
+    const existing = [
+      row({ accountId: "taxable", quantity: "1" }),
+      row({ accountId: "roth", quantity: "1" }),
+      row({ accountId: "roth", quantity: "2" }),
+    ];
+    // Row 1 is in both: the chosen account claims it. Row 2 is only in the Roth. Row 3 is new.
+    expect(matchImportRows([a, b, c].map(incoming), existing, ["taxable", "roth"])).toEqual(["taxable", "roth", null]);
+  });
+
+  it("matches one-to-one inside an account, then looks in the next", () => {
+    const existing = [row({ accountId: "taxable" }), row({ accountId: "roth" })];
+    expect(matchImportRows([row(), row(), row()].map(incoming), existing, ["taxable", "roth"])).toEqual(["taxable", "roth", null]);
+  });
+});
+
+describe("pickImportAsset", () => {
+  it("takes the user's own ETF for a ticker the file calls a stock", () => {
+    const candidates = [
+      { id: "qqq-stock", class: "stock" as const, mine: false },
+      { id: "qqq-etf", class: "etf" as const, mine: true },
+    ];
+    expect(pickImportAsset("stock", candidates)).toBe("qqq-etf");
+  });
+
+  it("prefers the file's class among shared assets, else any non-crypto one", () => {
+    const shared = [
+      { id: "voo-etf", class: "etf" as const, mine: false },
+      { id: "voo-stock", class: "stock" as const, mine: false },
+    ];
+    expect(pickImportAsset("stock", shared)).toBe("voo-stock");
+    expect(pickImportAsset("fund", shared)).toBe("voo-etf");
+  });
+
+  it("keeps crypto and securities apart, and returns null when nothing exists", () => {
+    const link = [{ id: "link-coin", class: "crypto" as const, mine: true }];
+    expect(pickImportAsset("stock", link)).toBeNull();
+    expect(pickImportAsset("crypto", link)).toBe("link-coin");
+    expect(pickImportAsset("etf", [])).toBeNull();
   });
 });

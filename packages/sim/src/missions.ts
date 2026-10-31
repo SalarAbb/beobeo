@@ -39,13 +39,27 @@ export function assignMissions(personas: Persona[], journal: Journal, date: stri
   });
 }
 
-/** A broker export (Robinhood format) of the persona's latest stock trades plus two new buys: overlap tests de-duplication, new rows test the import. */
-async function brokerCsv(userId: string, file: string, date: string): Promise<string | null> {
+/**
+ * A broker export (Robinhood format) of ONE account's latest stock trades, as a real export is,
+ * plus two new buys: overlap tests de-duplication, new rows test the import. The note tells the
+ * persona which account the file is from and which rows are new: without it, a persona whose file
+ * mixed three accounts' trades doubted the two new buys as "junk" (mission 81).
+ */
+async function brokerCsv(userId: string, file: string, date: string): Promise<{ file: string; note: string } | null> {
+  const [latest] = await db
+    .select({ accountId: schema.transactions.accountId })
+    .from(schema.transactions)
+    .innerJoin(schema.assets, eq(schema.transactions.assetId, schema.assets.id))
+    .where(and(eq(schema.transactions.userId, userId), ne(schema.assets.class, "crypto")))
+    .orderBy(desc(schema.transactions.tradedAt))
+    .limit(1);
+  if (!latest) return null;
+  const [account] = await db.select().from(schema.accounts).where(eq(schema.accounts.id, latest.accountId));
   const rows = await db
     .select({ t: schema.transactions, a: schema.assets })
     .from(schema.transactions)
     .innerJoin(schema.assets, eq(schema.transactions.assetId, schema.assets.id))
-    .where(and(eq(schema.transactions.userId, userId), ne(schema.assets.class, "crypto")))
+    .where(and(eq(schema.transactions.accountId, latest.accountId), ne(schema.assets.class, "crypto")))
     .orderBy(desc(schema.transactions.tradedAt))
     .limit(6);
   const trades = rows.filter((r) => r.t.type === "buy" || r.t.type === "sell");
@@ -59,9 +73,14 @@ async function brokerCsv(userId: string, file: string, date: string): Promise<st
   const out = ["Activity Date,Process Date,Settle Date,Instrument,Description,Trans Code,Quantity,Price,Amount"];
   for (const { t, a } of trades.reverse()) out.push(line(t.tradedAt, a.symbol, a.name, t.type === "buy" ? "Buy" : "Sell", Number(t.quantity), Number(t.pricePerUnit ?? 0)));
   const last = trades.at(-1)!;
-  for (const q of [2, 1]) out.push(line(date, last.a.symbol, last.a.name, "Buy", q, Number(last.t.pricePerUnit ?? 0)));
+  const px = Number(last.t.pricePerUnit ?? 0);
+  for (const q of [2, 1]) out.push(line(date, last.a.symbol, last.a.name, "Buy", q, px));
   writeFileSync(file, `${out.join("\n")}\n`);
-  return file;
+  const name = account?.name ?? "one of your accounts";
+  return {
+    file,
+    note: `It's the export of your ${name} account only. The first ${trades.length} rows are trades you already entered in Beobeo; the last two are new: you bought ${last.a.symbol} today (${date}) in ${name}, 2 shares and then 1 share at $${px.toFixed(2)}, and haven't entered them yet.`,
+  };
 }
 
 export async function runOneMission(
@@ -93,7 +112,7 @@ export async function runOneMission(
   const brief = freshNote
     ? freshNote + appBrief(overview.data, date).replace("(as shown on your Beobeo dashboard)", "(what you own at your brokers, not in Beobeo yet)")
     : appBrief(overview.data, date);
-  const csvFile = feature.id === "transactions.import" ? await brokerCsv(twin.userId, join(o.outDir, `mission-${p.id}-broker-export.csv`), date) : null;
+  const csv = feature.id === "transactions.import" ? await brokerCsv(twin.userId, join(o.outDir, `mission-${p.id}-broker-export.csv`), date) : null;
 
   const rng = mulberry32(seedFrom(`mission-view:${p.id}:${date}`));
   const viewport = feature.id === "app.mobile" || (p.techSavviness <= 2 && rng() < 0.3) ? "mobile" : "desktop";
@@ -102,7 +121,7 @@ export async function runOneMission(
   const storage = freshNote ? undefined : deviceStorage(p, twin.userId);
   const ctx = await newContext(browser, { viewport, scheme, cookies: client.cookieList, storage });
   const result = await runMission(ctx, {
-    persona: p, feature, holdingsBrief: brief, themes: themesBrief(journal), csvFile,
+    persona: p, feature, holdingsBrief: brief, themes: themesBrief(journal), csvFile: csv?.file ?? null, csvNote: csv?.note ?? null,
     viewport, scheme, outDir: o.outDir, date, journal, runId,
   }).finally(() => ctx.close());
   if (!result) return { persona: p, feature, result: null, diaryLine: "" };

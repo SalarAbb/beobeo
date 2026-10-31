@@ -6,6 +6,16 @@ import { protectedProcedure, router } from "../trpc";
 
 const assetClassSchema = z.enum(["stock", "etf", "fund", "crypto", "cash"]);
 
+/**
+ * For a select over `assets`: whether this user has a transaction in the row's asset. The outer
+ * column is written out qualified on purpose: drizzle renders `${schema.assets.id}` as a bare
+ * "id" in a single-table select, which inside this subquery binds to transactions.id, so the
+ * check was always false (the picker never listed "Your assets", and an import of QQQ as a stock
+ * missed the user's own QQQ ETF).
+ */
+export const ownsAsset = (userId: string) =>
+  sql<boolean>`exists (select 1 from ${schema.transactions} tx where tx.asset_id = "assets"."id" and tx.user_id = ${userId})`;
+
 export const assetsRouter = router({
   /** Local-first search; falls through to provider search for new symbols. */
   search: protectedProcedure
@@ -14,14 +24,13 @@ export const assetsRouter = router({
       // `assets` is shared, so a match may be another user's asset; `mine`
       // says whether this user has a transaction in it (the picker's "Your
       // assets"). Same single query: a subquery, not a second round trip.
-      const t = schema.transactions;
       const local = await ctx.db
         .select({
           id: schema.assets.id,
           symbol: schema.assets.symbol,
           name: schema.assets.name,
           class: schema.assets.class,
-          mine: sql<boolean>`exists (select 1 from ${t} where ${t.assetId} = ${schema.assets.id} and ${t.userId} = ${ctx.userId})`,
+          mine: ownsAsset(ctx.userId),
         })
         .from(schema.assets)
         .where(

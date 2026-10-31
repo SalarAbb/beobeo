@@ -70,3 +70,58 @@ export function splitDuplicates<T extends DedupeRow>(incoming: T[], existing: De
   }
   return { fresh, duplicates };
 }
+
+/**
+ * The import preview's per-row answer: which account already holds this trade, if any. The
+ * chosen account is matched first (those rows get skipped on import), then each other account
+ * in order, so a row recorded in the Roth while the file is headed for the taxable account says
+ * so before it's added twice. One-to-one within each account, like `splitDuplicates`.
+ */
+export function matchImportRows(
+  incoming: Omit<DedupeRow, "accountId">[],
+  existing: DedupeRow[],
+  accountOrder: string[],
+): (string | null)[] {
+  const matched: (string | null)[] = incoming.map(() => null);
+  let pending = incoming.map((r, i) => ({ ...r, i }));
+  for (const accountId of accountOrder) {
+    if (pending.length === 0) break;
+    const { fresh, duplicates } = splitDuplicates(
+      pending.map((r) => ({ ...r, accountId })),
+      existing.filter((e) => e.accountId === accountId),
+    );
+    for (const d of duplicates) matched[d.i] = accountId;
+    pending = fresh;
+  }
+  return matched;
+}
+
+export interface ImportAssetCandidate {
+  id: string;
+  class: "stock" | "etf" | "fund" | "crypto" | "cash";
+  /** The user already has a transaction in it. */
+  mine: boolean;
+}
+
+/**
+ * Which existing asset a file's ticker means. Exports rarely say what a ticker is (Robinhood
+ * calls everything a stock), and assets are unique on symbol + class, so taking the file's class
+ * literally made "QQQ · stock" next to the user's own "QQQ · ETF": a second holding, and no
+ * duplicate ever matched (petyr, mission 75). A non-crypto ticker is the same security whatever
+ * class a file gives it: the user's own asset wins, then the shared one of the file's class, then
+ * any shared one. Crypto only matches crypto (tickers like LINK exist on both sides). null = new.
+ */
+export function pickImportAsset(
+  cls: "stock" | "etf" | "fund" | "crypto",
+  candidates: ImportAssetCandidate[],
+): string | null {
+  const sameSide = candidates.filter(
+    (c) => c.class !== "cash" && (c.class === "crypto") === (cls === "crypto"),
+  );
+  const pick =
+    sameSide.find((c) => c.mine && c.class === cls) ??
+    sameSide.find((c) => c.mine) ??
+    sameSide.find((c) => c.class === cls) ??
+    sameSide[0];
+  return pick?.id ?? null;
+}

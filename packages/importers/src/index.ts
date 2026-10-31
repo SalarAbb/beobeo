@@ -12,4 +12,10 @@ export { robinhoodImporter } from "./robinhood";
 export { coinbaseImporter } from "./coinbase";
 export { deltaImporter } from "./delta";
 export { detectImporter, importers } from "./detect";
-export { splitDuplicates, type DedupeRow } from "./dedupe";
+export {
+  matchImportRows,
+  pickImportAsset,
+  splitDuplicates,
+  type DedupeRow,
+  type ImportAssetCandidate,
+} from "./dedupe";

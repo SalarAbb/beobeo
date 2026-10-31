@@ -1,8 +1,9 @@
 import { and, eq, gte, inArray, lte } from "drizzle-orm";
-import { splitDuplicates } from "@beobeo/importers";
+import { matchImportRows, pickImportAsset, splitDuplicates } from "@beobeo/importers";
 import { z } from "zod";
 import { schema } from "@beobeo/db";
 import { invalidateUserComputations } from "../cache";
+import { ownsAsset } from "./assets";
 import { loadTransactionAssets, loadTransactionList } from "../transactions-list";
 import { protectedProcedure, router } from "../trpc";
 
@@ -104,6 +105,94 @@ export const transactionsRouter = router({
         .returning({ id: schema.transactions.id });
       await invalidateUserComputations(ctx.userId);
       return { inserted: rows.length, skipped: duplicates.length };
+    }),
+
+  /**
+   * The import preview, before anything is written: which existing asset each row's ticker
+   * means (`pickImportAsset`, so a Robinhood "stock" lands on the user's own ETF) and which of
+   * the user's accounts already holds the trade (`matchImportRows`, the chosen account first).
+   * Rows matched in the chosen account are the ones `bulkCreate` skips. A mutation only so the
+   * rows travel in a POST body (a 2,000-row file doesn't fit in a query URL); it writes nothing.
+   */
+  previewImport: protectedProcedure
+    .input(
+      z.object({
+        accountId: z.uuid().optional(),
+        rows: z
+          .array(
+            z.object({
+              symbol: z.string().min(1).max(20).transform((s) => s.toUpperCase()),
+              assetClass: z.enum(["stock", "etf", "fund", "crypto"]),
+              type: transactionInput.shape.type,
+              quantity: z.string(),
+              pricePerUnit: z.string().nullable(),
+              fees: z.string(),
+              tradedAt: z.date(),
+            }),
+          )
+          .min(1)
+          .max(2000),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const t = schema.transactions;
+      const symbols = [...new Set(input.rows.map((r) => r.symbol))];
+      const [candidates, accounts] = await Promise.all([
+        ctx.db
+          .select({
+            id: schema.assets.id,
+            symbol: schema.assets.symbol,
+            class: schema.assets.class,
+            mine: ownsAsset(ctx.userId),
+          })
+          .from(schema.assets)
+          .where(inArray(schema.assets.symbol, symbols)),
+        ctx.db
+          .select({ id: schema.accounts.id, name: schema.accounts.name })
+          .from(schema.accounts)
+          .where(eq(schema.accounts.userId, ctx.userId))
+          .orderBy(schema.accounts.createdAt),
+      ]);
+      const assetIds = input.rows.map((r) =>
+        pickImportAsset(r.assetClass, candidates.filter((c) => c.symbol === r.symbol)),
+      );
+      const known = [...new Set(assetIds.filter((id): id is string => id !== null))];
+      const order = input.accountId
+        ? [input.accountId, ...accounts.map((a) => a.id).filter((id) => id !== input.accountId)]
+        : accounts.map((a) => a.id);
+      let inAccount: (string | null)[] = input.rows.map(() => null);
+      if (known.length > 0 && accounts.length > 0) {
+        const times = input.rows.map((r) => r.tradedAt.getTime());
+        const existing = await ctx.db
+          .select({
+            accountId: t.accountId,
+            assetId: t.assetId,
+            type: t.type,
+            quantity: t.quantity,
+            pricePerUnit: t.pricePerUnit,
+            fees: t.fees,
+            tradedAt: t.tradedAt,
+          })
+          .from(t)
+          .where(
+            and(
+              eq(t.userId, ctx.userId),
+              inArray(t.assetId, known),
+              gte(t.tradedAt, new Date(Math.min(...times) - 36 * 3_600_000)),
+              lte(t.tradedAt, new Date(Math.max(...times) + 36 * 3_600_000)),
+            ),
+          );
+        const rows = input.rows.map((r, i) => ({ ...r, assetId: assetIds[i] ?? "" }));
+        inAccount = matchImportRows(rows, existing, order);
+      }
+      const names = new Map(accounts.map((a) => [a.id, a.name]));
+      return {
+        rows: input.rows.map((_, i) => ({
+          assetId: assetIds[i] ?? null,
+          inAccountId: inAccount[i] ?? null,
+          inAccountName: inAccount[i] ? (names.get(inAccount[i]!) ?? null) : null,
+        })),
+      };
     }),
 
   update: protectedProcedure

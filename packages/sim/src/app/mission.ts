@@ -257,6 +257,8 @@ export async function runMission(
     holdingsBrief: string;
     themes: string;
     csvFile: string | null;
+    /** What the persona knows about the file: its account and which rows are new. */
+    csvNote?: string | null;
     viewport: "desktop" | "mobile";
     scheme: "light" | "dark";
     outDir: string;
@@ -280,7 +282,7 @@ export async function runMission(
 Make it concrete and real for YOU: what exactly do you want to find out or get done today? Use your real holdings and numbers.
 
 What the app currently shows you hold:
-${o.holdingsBrief}${o.csvFile ? `\n\nYou have a CSV export of your recent stock trades on your computer (${o.csvFile.split("/").pop()}). It's in Robinhood's export format (your broker's own export isn't one the app reads yet, so you converted it), and it overlaps with trades you've already entered.` : ""}`,
+${o.holdingsBrief}${o.csvFile ? `\n\nYou have a CSV export of your recent stock trades on your computer (${o.csvFile.split("/").pop()}). It's in Robinhood's export format (your broker's own export isn't one the app reads yet, so you converted it), and it overlaps with trades you've already entered.${o.csvNote ? ` ${o.csvNote}` : ""}` : ""}`,
   });
   if (!plan) return null;
 
@@ -328,7 +330,7 @@ ${o.holdingsBrief}${o.csvFile ? `\n\nYou have a CSV export of your recent stock 
           text: `${brief(feature, plan)}
 
   What you know about your own money:
-  ${o.holdingsBrief}
+  ${o.holdingsBrief}${o.csvNote ? `\n  About your CSV file: ${o.csvNote}` : ""}
 
   Steps so far:
   ${history || "(none yet: you just arrived)"}
