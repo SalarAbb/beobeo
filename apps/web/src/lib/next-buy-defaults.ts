@@ -65,3 +65,52 @@ export function defaultNextBuyIds(
     .slice(0, 3)
     .map((h) => h.assetId);
 }
+
+/** How many recent withdrawals the usual one is taken from. */
+const USUAL_WITHDRAWAL_FROM = 6;
+
+/**
+ * Whether money mostly comes out of this portfolio: over the last 365 days of
+ * the series, falls in the invested line (sale proceeds) outweigh rises (money
+ * put in). barristan sells $3,500 a month to live on, and the dashboard asked
+ * where his "usual" $80,000 should go, his one lump deposit (2026-10-31: "I'm
+ * not buying, I'm selling"). `usualUsd` is the median of the last few falls,
+ * `thisYearUsd` the net taken out since Jan 1 (sales minus money put back),
+ * `monthlyUsd` the last 12 months' net out ÷ 12. Null when money goes in.
+ */
+export function withdrawalPace(
+  points: { date: string; invested: number }[] | undefined,
+): { usualUsd: number; thisYearUsd: number; monthlyUsd: number; year: number } | null {
+  if (!points || points.length < 2) return null;
+  const last = points[points.length - 1]!;
+  const from = new Date(`${last.date}T00:00:00Z`);
+  from.setUTCDate(from.getUTCDate() - 365);
+  const cutoff = from.toISOString().slice(0, 10);
+  const year = last.date.slice(0, 4);
+  let rises = 0;
+  let falls = 0;
+  const recent: number[] = [];
+  // The invested line just before Jan 1 (0 when the series starts this year).
+  let yearStart = points[0]!.date < `${year}-01-01` ? points[0]!.invested : 0;
+  for (let i = 1; i < points.length; i++) {
+    const p = points[i]!;
+    const step = p.invested - points[i - 1]!.invested;
+    if (p.date < `${year}-01-01`) yearStart = p.invested;
+    if (p.date <= cutoff) continue;
+    if (step >= 1) rises += step;
+    else if (step <= -1) {
+      falls -= step;
+      recent.push(-step);
+    }
+  }
+  if (falls <= rises || recent.length === 0) return null;
+  const sorted = recent.slice(-USUAL_WITHDRAWAL_FROM).sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  const usualUsd = sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+  return {
+    usualUsd: Math.round(usualUsd),
+    thisYearUsd: Math.max(0, yearStart - last.invested),
+    monthlyUsd: (falls - rises) / 12,
+    year: Number(year),
+  };
+}

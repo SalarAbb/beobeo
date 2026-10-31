@@ -17,18 +17,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { TabError, TabLoading } from "@/components/tax-center/tab-state";
+import { RAISE_CASH_DEFAULT, RAISE_CASH_KEY, type RaiseCashState } from "@/lib/raise-cash-state";
 import { useTRPC } from "@/lib/trpc";
 import { useStoredState } from "@/lib/use-stored-state";
 import { fmtUsd } from "@/lib/viz";
 import { cn } from "@/lib/utils";
 
-type RaiseCashState = {
-  amountInput: string;
-  target: number | null;
-  doNotSell: string[];
-  /** Sell only from this taxable account; unset = any of them. */
-  accountId?: string;
-};
 
 function parseAmount(input: string): number | null {
   const n = Number(input.replace(/[^0-9.]/g, ""));
@@ -44,11 +38,7 @@ export function RaiseCashTab() {
   // $10,000 every time he checked All Lots (mission 2). One value for every portfolio: the
   // cash you need doesn't change when you switch scope (a per-portfolio key reset it, mission 15).
   const [{ amountInput, target, doNotSell, accountId: storedAccountId }, setState] =
-    useStoredState<RaiseCashState>("beobeo.tax.raise", {
-      amountInput: "10000",
-      target: 10000,
-      doNotSell: [],
-    });
+    useStoredState<RaiseCashState>(RAISE_CASH_KEY, RAISE_CASH_DEFAULT);
 
   const lots = useQuery(trpc.tax.lots.queryOptions(scope));
   const symbols = [...new Set((lots.data ?? []).map((l) => l.symbol))].sort();
