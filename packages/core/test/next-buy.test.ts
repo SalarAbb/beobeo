@@ -143,7 +143,7 @@ describe("pickNextBuy", () => {
       "NVDA is 15% below its 1-year high, and 15% under what you paid. That outweighed VOO, a fund of many companies, keeping your money more spread out: NVDA is a single company that would be 45% of your portfolio after this buy.",
     );
     expect(second!.reason).toBe(
-      "VOO is a fund of many companies, so it would keep your money more spread out than NVDA, but NVDA's lower price tipped the pick.",
+      "VOO is a fund of many companies, so it would keep your money more spread out than NVDA, but NVDA comes first because its price has dropped more.",
     );
   });
 

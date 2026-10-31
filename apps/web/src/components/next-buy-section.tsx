@@ -17,7 +17,6 @@ import { Input } from "@/components/ui/input";
 import { TabLoading } from "@/components/tax-center/tab-state";
 import { defaultNextBuyAmount } from "@/lib/next-buy-defaults";
 import { useTRPC } from "@/lib/trpc";
-import { cn } from "@/lib/utils";
 import { fmtUsd } from "@/lib/viz";
 
 const MAX_OPTIONS = 5;
@@ -79,6 +78,7 @@ export function NextBuySection({
   const index = shown.key === inputKey ? shown.index : 0;
   const picks = query.data?.picks ?? [];
   const pick = picks.length > 0 ? picks[index % picks.length]! : null;
+  const next = picks.length > 1 ? picks[(index + 1) % picks.length]! : null;
   const ready = options.length > 0 && (waiting || amountUsd > 0);
   // The pick on screen is for an older amount or list until the new one lands.
   const stale = amountUsd !== debouncedAmount || query.isPlaceholderData;
@@ -169,8 +169,12 @@ export function NextBuySection({
           Enter an amount and one to five things you&apos;re thinking of buying, and
           Beobeo picks one.
         </p>
-      ) : !pick ? (
-        query.isError ? (
+      ) : !pick || stale ? (
+        // An older amount's pick under the new amount read as the answer, and the
+        // real one then "flipped" it (luna, missions 84/85: VOO for $150, NVDA for $100).
+        pick && stale ? (
+          <TabLoading label={`Weighing ${fmtUsd(amountUsd)}…`} className="h-16 max-w-md" />
+        ) : query.isError ? (
           <p className="text-sm text-muted-foreground">
             Couldn&apos;t weigh these options right now. Try again in a moment.
           </p>
@@ -178,17 +182,8 @@ export function NextBuySection({
           <TabLoading label="Weighing your options…" className="h-16 max-w-md" />
         )
       ) : (
-        <div
-          className={cn("grid gap-1.5 transition-opacity", stale && "opacity-50")}
-          aria-live="polite"
-          aria-busy={stale}
-        >
-          {stale && (
-            <p className="text-xs text-muted-foreground">Weighing {fmtUsd(amountUsd)}…</p>
-          )}
+        <div className="grid gap-1.5" aria-live="polite">
           <p className="flex flex-wrap items-center gap-x-1.5 text-lg">
-            {/* The typed amount, never the one still being weighed: "$150" under a
-                freshly typed $100 read as the box ignoring it (luna, mission 29). */}
             {/* "Put $100 into VOO" on the runner-up read as the recommendation
                 (luna, mission 67), so a lower pick says it's the other way. */}
             {index % picks.length === 0 ? "Put" : "Or, next best: put"}{" "}
@@ -214,14 +209,18 @@ export function NextBuySection({
           )}
           {pick.account && <p className="text-sm text-muted-foreground">{accountLine(pick.account)}</p>}
           <div className="mt-1 flex flex-wrap items-center gap-2">
-            {picks.length > 1 && (
+            {/* Named, so two options don't read as a loop with the first pick
+                out of sight (luna, mission 84: "Back to the first pick" hid which it was). */}
+            {next && (
               <Button
                 variant="outline"
                 size="sm"
                 className="h-8 rounded-full"
                 onClick={() => setShown({ key: inputKey, index: index + 1 })}
               >
-                {(index + 1) % picks.length === 0 ? "Back to the first pick" : "Show me another"}
+                {(index + 1) % picks.length === 0
+                  ? `Back to the first pick, ${next.key}`
+                  : `Show me another: ${next.key}`}
               </Button>
             )}
             <Button
@@ -241,6 +240,8 @@ export function NextBuySection({
             <HowPicked
               id="next-buy-how"
               pick={pick}
+              first={picks[0]!}
+              runnerUp={picks[1] ?? null}
               amountUsd={debouncedAmount}
               portfolioValue={query.data?.portfolioValue ?? 0}
             />
@@ -281,26 +282,45 @@ function accountLine(account: {
     : `Buy it in ${where}: ${account.why}.`;
 }
 
+interface PickFacts {
+  key: string;
+  fit: number;
+  weightNow: number;
+  weightAfter: number;
+  target: number | null;
+  gapUsd: number | null;
+  offHigh: number | null;
+  vsCost: number | null;
+}
+
 /** The pick's numbers in the user's own dollars, then the rule in plain words. */
 function HowPicked({
   id,
   pick,
+  first,
+  runnerUp,
   amountUsd,
   portfolioValue,
 }: {
   id: string;
-  pick: {
-    key: string;
-    weightNow: number;
-    weightAfter: number;
-    target: number | null;
-    gapUsd: number | null;
-    offHigh: number | null;
-    vsCost: number | null;
-  };
+  pick: PickFacts;
+  first: PickFacts;
+  runnerUp: PickFacts | null;
   amountUsd: number;
   portfolioValue: number;
 }) {
+  // "Mostly: not putting too much in one place" under a pick that does just that
+  // read as the explainer contradicting the pick (luna, mission 84): when price
+  // outweighed spread, say so for this pick.
+  const priceDecided =
+    first.target === null && runnerUp !== null && runnerUp.fit > first.fit;
+  const decided = !priceDecided
+    ? null
+    : pick.key === first.key
+      ? `Here price decided it: ${first.key}'s price has dropped more than ${runnerUp.key}'s, enough to outweigh ${runnerUp.key} keeping your money more spread out.`
+      : pick.fit > first.fit
+        ? `${pick.key} keeps your money more spread out, but ${first.key}'s price has dropped more, enough to put ${first.key} first.`
+        : null;
   const held = pick.weightNow * portfolioValue;
   const lines: string[] = [
     portfolioValue > 0
@@ -343,8 +363,9 @@ function HowPicked({
       <p className="text-muted-foreground">
         {pick.target !== null
           ? "What decides it, mostly (90%): which option is furthest short of your target mix. Price only settles close calls (10%): one further below its past-year high, or below what you paid, gets a small edge."
-          : "What decides it, mostly (60%): not putting too much of your money in one place. A single company or coin weighs twice as much here, because it can drop on its own in a way a fund of hundreds of companies rarely does. The rest (40%) is price: one further below its past-year high, or below what you paid, gets an edge."}
+          : "What decides it, mostly (60%): not putting too much of your money in one place. Money in one company or coin counts as more lopsided than the same money in a fund, because one company can drop on its own in a way a fund of hundreds rarely does. The rest (40%) is price: one further below its past-year high, or below what you paid, gets an edge."}
       </p>
+      {decided && <p>{decided}</p>}
     </div>
   );
 }

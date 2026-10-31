@@ -214,7 +214,9 @@ export function pickNextBuy(input: {
         }
         if (i > 0 && p.fit > top.fit && p.reason.includes("; this buy takes it to")) {
           const what = !p.singleName && top.singleName ? `${p.key} is ${fund(p)}, so it` : `${p.key}`;
-          p.reason = `${what} would keep your money more spread out than ${top.key}, but ${top.key}'s lower price tipped the pick.`;
+          // "NVDA's lower price tipped the pick" under VOO read as VOO's own
+          // reason contradicting it (luna, mission 84): name who comes first and why.
+          p.reason = `${what} would keep your money more spread out than ${top.key}, but ${top.key} comes first because its price has dropped more.`;
           return;
         }
       }
