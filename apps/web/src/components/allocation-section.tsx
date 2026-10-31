@@ -136,10 +136,11 @@ function KindSplit({ holdings }: { holdings: AllocationHolding[] }) {
 
 type AllocationHolding = { symbol: string; value: number; class: string };
 
-const pts = (drift: number) => {
+/** "1.2 under" / "1.2 over" (percentage points): "−1.2 pts" was one more thing to decode. */
+const offBy = (drift: number) => {
   const v = drift * 100;
-  if (Math.abs(v) < 0.05) return "0.0";
-  return `${v > 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}`;
+  if (Math.abs(v) < 0.05) return "on target";
+  return `${Math.abs(v).toFixed(1)} ${v > 0 ? "over" : "under"}`;
 };
 
 /**
@@ -306,7 +307,7 @@ export function AllocationSection({
               <th className="pb-2 pl-3 text-right font-normal">Now</th>
               <th className="pb-2 pl-3 text-right font-normal">Target</th>
               <th className="hidden w-28 pb-2 sm:table-cell" aria-hidden />
-              <th className="pb-2 pl-3 text-right font-normal whitespace-nowrap">Off by</th>
+              <th className="pb-2 pl-3 text-right font-normal whitespace-nowrap">Off target</th>
             </tr>
           </thead>
           <tbody>
@@ -350,7 +351,7 @@ export function AllocationSection({
                     Math.abs(r.drift) >= FLAG_DRIFT ? "text-warn" : "text-muted-foreground",
                   )}
                 >
-                  {pts(r.drift)} pts
+                  {offBy(r.drift)}
                 </td>
               </tr>
             ))}
@@ -392,8 +393,8 @@ export function AllocationSection({
         </div>
         {plan.length > 0 && (
           <p className="text-xs text-muted-foreground">
-            The most underweight holdings get topped up first, so you move toward your mix
-            without selling anything.
+            The holdings furthest below their target get the money first, so you move toward
+            your mix without selling anything.
           </p>
         )}
       </div>

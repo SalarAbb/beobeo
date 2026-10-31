@@ -721,8 +721,15 @@ export default function DashboardPage() {
           value={fmtUsd(totals.realized)}
           tone={gainClass(totals.realized)}
           // All time on its own reads as "this year" next to the Tax Center
-          // and chat (personas asked which one to put on their taxes).
-          sub={windowed ? undefined : `All time · ${fmtUsd(totals.realizedThisYear)} this year`}
+          // and chat (personas asked which one to put on their taxes). With
+          // nothing sold, "All time · $0.00 this year" was two zeros to decode.
+          sub={
+            windowed
+              ? undefined
+              : totals.realized === 0 && totals.realizedThisYear === 0
+                ? "Nothing gained or lost from sales yet"
+                : `All time · ${fmtUsd(totals.realizedThisYear)} this year`
+          }
           subTone="text-muted-foreground"
         />
         <StatTile
@@ -821,7 +828,7 @@ export default function DashboardPage() {
                     className="pl-1"
                   />
                   <SortableHead
-                    label="Qty"
+                    label="Units"
                     sortKey="quantity"
                     sort={sort}
                     onSort={toggleSort}

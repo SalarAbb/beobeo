@@ -20,6 +20,7 @@ import { useTRPC } from "@/lib/trpc";
 import { fmtUsd } from "@/lib/viz";
 
 const MAX_OPTIONS = 5;
+const RANK = ["best", "second best", "third best", "fourth best", "fifth best"];
 const pctText = (x: number) => `${Number((Math.abs(x) * 100).toFixed(1))}%`;
 
 /**
@@ -190,11 +191,12 @@ export function NextBuySection({
             <span className="data font-semibold">{fmtUsd(amountUsd)}</span> into
             <AssetLogo symbol={pick.key} assetClass={pick.assetClass} size={20} />
             <span className="font-semibold">{pick.key}</span>
-            {/* Numbered from the first, so "choice 2 of 2" isn't the only marker
-                (luna couldn't tell which pick came first, mission 66). */}
+            {/* Says the rank in words: luna couldn't tell which pick came first
+                (mission 66), then read "choice 2 of 3" as the pick (mission 86). */}
             {picks.length > 1 && (
               <span className="text-sm text-muted-foreground">
-                (choice {(index % picks.length) + 1} of {picks.length})
+                ({RANK[index % picks.length] ?? `number ${(index % picks.length) + 1}`} of your{" "}
+                {picks.length} options)
               </span>
             )}
           </p>
