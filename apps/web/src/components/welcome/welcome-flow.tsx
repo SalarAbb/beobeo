@@ -51,10 +51,12 @@ const TYPE_LABEL: Record<string, string> = {
 const k = (n: number) =>
   n >= 1000 ? `$${Math.round(n / 1000).toLocaleString("en-US")}k` : `$${n}`;
 
+/** Exact, like the recap and Tax Profile: rounded "$404k – $512k" here next to
+ *  "$403,550 to $512,450" there read as two different brackets (mission 88). */
 function bandLabel(b: BracketOption) {
-  if (b.incomeFrom === 0) return `Under ${k(b.incomeTo!)}`;
-  if (b.incomeTo === null) return `Over ${k(b.incomeFrom)}`;
-  return `${k(b.incomeFrom)} – ${k(b.incomeTo)}`;
+  if (b.incomeFrom === 0) return `Under ${usd(b.incomeTo!)}`;
+  if (b.incomeTo === null) return `Over ${usd(b.incomeFrom)}`;
+  return `${usd(b.incomeFrom)} – ${usd(b.incomeTo)}`;
 }
 
 /**
@@ -81,6 +83,17 @@ function payLabel(status: FilingStatus, b: BracketOption) {
   if (b.incomeTo === null) return `pay over ~${k(b.incomeFrom + d)}`;
   return `pay ~${k(b.incomeFrom + d)} – ${k(b.incomeTo + d)}`;
 }
+
+const usd = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
+
+/** A band's taxable-income edges, exact (the rows show them rounded). */
+function bandEdges(b: BracketOption) {
+  if (b.incomeFrom === 0) return `taxable income under ${usd(b.incomeTo!)}`;
+  if (b.incomeTo === null) return `taxable income over ${usd(b.incomeFrom)}`;
+  return `taxable income from ${usd(b.incomeFrom)} to ${usd(b.incomeTo)}`;
+}
+
+type RecapLine = { label: string; value: string };
 
 /** Selected rows/chips: the accent pill look used across the app. */
 const choice = (on: boolean) =>
@@ -117,7 +130,7 @@ export function WelcomeFlow({ name }: { name: string }) {
   const [accountsPending, setAccountsPending] = useState<Promise<unknown> | null>(null);
   // What the earlier steps set, recapped on step 3: after setup hermione had
   // no way to check the accounts and types it created (mission 77).
-  const [taxRecap, setTaxRecap] = useState<string | null>(null);
+  const [taxRecap, setTaxRecap] = useState<RecapLine[]>([]);
   const [accountsRecap, setAccountsRecap] = useState<string | null>(null);
 
   function addAccounts(presets: AccountPreset[]) {
@@ -149,7 +162,7 @@ export function WelcomeFlow({ name }: { name: string }) {
         first={first}
         onDone={(answers, recap) => {
           if (answers) saveTax.mutate(answers);
-          setTaxRecap(recap ?? null);
+          setTaxRecap(recap ?? []);
           setStep(2);
         }}
       />
@@ -166,7 +179,7 @@ export function WelcomeFlow({ name }: { name: string }) {
       accountsPending={accountsPending}
       accountsError={createAccounts.error?.message ?? null}
       recap={[
-        ...(taxRecap && !saveTax.error ? [{ label: "Taxes", value: taxRecap }] : []),
+        ...(saveTax.error ? [] : taxRecap.filter((r) => r.value)),
         ...(accountsRecap && !createAccounts.error ? [{ label: "Accounts", value: accountsRecap }] : []),
       ]}
     />
@@ -193,7 +206,7 @@ function TaxStep({
   onDone,
 }: {
   first: string;
-  onDone: (answers: TaxAnswers | null, recap?: string) => void;
+  onDone: (answers: TaxAnswers | null, recap?: RecapLine[]) => void;
 }) {
   const [status, setStatus] = useState<FilingStatus>("single");
   const [band, setBand] = useState<number | null>(null);
@@ -228,9 +241,26 @@ function TaxStep({
       });
     if (!rates && stateRate.trim() === "") return onDone(null);
     const state = stateRate.trim() === "" ? "" : `${statePct}% state`;
-    const recap = rates
-      ? `${FILING_STATUS_LABEL[status]}: ${rates.ordinaryRatePct}% on sales held a year or less, ${rates.ltcgRatePct}% on longer ones${state && `, plus ${state}`}`
-      : state;
+    const recap = [
+      {
+        label: "Taxes",
+        value: rates
+          ? `${FILING_STATUS_LABEL[status]}: ${rates.ordinaryRatePct}% on sales held a year or less, ${rates.ltcgRatePct}% on longer ones${state && `, plus ${state}`}`
+          : state,
+      },
+      // The figures behind the rates, so they can be checked here without
+      // opening Tax Profile (hermione, mission 87).
+      ...(picked
+        ? [
+            {
+              label: "Income",
+              value: usesPay
+                ? `About ${usd(taxable!)} taxable (${usd(pay!)} pay minus the ${usd(STANDARD_DEDUCTION[status])} standard deduction), in the ${picked.ordinaryRatePct}% bracket: ${bandEdges(picked)}`
+                : `The ${picked.ordinaryRatePct}% bracket you picked: ${bandEdges(picked)}`,
+            },
+          ]
+        : []),
+    ];
     onDone({
       ...(rates && {
         federalOrdinaryRatePct: rates.ordinaryRatePct,
@@ -518,7 +548,7 @@ function FirstHoldingStep({
 }: {
   accountsPending: Promise<unknown> | null;
   accountsError: string | null;
-  recap: { label: string; value: string }[];
+  recap: RecapLine[];
 }) {
   const router = useRouter();
   // After Save the step itself says what happens next: a small "Saving…"
@@ -584,12 +614,13 @@ function FirstHoldingStep({
           onSaving={setSaving}
           accountsPending={accountsPending}
           defaultEntry="total"
+          owned
           trigger={
             <button type="button" className={card} disabled={busy}>
               <PenLine className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
               <OptionText
                 title="Type in a holding"
-                body="A ticker, how many and what you paid in all, as your statement shows it."
+                body="A ticker, how many, what you paid in all and roughly when, as your statement shows it."
               />
               <ArrowRight className="mt-0.5 ml-auto size-4 shrink-0 text-muted-foreground" aria-hidden />
             </button>

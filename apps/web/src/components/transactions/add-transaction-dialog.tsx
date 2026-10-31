@@ -50,6 +50,25 @@ const TOTAL_LABEL: Partial<Record<TxnType, string>> = {
   transfer_out: "Value",
 };
 
+const dayFmt = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+/** How a sale of a holding bought on `date` would be taxed: long-term from
+ *  the day after its anniversary, like the Tax Center's lots. */
+function heldNote(date: string, today: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  if (!y || !m || !d) return "Roughly is fine (e.g. 10/1/2024): after a year, a sale is taxed at the lower long-term rate.";
+  if (date >= today) return "Bought earlier? Type or pick roughly when: after a year, a sale is taxed at the lower long-term rate.";
+  const ltOn = new Date(Date.UTC(y + 1, m - 1, d + 1));
+  return ltOn.toISOString().slice(0, 10) <= today
+    ? "Owned over a year: a sale is taxed at the lower long-term rate."
+    : `Under a year: a sale is taxed at the lower long-term rate from ${dayFmt.format(ltOn)}.`;
+}
+
 export function AddTransactionDialog({
   onCreated,
   onSaving,
@@ -57,6 +76,7 @@ export function AddTransactionDialog({
   defaultOpen = false,
   defaultType = "buy",
   defaultEntry = "price",
+  owned = false,
   trigger,
 }: {
   onCreated?: () => void;
@@ -76,6 +96,10 @@ export function AddTransactionDialog({
    *  already owned, whose statement shows what was paid in all, and a
    *  prefilled market price had to be switched away from (mission 42). */
   defaultEntry?: "price" | "total";
+  /** Setup's holding is already owned: the date is asked as "When you bought
+   *  it" and says how a sale would be taxed. Left on today, hermione's
+   *  long-held VOO read as a short-term gain taxed at 32% (mission 87). */
+  owned?: boolean;
 }) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
@@ -99,7 +123,10 @@ export function AddTransactionDialog({
   const [entry, setEntry] = useState<"price" | "total">(defaultEntry);
   const [totalInput, setTotalInput] = useState("");
   const [fees, setFees] = useState("");
-  const [date, setDate] = useState(() => localIsoDate());
+  // Something already owned starts with no date: today was wrong for nearly
+  // every setup holding and still had to be changed (mission 92).
+  const [date, setDate] = useState(() => (owned ? "" : localIsoDate()));
+  const [today] = useState(() => localIsoDate());
   const [note, setNote] = useState("");
 
   // Account is optional: preselect the first account; if the user has none,
@@ -182,6 +209,10 @@ export function AddTransactionDialog({
     if (saving) return;
     if (!asset) {
       toast.error("Pick an asset");
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      toast.error(owned ? "Add roughly when you bought it" : "Pick a date");
       return;
     }
     const what = `${asset.symbol} ${type.replace("_", " ")}`;
@@ -287,8 +318,15 @@ export function AddTransactionDialog({
               </Select>
             </div>
             <div className="grid content-start gap-1.5">
-              <Label>Date</Label>
-              <DatePicker value={date} onChange={setDate} />
+              <Label>{owned && type === "buy" ? "When you bought it" : "Date"}</Label>
+              <DatePicker
+                value={date}
+                onChange={setDate}
+                label={owned && type === "buy" ? "When you bought it" : "Date"}
+              />
+              {owned && type === "buy" && (
+                <p className="text-xs text-muted-foreground">{heldNote(date, today)}</p>
+              )}
             </div>
           </div>
 

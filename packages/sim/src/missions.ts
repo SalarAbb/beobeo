@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { and, desc, eq, ne } from "drizzle-orm";
+import { and, desc, eq, min, ne } from "drizzle-orm";
 import type { Browser } from "playwright";
 import { db, schema } from "@beobeo/db";
 import { AppClient } from "./app/client";
@@ -107,7 +107,21 @@ export async function runOneMission(
     const own = new AppClient();
     await own.signIn(simEmail(p.id), simPassword(p.id));
     overview = await own.query<Overview>("portfolio.overview", { window: "all" });
-    freshNote = "You have just created a brand-new Beobeo account: it has no accounts or holdings yet.\n";
+    // A person knows roughly when they started buying; without it, every setup run left
+    // the first holding dated today and then read its short-term tax as wrong (mission 88).
+    const firstBuys = await db
+      .select({ symbol: schema.assets.symbol, first: min(schema.transactions.tradedAt) })
+      .from(schema.transactions)
+      .innerJoin(schema.assets, eq(schema.transactions.assetId, schema.assets.id))
+      .where(and(eq(schema.transactions.userId, sourceId), eq(schema.transactions.type, "buy")))
+      .groupBy(schema.assets.symbol);
+    const month = (d: Date) => d.toLocaleString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+    const since = firstBuys
+      .filter((r) => r.first && overview.data.holdings.some((h) => h.symbol === r.symbol))
+      .map((r) => `${r.symbol} in ${month(new Date(r.first!))}`);
+    freshNote = `You have just created a brand-new Beobeo account: it has no accounts or holdings yet.\n${
+      since.length ? `You first bought ${since.join(", ")}.\n` : ""
+    }`;
   }
   const brief = freshNote
     ? freshNote + appBrief(overview.data, date).replace("(as shown on your Beobeo dashboard)", "(what you own at your brokers, not in Beobeo yet)")

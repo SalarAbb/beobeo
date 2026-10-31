@@ -73,7 +73,9 @@ export async function observe(page: Page): Promise<Observation> {
     const list = [...document.querySelectorAll<HTMLElement>("[role=listbox], [role=menu]")].find(visible) ?? null;
     // The whole popover layer, so a combobox's search box beside its list is reachable too.
     const popup = list?.closest<HTMLElement>("[data-radix-popper-content-wrapper]") ?? list;
-    const dialog = document.querySelector<HTMLElement>("[role=dialog], [role=alertdialog]");
+    // The topmost open one: a date popover (role=dialog) opened inside the add form is portaled after
+    // it, and scoping to the first left its calendar unlisted, so the persona couldn't backdate (mission 89).
+    const dialog = [...document.querySelectorAll<HTMLElement>("[role=dialog], [role=alertdialog]")].filter(visible).at(-1) ?? null;
     const scope: ParentNode = popup ?? dialog ?? document;
     const sel = [
       "a[href]", "button", "input", "select", "textarea", "summary", "[contenteditable=true]",
