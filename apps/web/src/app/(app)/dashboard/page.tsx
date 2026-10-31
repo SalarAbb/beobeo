@@ -295,40 +295,91 @@ const fmtDay = (iso: string) =>
     timeZone: "UTC",
   });
 
-/** What the numbers below cover and how they fit together (petyr, mission 38:
- *  no dates, and "25.44% vs 12.81% vs 1.17% doesn't reconcile" — the growth of
- *  the picks is a total for the period, the other two are per year). */
-function PeriodNote({ m, window }: { m: MetricValues | undefined; window?: string }) {
+/** Your money in dollars over the whole history, the bridge from the strip's
+ *  tiles to the percentages below. */
+interface MoneyBridge {
+  value: number;
+  /** Put in, minus sales: the value chart's dashed line. */
+  invested: number;
+  unrealized: number;
+  realized: number;
+  dividends: number;
+}
+
+/** What the numbers below cover and how they fit together. petyr (mission 38)
+ *  had no dates; arya (mission 68) and gilderoy (mission 60) couldn't tie
+ *  "+23.91% growth of your picks" to "+9.63%" on the strip. On the All window
+ *  it starts from dollars (put in, worth now, the gain = the strip's tiles),
+ *  then says what each percentage measures and why it differs. */
+function PeriodNote({
+  m,
+  window,
+  money,
+}: {
+  m: MetricValues | undefined;
+  window?: string;
+  money?: MoneyBridge;
+}) {
   const fmt = (v: number) => `${v >= 0 ? "" : "−"}${Math.abs(v).toFixed(2)}%`;
+  const fig = (s: string) => <span className="data text-foreground">{s}</span>;
+  const gain = money ? money.value - money.invested + money.dividends : null;
+  // Only meaningful while more went in than came out of sales.
+  const gainPct =
+    money && gain !== null && money.invested > 0 ? (gain / money.invested) * 100 : null;
+  const twr = m?.twr ?? null;
+  const perYear =
+    m?.twrAnnualized != null && twr != null && twr !== m.twrAnnualized ? m.twrAnnualized : null;
+  const since = m?.from ? fmtDay(m.from) : null;
   return (
-    <p className="max-w-2xl text-sm text-muted-foreground">
+    <div className="grid max-w-2xl gap-2 text-sm text-muted-foreground">
       {/* No end date: the series is keyed by the UTC day, which reads as
-          tomorrow on a US evening. "Since" is true in every time zone. */}
-      {m?.from ? (
-        <>
-          Since <span className="data text-foreground">{fmtDay(m.from)}</span>
-          {window && <> ({window})</>}.{" "}
-        </>
-      ) : (
-        window && <>Over {window}. </>
-      )}
-      The yearly rate counts when each dollar went in. The growth of your picks
-      ignores that timing and is the total for the whole period
-      {m?.twrAnnualized != null && m.twr != null && m.twr !== m.twrAnnualized && (
-        <>
-          , about <span className="data text-foreground">{fmt(m.twrAnnualized)}</span> a
-          year
-        </>
-      )}
-      . The timing effect is the yearly rate minus that.{" "}
-      {!window && (
-        <>
-          None of them is the gain on holdings above, which compares
-          today&apos;s value with what you paid for what you still own.{" "}
-        </>
-      )}
-      Hover or tap any label for what it means.
-    </p>
+          tomorrow on a US evening. "through today" is true in every time zone. */}
+      <p>
+        {since ? (
+          <>
+            From {fig(since)} through today{window && <> ({window})</>}.{" "}
+          </>
+        ) : (
+          window && <>Over {window}. </>
+        )}
+        {money && gain !== null && (
+          <>
+            In dollars: you put in {fig(fmtUsd(money.invested))}{" "}
+            more than your sales took out, and it&apos;s worth {fig(fmtUsd(money.value))} now, {fig(fmtUsd(gain))}
+            {gainPct !== null && <> ({fig(fmtPct(gainPct))} on your money)</>}. That&apos;s
+            the {fig(fmtUsd(money.unrealized))} gain on holdings plus{" "}
+            {fig(fmtUsd(money.realized))} from sales
+            {money.dividends !== 0 && <> and {fig(fmtUsd(money.dividends))} of dividends</>}.
+            The gain on holdings&apos; percentage only compares what you still own with
+            what you paid for it.
+          </>
+        )}
+      </p>
+      <p>
+        {twr !== null ? (
+          <>
+            Growth of your picks, {fig(fmtPct(twr))}
+            {perYear !== null && <> (about {fig(fmt(perYear))} a year)</>}, is what a dollar
+            put in {since ? <>on {since}</> : "at the start"} and left alone would have
+            become
+            {gainPct !== null && Math.abs(twr - gainPct) >= 0.5 && (
+              <>
+                . Your money did {twr > gainPct ? "less" : "better"} than that dollar because
+                of when it went in: more of it was invested during the{" "}
+                {twr > gainPct ? "weaker" : "stronger"} stretches
+              </>
+            )}
+            .{" "}
+          </>
+        ) : (
+          <>The growth of your picks ignores when each dollar went in. </>
+        )}
+        The yearly rate{m?.xirr != null && <>, {fig(fmtPct(m.xirr))},</>}{" "}
+        is your money&apos;s own gain as a rate per year, counting how long each dollar was in. The timing effect
+        is the yearly rate minus the growth of your picks per year. Swings and reward for
+        risk cover the same dates. Hover or tap any label for what it means.
+      </p>
+    </div>
   );
 }
 
@@ -612,6 +663,17 @@ export default function DashboardPage() {
               window={
                 metrics.data && metrics.data.window !== "all"
                   ? WINDOWS.find((w) => w.value === metrics.data!.window)!.label
+                  : undefined
+              }
+              money={
+                metrics.data?.window === "all" && !windowed && timeseries.data?.length
+                  ? {
+                      value: totals.value,
+                      invested: timeseries.data[timeseries.data.length - 1]!.invested,
+                      unrealized: totals.unrealized,
+                      realized: totals.realized,
+                      dividends: totals.dividends,
+                    }
                   : undefined
               }
             />
