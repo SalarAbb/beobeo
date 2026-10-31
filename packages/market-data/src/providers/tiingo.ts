@@ -4,6 +4,7 @@ import {
   ProviderError,
   type AssetRef,
   type DailyClose,
+  type DividendPayment,
   type PriceProvider,
   type SearchResult,
 } from "../types";
@@ -51,6 +52,21 @@ export class TiingoProvider implements PriceProvider {
         ? { splitFactor: String(r.splitFactor) }
         : {}),
     }));
+  }
+
+  /** Cash dividends from the same EOD endpoint (`divCash` is per share on the
+   *  ex-date, 0 on other days). Interactive throttle: someone is waiting on it,
+   *  and the service memoizes the answer for hours. */
+  async getDividends(asset: AssetRef, from: string, to: string): Promise<DividendPayment[]> {
+    const url =
+      `https://api.tiingo.com/tiingo/daily/${encodeURIComponent(asset.symbol.toLowerCase())}/prices` +
+      `?startDate=${from}&endDate=${to}&columns=date,divCash&token=${this.apiKey}`;
+    const rows = z
+      .array(z.object({ date: z.string(), divCash: z.number().nullish() }))
+      .parse(await this.request(url, this.interactiveThrottle));
+    return rows
+      .filter((r) => (r.divCash ?? 0) > 0)
+      .map((r) => ({ date: r.date.slice(0, 10), amount: String(r.divCash) }));
   }
 
   async search(query: string): Promise<SearchResult[]> {

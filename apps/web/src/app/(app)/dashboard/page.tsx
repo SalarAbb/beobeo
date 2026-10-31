@@ -9,6 +9,7 @@ import { usePortfolio } from "@/components/portfolio-context";
 import { Section, StatStrip, StatTile } from "@/components/page-section";
 import { AllocationSection } from "@/components/allocation-section";
 import { NextBuySection } from "@/components/next-buy-section";
+import { DividendIncomeSection } from "@/components/dividend-income-section";
 import { ValueChart } from "@/components/charts/value-chart";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -790,6 +791,8 @@ export default function DashboardPage() {
           .map((h) => ({ symbol: h.symbol, value: h.marketValue! }))}
         lastDeposit={lastDeposit(timeseries.data)}
       />
+
+      <DividendIncomeSection holdings={data.holdings} />
 
       {/* Asked once, with the real last deposit: a $500 placeholder asked first
           meant two next-buy requests on every cold dashboard. */}

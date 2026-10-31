@@ -10,6 +10,12 @@ export interface DailyClose {
   splitFactor?: string;
 }
 
+/** A cash dividend per share on its ex-dividend date (unadjusted, decimal string). */
+export interface DividendPayment {
+  date: IsoDate;
+  amount: string;
+}
+
 export interface AssetRef {
   symbol: string;
   class: "stock" | "etf" | "fund" | "crypto" | "cash";
@@ -33,6 +39,8 @@ export interface PriceProvider {
   getIntradayQuote?(asset: AssetRef): Promise<string | null>;
   /** Many quotes in one request, keyed by upper-case symbol (missing = no quote). */
   getIntradayQuotes?(assets: AssetRef[]): Promise<Map<string, string>>;
+  /** Cash dividends per share by ex-date in an inclusive range. */
+  getDividends?(asset: AssetRef, from: IsoDate, to: IsoDate): Promise<DividendPayment[]>;
 }
 
 export class ProviderError extends Error {

@@ -10,7 +10,7 @@ import {
   type Decimal,
 } from "@beobeo/core";
 import { primePortfolioAgentCache, type PortfolioApi } from "@beobeo/agent";
-import { cached, userCacheKey } from "./cache";
+import { cached, userCacheKey, warm } from "./cache";
 import { getMarketData } from "./market-data";
 import {
   computeDcaComparison,
@@ -30,6 +30,7 @@ import {
   computeTaxProfile,
 } from "./tax-center";
 import { computeNextBuy } from "./next-buy";
+import { computeDividendEstimate } from "./dividends";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -206,6 +207,9 @@ const PRIME_EVERY_MS = 4 * 60_000;
  * skipped while the same snapshot was primed in the last 4 minutes.
  */
 export async function warmContextSnapshot(userId: string, portfolioId?: string) {
+  // Dividends come from the provider one ticker at a time (memoized for the
+  // day), so fetch them while the user types rather than inside a turn.
+  warm(() => computeDividendEstimate(userId, portfolioId));
   const snapshot = await loadContextSnapshot(userId, portfolioId);
   if (!process.env.ANTHROPIC_API_KEY) return;
   const key = `${userId}:${portfolioId ?? "all"}`;
@@ -371,6 +375,35 @@ export function makePortfolioApi(userId: string, portfolioId?: string): Portfoli
       return {
         years,
         note: "Every account, retirement accounts included (their sales aren't taxed); the snapshot's taxProfile ytd gains are the taxable part.",
+      };
+    },
+
+    async estimateDividendIncome() {
+      const e = await computeDividendEstimate(userId, portfolioId);
+      const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      return {
+        asOf: e.asOf,
+        method: "Cash paid per share over the last 12 months × shares held now. Trailing, not a forecast.",
+        yearlyUsd: e.yearlyUsd,
+        monthlyAverageUsd: e.monthlyAverageUsd,
+        yieldOnHoldingsValuePct: e.yieldOnValuePct,
+        yieldOnCostPct: e.yieldOnCostPct,
+        yieldOnWholePortfolioPct: e.yieldOnPortfolioPct,
+        byExDividendMonth: e.byMonth.map((m) => [MONTHS[m.month - 1], m.usd]),
+        columns: ["symbol", "shares", "perShareLast12Months", "paymentsAYear", "yearlyUsd", "yieldOnValuePct", "yieldOnCostPct", "lastExDate"],
+        rows: e.holdings.map((h) => [
+          h.key,
+          h.quantity,
+          h.perShareYearly,
+          h.paymentsPerYear,
+          h.yearlyUsd,
+          h.yieldOnValuePct,
+          h.yieldOnCostPct,
+          h.lastExDate,
+        ]),
+        paidNothingLast12Months: e.noPayments,
+        noDataFor: e.unavailable,
+        recordedInAppLast12MonthsUsd: e.recordedLast12MonthsUsd,
       };
     },
 

@@ -124,9 +124,7 @@ it against each digest; items cite the theme keys that motivated them.
 3. **Tolerate dust in imports.** A sell that exceeds buys by 0.000001 drops the whole
    position from the dashboard total while the chart still counts it. Clamp dust and say
    so, instead of excluding the asset. Theme: `dashboard-value-mismatch-excluded-qqq`.
-4. **Dividend income view.** Income per month and year, yield on cost (Olenna). Needs
-   simulated dividends first (see the gaps below). Theme: `income-view-monthly-dividends-yoc`.
-5. **Power layer.** ⌘K command palette (add transaction, jump to symbol, switch
+4. **Power layer.** ⌘K command palette (add transaction, jump to symbol, switch
    portfolio) and keyboard shortcuts (Hermione).
 6. **Latency instrumentation.** `Server-Timing` on tRPC and a dev overlay, so
    personas and humans see the same numbers.
@@ -165,9 +163,9 @@ format: Status is `built`, `partial` or `missing`.
 | Product | Expert metrics discoverable, not front-facing | partial | Behind a closed "Performance details" disclosure on the dashboard (R-002); waiting for the personas to confirm |
 | Product | Allocation vs. target mix + where the next deposit goes | partial | dashboard drift table and deposit split (2026-10-25); targets saved on the device only, so chat can't see them (backlog #2) |
 | Product | Export your data (CSV) | partial | Transactions → Export: transactions, realized gains by sale, open purchases (2026-10-28); no wash-sale basis adjustments, no per-year picker |
-| Product | Dividend income view | missing | backlog #4 (Olenna) |
+| Product | Dividend income view | partial | dashboard "Dividend income" + chat `estimate_dividend_income`: last 12 months' payouts per share × shares held now, by month, yield on value and cost (2026-10-30); payouts not stored (Tiingo, memoized in-process), no forward calendar |
 | Product | "Am I on track?" projections | partial | chat only: `project_growth` at 4/6/8% from your own pace, withdrawals with a bad-start case, assumptions stated (2026-10-28); no page or saved goal |
-| Product | Keyboard layer (⌘K, shortcuts) | missing | backlog #5 (Hermione) |
+| Product | Keyboard layer (⌘K, shortcuts) | missing | backlog #4 (Hermione) |
 | Product | Phone layout | partial | top-bar shell and dashboard fit 400px; other pages not yet checked at phone width |
 | Product | Visual identity matching the evolution page | built | every page converted (2026-10-25); R-001 shipped 2026-10-29 (look scores held: 3.50 → 3.64) |
 | Simulator | Personas with habits (policy) and judgment (LLM mind) | built | 11 personas, incl. one retiree drawing down monthly |
@@ -197,6 +195,7 @@ format: Status is `built`, `partial` or `missing`.
 One entry per cycle, newest first: date · branch · what shipped · theme ids
 answered · before/after signal.
 
+- **2026-10-30 · What your shares pay: a dividend income view.** Olenna (2/5, "still no income view, nothing on monthly dividends or yield on cost", two days running) asked chat to "estimate what my shares should pay per month and per year". The dashboard gained a "Dividend income" section: each holding's cash per share over the last 12 months (Tiingo's `divCash`, split-adjusted) × the shares held now, as a yearly and monthly figure, yield on value and on what you paid, Jan–Dec bars by ex-dividend month and a per-holding table, with a note that it's an estimate, not a promise, beside what's recorded in Beobeo. Chat's new `estimate_dividend_income` returns the same figures. Core `estimateDividendIncome` (3 tests); payouts aren't stored (no table without a human `db:push`), memoized 12h in-process. Olenna's portfolio: about $1,175 a year, $98 a month, 2.91% of value, 3.41% on cost. · theme `income-view-monthly-dividends-yoc` · expected signal: olenna's income notes stop; her chat dividend questions answer with one tool call.
 - **2026-10-30 · Tax Center savings show their arithmetic.** Each loss move's "saves ~$X" on Now opens a card that splits the loss by where it lands, each part at its rate. Barristan's BND: "$2,526 cancels gains on things held over a year, taxed at 15%: $379". Fred's BTC: "$433 comes off your pay at 32%: $139 · $698 carries to next year, counted at 70% of 32% = 22.4%: $156". Core `taxMoves` gives each lock, harvest and on-hold move a `landing`, using netting diffs in the engine's own order, so the parts sum to the saving exactly (golden tests extended). Chat gets the same data. · `tax-center-saving-math-unexplained` · expected: no "how did it get $X" notes on Tax Center → Now.
 - **2026-10-30 · A sale's details load the purchases it used without waiting on prices.** Petyr's sale dialog sat on "Working out which purchases this sale used…" (missions 70/71) because it waited on the whole `portfolio.position` (latest quote, price series, average-cost steps; 600–1000ms cold). New `portfolio.sales` (`computeSales`) is just the replay: 150ms cold, 4ms warm, prefetched on sell-row hover. The position page now reads its latest price and price series side by side. · `sale-detail-stuck-working-out-lots` · expected: no "Working out" wait in transactions missions.
 

@@ -31,6 +31,23 @@ describe("TiingoProvider", () => {
     expect(mockFetch.mock.calls[0]![0]).toContain("tiingo/daily/aapl/prices");
   });
 
+  it("reads cash dividends from the EOD divCash column, ex-dates only", async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      jsonResponse([
+        { date: "2026-03-12T00:00:00.000Z", divCash: 0 },
+        { date: "2026-03-13T00:00:00.000Z", divCash: 0.51 },
+        { date: "2026-03-14T00:00:00.000Z" },
+      ]),
+    );
+    const payments = await new TiingoProvider("key", mockFetch).getDividends(
+      { symbol: "KO", class: "stock" },
+      "2025-10-30",
+      "2026-10-30",
+    );
+    expect(payments).toEqual([{ date: "2026-03-13", amount: "0.51" }]);
+    expect(mockFetch.mock.calls[0]![0]).toContain("columns=date,divCash");
+  });
+
   it("maps 429 to RATE_LIMITED", async () => {
     const provider = new TiingoProvider(
       "key",

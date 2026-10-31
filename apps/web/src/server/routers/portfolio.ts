@@ -7,6 +7,7 @@ import {
   computeTimeseries,
 } from "@/server/portfolio";
 import { computeNextBuy } from "@/server/next-buy";
+import { computeDividendEstimate } from "@/server/dividends";
 import { protectedProcedure, router } from "../trpc";
 
 const scope = z.object({ portfolioId: z.uuid().optional() }).default({});
@@ -48,6 +49,11 @@ export const portfolioRouter = router({
     .query(({ ctx, input }) =>
       computeSales(ctx.userId, input.assetId, input.portfolioId),
     ),
+
+  /** Yearly dividend income from what's held now (last 12 months' payouts). */
+  dividends: protectedProcedure
+    .input(scope)
+    .query(({ ctx, input }) => computeDividendEstimate(ctx.userId, input.portfolioId)),
 
   /** "I have $n — where should it go?" — ranked picks among the user's candidates. */
   nextBuy: protectedProcedure

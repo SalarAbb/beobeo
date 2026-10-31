@@ -37,6 +37,9 @@ export interface PortfolioApi {
   /** "Am I on track for $1M?" / "how long does my money last?": the value
    *  projected at a few stated yearly returns, with every assumption named. */
   projectGrowth(request: ProjectionRequest): Promise<unknown>;
+  /** "What do my shares pay me a year / a month?": last 12 months' dividends
+   *  per share times the units held now, per holding and by month. */
+  estimateDividendIncome(): Promise<unknown>;
 }
 
 export interface ProjectionRequest {

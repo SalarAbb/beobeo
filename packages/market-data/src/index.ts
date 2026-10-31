@@ -2,6 +2,7 @@ export {
   ProviderError,
   type AssetRef,
   type DailyClose,
+  type DividendPayment,
   type PriceProvider,
   type SearchResult,
 } from "./types";

@@ -184,6 +184,13 @@ export function buildPortfolioTools(
       ),
     }),
     betaZodTool({
+      name: "estimate_dividend_income",
+      description:
+        "'What will my shares pay me a year / a month?', 'what's my yield on cost?', 'which holding pays me the most?', 'can I live on the dividends?'. For every holding: the cash it paid per share over the last 12 months (from market data, split-adjusted) times the units held now = yearly income, with yield on value and on cost, payments a year and the last ex-dividend date; totals, a Jan–Dec month-by-month line (by ex-dividend month), holdings that paid nothing, and the dividends the user recorded in the app over the same year. Works with no dividends recorded. Never estimate yields or payouts yourself.",
+      inputSchema: z.object({}),
+      run: timed("estimate_dividend_income", async () => json(await api.estimateDividendIncome())),
+    }),
+    betaZodTool({
       name: "pick_next_buy",
       description:
         "'I have $n, where should it go?' Ranks 1–5 candidate symbols for one buy of the whole amount, deterministically: 60% fit with what the user holds (lower weight after the buy wins; a single stock or coin's weight counts double, since a fund of many companies is already spread out),40% how far each sits below its 1-year high and the user's average cost; with a target mix, 90% how far short of its target each is and 10% the dip (close calls only). Returns picks best first, each with a one-sentence reason and the account it belongs in. The first pick is the answer; the second is 'another option'.",

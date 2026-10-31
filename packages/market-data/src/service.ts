@@ -10,6 +10,7 @@ import { TiingoProvider } from "./providers/tiingo";
 import {
   ProviderError,
   type AssetRef,
+  type DividendPayment,
   type PriceProvider,
   type SearchResult,
 } from "./types";
@@ -67,6 +68,11 @@ export class MarketDataService {
   /** How long a "today" read waits for quotes before serving cached closes.
    *  Quotes that land later still fill the memo for the next read. */
   private static readonly QUOTE_BUDGET_MS = 2_500;
+  /** Trailing-year dividends per asset and day (see getRecentDividends). */
+  private dividendMemo = new Map<
+    string,
+    { run: Promise<DividendPayment[] | null>; expires: number }
+  >();
 
   constructor(
     private readonly db: Db,
@@ -293,6 +299,55 @@ export class MarketDataService {
       out.set(r.assetId, list);
     }
     return out;
+  }
+
+  /**
+   * Cash dividends per share over the year to `asOf`, per asset (crypto: none).
+   * null = no provider could say (no key, a failure, a ticker it doesn't
+   * know). Not stored: there's no dividend table yet, so answers are
+   * memoized in-process for 12 hours (failures 5 minutes) and a page or chat
+   * turn pays the provider once a day per asset.
+   */
+  async getRecentDividends(
+    assets: DbAsset[],
+    asOf: IsoDate,
+  ): Promise<Map<string, DividendPayment[] | null>> {
+    const from = new Date(Date.parse(asOf) - 366 * 86_400_000).toISOString().slice(0, 10);
+    const providers = this.equity.filter((p) => p.getDividends);
+    const entries = await Promise.all(
+      assets.map(async (asset): Promise<[string, DividendPayment[] | null]> => {
+        if (asset.class === "crypto" || asset.class === "cash") return [asset.id, []];
+        if (providers.length === 0) return [asset.id, null];
+        const key = `${asset.id}:${asOf}`;
+        const memo = this.dividendMemo.get(key);
+        if (memo && memo.expires > Date.now()) return [asset.id, await memo.run];
+        let retryInMs = MarketDataService.FAILED_RANGE_TTL_MS;
+        const run = (async () => {
+          for (const p of providers) {
+            try {
+              return await p.getDividends!(asset, from, asOf);
+            } catch (err) {
+              console.warn(`[market-data] dividends for ${asset.symbol} via ${p.name}: ${(err as Error).message}`);
+              if (!(err instanceof ProviderError)) continue;
+              if (err.kind === "NOT_FOUND") return null;
+              // Tiingo's cap is hourly and shared with prices: retrying sooner
+              // only spends requests the price closes need.
+              if (err.kind === "RATE_LIMITED") retryInMs = 3_600_000;
+            }
+          }
+          return null;
+        })();
+        this.dividendMemo.set(key, { run, expires: Date.now() + 12 * 3_600_000 });
+        const payments = await run;
+        if (payments === null) this.dividendMemo.set(key, { run, expires: Date.now() + retryInMs });
+        return [asset.id, payments];
+      }),
+    );
+    if (this.dividendMemo.size > 2000) {
+      const now = Date.now();
+      for (const [k, v] of this.dividendMemo) if (v.expires <= now) this.dividendMemo.delete(k);
+    }
+    return new Map(entries);
   }
 
   /**
