@@ -23,7 +23,7 @@ export const FEATURES: Feature[] = [
   { id: "dashboard.chart", route: "/dashboard", does: "Read the value-over-time chart: change its range, hover to see a past day's value versus what you'd put in" },
   { id: "dashboard.performance", route: "/dashboard", does: "Open the performance details and understand annual return, total return, risk and timing: which dates they cover, and how they fit together; tap a label to see what it means", fits: ["expert"] },
   { id: "dashboard.holdings", route: "/dashboard", does: "Sort your holdings (by value, or gain in dollars or in percent) and open one to see its details" },
-  { id: "dashboard.allocation", route: "/dashboard", does: "See how your money is split across holdings and compare it with the mix you want", fits: ["dca"] },
+  { id: "dashboard.allocation", route: "/dashboard", does: "See how your money is split across holdings and kinds (funds, single companies, crypto) and compare it with the mix you want", fits: ["dca"] },
   { id: "dashboard.target-mix", route: "/dashboard", does: "Set or change your target mix (the percentages you want in each holding)", fits: ["dca", "expert"] },
   { id: "dashboard.next-deposit", route: "/dashboard", does: "Find out where your next deposit should go, for an amount you choose", fits: ["dca", "beginner"] },
   { id: "dashboard.next-buy", route: "/dashboard", does: "You have an amount to invest and a few things in mind: name them under \"Where should my next buy go?\", get one pick with its reason and account, ask for another, and check how it was picked", fits: ["beginner", "dca"] },

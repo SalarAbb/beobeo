@@ -788,7 +788,7 @@ export default function DashboardPage() {
       <AllocationSection
         holdings={data.holdings
           .filter((h) => h.marketValue !== null)
-          .map((h) => ({ symbol: h.symbol, value: h.marketValue! }))}
+          .map((h) => ({ symbol: h.symbol, value: h.marketValue!, class: h.class }))}
         lastDeposit={lastDeposit(timeseries.data)}
       />
 

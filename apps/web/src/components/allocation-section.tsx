@@ -83,6 +83,59 @@ function roundedWeights(holdings: { symbol: string; value: number }[]) {
   return Object.fromEntries(parts.map((p) => [p.symbol, p.pct]));
 }
 
+/** Asset classes grouped the way a person thinks of them, in display order. */
+const KINDS: { label: string; classes: string[] }[] = [
+  { label: "Funds", classes: ["etf", "fund"] },
+  { label: "Single companies", classes: ["stock"] },
+  { label: "Crypto", classes: ["crypto"] },
+  { label: "Cash", classes: ["cash"] },
+];
+
+/**
+ * "By kind: Funds 49.3% (VOO) · Crypto 22.3% (ETH 16.0%, BTC 6.3%)", so a
+ * share like "how much is crypto" needn't be added up from the donut (arya,
+ * 2026-10-31: over her 15% crypto cap and the page never said so). Renders
+ * nothing when everything is one kind.
+ */
+function KindSplit({ holdings }: { holdings: AllocationHolding[] }) {
+  const total = holdings.reduce((s, h) => s + h.value, 0);
+  if (total <= 0) return null;
+  const groups = KINDS.map((k) => {
+    const members = holdings
+      .filter((h) => k.classes.includes(h.class))
+      .sort((a, b) => b.value - a.value);
+    return { label: k.label, members, value: members.reduce((s, h) => s + h.value, 0) };
+  }).filter((g) => g.value > 0);
+  if (groups.length < 2) return null;
+  const pct = (v: number) => `${((v / total) * 100).toFixed(1)}%`;
+  return (
+    <p className="text-sm">
+      <span className="text-muted-foreground">By kind: </span>
+      {groups.map((g, i) => (
+        <span key={g.label}>
+          <span className="font-medium">{g.label}</span>{" "}
+          <span className="data">{pct(g.value)}</span>{" "}
+          <span className="text-muted-foreground">
+            (
+            {g.members.length === 1
+              ? g.members[0]!.symbol
+              : g.members.map((m, j) => (
+                  <span key={m.symbol}>
+                    {m.symbol} <span className="data">{pct(m.value)}</span>
+                    {j < g.members.length - 1 && ", "}
+                  </span>
+                ))}
+            )
+          </span>
+          {i < groups.length - 1 && <span className="text-muted-foreground"> · </span>}
+        </span>
+      ))}
+    </p>
+  );
+}
+
+type AllocationHolding = { symbol: string; value: number; class: string };
+
 const pts = (drift: number) => {
   const v = drift * 100;
   if (Math.abs(v) < 0.05) return "0.0";
@@ -100,7 +153,7 @@ export function AllocationSection({
   holdings,
   lastDeposit,
 }: {
-  holdings: { symbol: string; value: number }[];
+  holdings: AllocationHolding[];
   /** Size of the most recent net deposit, the default "next deposit". */
   lastDeposit: number | null;
 }) {
@@ -207,6 +260,7 @@ export function AllocationSection({
     return (
       <Section title="Allocation" aside={aside}>
         <AllocationDonut data={holdings} />
+        <KindSplit holdings={holdings} />
       </Section>
     );
   }
@@ -303,6 +357,7 @@ export function AllocationSection({
           </tbody>
         </table>
       </div>
+      <KindSplit holdings={holdings} />
       <div className="grid gap-2 border-t pt-4">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
           <label htmlFor="next-deposit">Your next deposit of</label>
