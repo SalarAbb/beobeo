@@ -166,7 +166,7 @@ for (const p of personas) {
 
   // Personas judge the app against what the app itself shows them (their own
   // avg-cost ledger at live quotes would manufacture "numbers don't match" noise).
-  const brief = overview ? appBrief(overview) : holdingsBrief(holdings, book, date);
+  const brief = overview ? appBrief(overview, date) : holdingsBrief(holdings, book, date);
   if (!overview) diary.push("Your dashboard failed to load.");
 
   // ---- curiosity: some days a persona wanders the app (seeded, so it can be replayed)

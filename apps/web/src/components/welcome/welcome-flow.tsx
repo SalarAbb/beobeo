@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, FileUp, PenLine, ArrowRight, Loader2 } from "lucide-react";
 import {
   bracketOptions,
+  FILING_STATUS_LABEL,
   ratesAtIncome,
   STANDARD_DEDUCTION,
   taxableFromPay,
@@ -114,9 +115,23 @@ export function WelcomeFlow({ name }: { name: string }) {
   useQuery(trpc.accounts.list.queryOptions({}));
   const createAccounts = useMutation(trpc.accounts.createMany.mutationOptions());
   const [accountsPending, setAccountsPending] = useState<Promise<unknown> | null>(null);
+  // What the earlier steps set, recapped on step 3: after setup hermione had
+  // no way to check the accounts and types it created (mission 77).
+  const [taxRecap, setTaxRecap] = useState<string | null>(null);
+  const [accountsRecap, setAccountsRecap] = useState<string | null>(null);
 
   function addAccounts(presets: AccountPreset[]) {
     setStep(3);
+    setAccountsRecap(
+      presets.length
+        ? presets
+            .map((p) => {
+              const type = TYPE_LABEL[p.type]!;
+              return p.name.toLowerCase().includes(type.toLowerCase()) ? p.name : `${p.name} (${type})`;
+            })
+            .join(", ")
+        : null,
+    );
     if (presets.length === 0) return;
     // One request for all of them (it also makes the "Main" portfolio).
     const pending = createAccounts
@@ -132,8 +147,9 @@ export function WelcomeFlow({ name }: { name: string }) {
     return (
       <TaxStep
         first={first}
-        onDone={(answers) => {
+        onDone={(answers, recap) => {
           if (answers) saveTax.mutate(answers);
+          setTaxRecap(recap ?? null);
           setStep(2);
         }}
       />
@@ -149,6 +165,10 @@ export function WelcomeFlow({ name }: { name: string }) {
     <FirstHoldingStep
       accountsPending={accountsPending}
       accountsError={createAccounts.error?.message ?? null}
+      recap={[
+        ...(taxRecap && !saveTax.error ? [{ label: "Taxes", value: taxRecap }] : []),
+        ...(accountsRecap && !createAccounts.error ? [{ label: "Accounts", value: accountsRecap }] : []),
+      ]}
     />
   );
 }
@@ -173,7 +193,7 @@ function TaxStep({
   onDone,
 }: {
   first: string;
-  onDone: (answers: TaxAnswers | null) => void;
+  onDone: (answers: TaxAnswers | null, recap?: string) => void;
 }) {
   const [status, setStatus] = useState<FilingStatus>("single");
   const [band, setBand] = useState<number | null>(null);
@@ -207,6 +227,10 @@ function TaxStep({
         band: usesPay ? null : { status, incomeFrom: picked.incomeFrom },
       });
     if (!rates && stateRate.trim() === "") return onDone(null);
+    const state = stateRate.trim() === "" ? "" : `${statePct}% state`;
+    const recap = rates
+      ? `${FILING_STATUS_LABEL[status]}: ${rates.ordinaryRatePct}% on sales held a year or less, ${rates.ltcgRatePct}% on longer ones${state && `, plus ${state}`}`
+      : state;
     onDone({
       ...(rates && {
         federalOrdinaryRatePct: rates.ordinaryRatePct,
@@ -218,7 +242,7 @@ function TaxStep({
         stateLtcgRatePct: statePct,
         stateTreatsLtcgAsOrdinary: true,
       }),
-    });
+    }, recap);
   }
 
   return (
@@ -490,9 +514,11 @@ function OptionText({ title, body }: { title: string; body: string }) {
 function FirstHoldingStep({
   accountsPending,
   accountsError,
+  recap,
 }: {
   accountsPending: Promise<unknown> | null;
   accountsError: string | null;
+  recap: { label: string; value: string }[];
 }) {
   const router = useRouter();
   // After Save the step itself says what happens next: a small "Saving…"
@@ -520,7 +546,12 @@ function FirstHoldingStep({
     >
       {saving && (
         <p role="status" className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Loader2 className="size-3.5 animate-spin" aria-hidden />
+          {/* A spinner beside "recorded" still read as a wait (mission 78). */}
+          {saved ? (
+            <Check className="size-3.5 text-gain" aria-hidden />
+          ) : (
+            <Loader2 className="size-3.5 animate-spin" aria-hidden />
+          )}
           {saved
             ? `Your ${saving} is recorded. Opening your dashboard…`
             : `Saving your ${saving}. Your dashboard opens as soon as it's in.`}
@@ -531,6 +562,16 @@ function FirstHoldingStep({
           Your accounts didn&apos;t save ({accountsError}). Add them any time on the Accounts
           page.
         </p>
+      )}
+      {recap.length > 0 && (
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-lg border px-3 py-2 text-sm">
+          {recap.map((r) => (
+            <div key={r.label} className="contents">
+              <dt className="text-muted-foreground">{r.label}</dt>
+              <dd>{r.value}</dd>
+            </div>
+          ))}
+        </dl>
       )}
       <div className="grid gap-1.5">
         {/* The form opens right here (it used to send you to /transactions,

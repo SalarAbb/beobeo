@@ -7,6 +7,7 @@
  *      [--income 42000]            (as if typed into Tax Profile → Your income)
  *      [--pay 55000]               (pay typed there instead; its taxable part is worked out)
  *      [--band 211400]            (as if setup's band with that lower edge was tapped, no pay)
+ *      [--twin]                    (as the persona's disposable mission twin, so --click may save)
  */
 import "../src/env";
 import { taxableFromPay } from "@beobeo/core/tax-brackets";
@@ -30,7 +31,8 @@ const income = opt("income"); // taxable income typed into Tax Profile → Your 
 const p = loadPersonas().find((x) => x.id === persona);
 if (!p) throw new Error(`unknown persona ${persona}`);
 const client = new AppClient();
-await client.signIn(simEmail(persona), simPassword(persona));
+// --twin signs in as the persona's disposable mission twin, for clicks that save (setup's steps).
+await client.signIn(simEmail(persona, args.includes("--twin") ? "-m" : ""), simPassword(persona));
 const browser = await launchBrowser();
 const band = opt("band"); // a setup band tapped instead of typing pay (its lower edge)
 const pay = opt("pay"); // pay typed into Tax Profile → Your income (its taxable part is worked out)

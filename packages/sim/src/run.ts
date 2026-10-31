@@ -106,12 +106,17 @@ export interface Overview {
   totals: { value: number; cost: number; unrealizedPct: number | null; realized: number; dividends: number };
 }
 
-/** The persona's holdings as their Beobeo dashboard shows them: personas judge the app by its own numbers. */
-export function appBrief(o: Overview): string {
+/**
+ * The persona's holdings as their Beobeo dashboard shows them: personas judge the app by its own numbers.
+ * A live quote is dated by the server's UTC day, tomorrow on a US evening, so anything dated `today`
+ * (the local sim date) or later reads "today": "priced 2026-10-31" next to an add form opening on
+ * Oct 30 was reported as "default trade date is a day before pricing" (missions 72, 73).
+ */
+export function appBrief(o: Overview, today?: string): string {
   const usd = (x: number) => `$${x.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
   const pct = (x: number | null) => (x === null ? "n/a" : `${x >= 0 ? "+" : ""}${x.toFixed(1)}%`);
   const lines = o.holdings.map(
-    (h) => `${h.symbol}: ${h.quantity.toFixed(4)} units, cost ${usd(h.costBasis)}, now ${h.marketValue === null ? "no price" : usd(h.marketValue)} (${pct(h.unrealizedGainPct)})${h.priceDate ? ` · priced ${h.priceDate}` : ""}`,
+    (h) => `${h.symbol}: ${h.quantity.toFixed(4)} units, cost ${usd(h.costBasis)}, now ${h.marketValue === null ? "no price" : usd(h.marketValue)} (${pct(h.unrealizedGainPct)})${h.priceDate ? ` · priced ${today && h.priceDate >= today ? "today" : h.priceDate}` : ""}`,
   );
   const issues = o.dataIssues.length ? `\nThe app flags data issues for: ${o.dataIssues.map((d) => d.symbol).join(", ")}` : "";
   return `(as shown on your Beobeo dashboard)\n${lines.join("\n")}\nTOTAL: ${usd(o.totals.value)} on ${usd(o.totals.cost)} cost (${pct(o.totals.unrealizedPct)}) · realized ${usd(o.totals.realized)} · dividends ${usd(o.totals.dividends)}${issues}`;

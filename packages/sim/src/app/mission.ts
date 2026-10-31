@@ -276,7 +276,7 @@ export async function runMission(
     schema: planSchema,
     system: personaSystem(p),
     estimateUsd: 0.02,
-    content: `Today you open Beobeo because you want to: ${feature.does}.
+    content: `Today is ${o.date}. You open Beobeo because you want to: ${feature.does}.
 Make it concrete and real for YOU: what exactly do you want to find out or get done today? Use your real holdings and numbers.
 
 What the app currently shows you hold:

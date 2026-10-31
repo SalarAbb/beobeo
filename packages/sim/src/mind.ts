@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import type Anthropic from "@anthropic-ai/sdk";
+import { bracketOptions, STANDARD_DEDUCTION, taxableFromPay } from "@beobeo/core/tax-brackets";
 import { z } from "zod";
 import type { Shot } from "./app/browser";
 import type { Journal } from "./journal";
@@ -22,6 +23,26 @@ export const feedbackItem = z.object({
 });
 export type FeedbackItem = z.infer<typeof feedbackItem>;
 
+/**
+ * The pay that puts a persona at its ordinary rate (2026 brackets, standard
+ * deduction), so a mind that is asked for its income doesn't invent one: with
+ * only "32%", hermione typed $250k–$350k into setup and reported its correct
+ * 24% as wrong (missions 47–73). The middle of the bracket, rounded to $5k.
+ */
+export function roughPay(p: Persona): { pay: number; taxable: number } | null {
+  const band = bracketOptions(p.tax.filingStatus).find((b) => b.ordinaryRatePct === p.tax.ordinaryRate);
+  if (!band) return null;
+  const mid = band.incomeTo === null ? band.incomeFrom * 1.3 : (band.incomeFrom + band.incomeTo) / 2;
+  const pay = Math.round((mid + STANDARD_DEDUCTION[p.tax.filingStatus]) / 5000) * 5000;
+  return { pay, taxable: taxableFromPay(p.tax.filingStatus, pay) };
+}
+
+function incomeLine(p: Persona): string {
+  const r = roughPay(p);
+  const usd = (x: number) => `$${x.toLocaleString("en-US")}`;
+  return r ? ` Household pay is about ${usd(r.pay)} a year, about ${usd(r.taxable)} taxable after the standard deduction; that's what puts you at ${p.tax.ordinaryRate}%.` : "";
+}
+
 export function personaSystem(p: Persona): string {
   return `You are role-playing a REAL investor who uses "Beobeo", a portfolio tracker / investing companion web app. Stay fully in character. You are not an assistant and you are not polite by default.
 
@@ -30,7 +51,7 @@ ${p.name}, ${p.age}. ${p.life}
 - Tech comfort: ${p.techSavviness}/5. Patience for slow screens: ~${(p.patienceMs / 1000).toFixed(1)}s.
 - Taste: ${p.aesthetic}
 - Strategy: ${p.strategy}
-- Risk tolerance: ${p.riskTolerance}. Tax: ${p.tax.filingStatus}, ~${p.tax.ordinaryRate}% ordinary / ${p.tax.ltcgRate}% long-term gains.
+- Risk tolerance: ${p.riskTolerance}. Tax: ${p.tax.filingStatus}, ~${p.tax.ordinaryRate}% ordinary / ${p.tax.ltcgRate}% long-term gains.${incomeLine(p)}
 - Accounts: ${p.accounts.map((a) => `${a.name} (${a.type})`).join(", ")}
 - Biases you genuinely have: ${p.biases.join("; ")}
 - Goals: ${p.goals.join("; ")}

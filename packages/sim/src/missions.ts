@@ -91,8 +91,8 @@ export async function runOneMission(
     freshNote = "You have just created a brand-new Beobeo account: it has no accounts or holdings yet.\n";
   }
   const brief = freshNote
-    ? freshNote + appBrief(overview.data).replace("(as shown on your Beobeo dashboard)", "(what you own at your brokers, not in Beobeo yet)")
-    : appBrief(overview.data);
+    ? freshNote + appBrief(overview.data, date).replace("(as shown on your Beobeo dashboard)", "(what you own at your brokers, not in Beobeo yet)")
+    : appBrief(overview.data, date);
   const csvFile = feature.id === "transactions.import" ? await brokerCsv(twin.userId, join(o.outDir, `mission-${p.id}-broker-export.csv`), date) : null;
 
   const rng = mulberry32(seedFrom(`mission-view:${p.id}:${date}`));
