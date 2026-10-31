@@ -18,7 +18,7 @@ export interface Feature {
 }
 
 export const FEATURES: Feature[] = [
-  { id: "dashboard.glance", route: "/dashboard", does: "See what your portfolio is worth and whether you're up or down, at a glance" },
+  { id: "dashboard.glance", route: "/dashboard", does: "See what your portfolio is worth and whether you're up or down, at a glance: the sentence under the header says it in dollars against what you put in, and the tiles should add up to it", fits: ["beginner"] },
   { id: "dashboard.window", route: "/dashboard", does: "Change the time window (1D, 1W, 1M, YTD, 1Y, All) to see how you did over a specific period" },
   { id: "dashboard.chart", route: "/dashboard", does: "Read the value-over-time chart: change its range, hover to see a past day's value versus what you'd put in" },
   { id: "dashboard.performance", route: "/dashboard", does: "Open the performance details and understand annual return, total return, risk and timing: which dates they cover, and how they fit together; tap a label to see what it means", fits: ["expert"] },

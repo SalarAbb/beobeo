@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Gauge } from "lucide-react";
 import Link from "next/link";
@@ -384,6 +384,83 @@ function PeriodNote({
   );
 }
 
+/** One plain sentence under the header that answers "am I doing okay?" in
+ *  dollars (R-002). augusta, two days running: "the big number is what I came
+ *  for… but I still can't tell at a glance whether I'm doing okay". On the All
+ *  window it's the PeriodNote's bridge (worth now vs. put in minus sales, plus
+ *  dividends) with the yearly rate once there's a year of history; on a window
+ *  it's the window's change after deposits and withdrawals. */
+function DashboardVerdict({
+  windowLabel,
+  money,
+  periodGain,
+  periodGainPct,
+  yearlyRate,
+}: {
+  windowLabel: string | null;
+  money?: { value: number; invested: number; dividends: number; sold: boolean };
+  periodGain: number | null;
+  periodGainPct: number | null;
+  yearlyRate: number | null;
+}) {
+  const fig = (s: string) => <span className="data font-semibold text-foreground">{s}</span>;
+  const pct = (v: number) => `${Math.abs(v).toFixed(1)}%`;
+  const dir = (v: number) => (Math.abs(v) < 0.005 ? "even" : v > 0 ? "up" : "down");
+  let body: ReactNode = null;
+  if (windowLabel) {
+    if (periodGain === null) return null;
+    const d = dir(periodGain);
+    body =
+      d === "even" ? (
+        <>Over {windowLabel} your holdings are about where they started.</>
+      ) : (
+        <>
+          Over {windowLabel} you&apos;re {d} {fig(fmtUsd(Math.abs(periodGain)))}
+          {periodGainPct !== null && <> ({pct(periodGainPct)})</>}, not counting money you
+          added or took out.
+        </>
+      );
+  } else if (money) {
+    const gain = money.value - money.invested + money.dividends;
+    const d = dir(gain);
+    if (money.invested <= 0) {
+      body = (
+        <>
+          Your sales have already taken out {fig(fmtUsd(-money.invested))} more than you put
+          in, and what&apos;s left is worth {fig(fmtUsd(money.value))}.
+        </>
+      );
+    } else {
+      body = (
+        <>
+          {d === "even" ? (
+            <>You&apos;re about even: </>
+          ) : (
+            <>
+              You&apos;re {d} {fig(fmtUsd(Math.abs(gain)))} overall: the{" "}
+            </>
+          )}
+          {d === "even" && "the "}
+          {fig(fmtUsd(money.invested))} you put in{money.sold && " (minus what sales took out)"} is
+          worth{" "}
+          {fig(fmtUsd(money.value))} now
+          {money.dividends !== 0 && <>, plus {fig(fmtUsd(money.dividends))} of dividends</>}
+          {d !== "even" && <>, {pct((gain / money.invested) * 100)} {d === "up" ? "more" : "less"}</>}
+          .
+          {yearlyRate !== null && (
+            <>
+              {" "}
+              That&apos;s about {fig(`${yearlyRate < 0 ? "−" : ""}${pct(yearlyRate)}`)} a year.
+            </>
+          )}
+        </>
+      );
+    }
+  }
+  if (!body) return null;
+  return <p className="-mt-8 max-w-3xl text-base text-ink-2">{body}</p>;
+}
+
 /** The expert numbers behind "Performance details" (R-002: one deliberate
  *  tap away, plain labels, the technical term only in the hover card). */
 function MetricsGrid({
@@ -554,6 +631,19 @@ export default function DashboardPage() {
     ? WINDOWS.find((w) => w.value === pnlWindow)!.label
     : null;
   const stale = loadingLabel ? "opacity-50 transition-opacity" : "transition-opacity";
+  const lastPoint = timeseries.data?.[timeseries.data.length - 1];
+  const lastInvested = lastPoint?.invested;
+  // A yearly rate only means something once the history spans a year (the
+  // rule Compare follows: two months annualized read as alarming).
+  const yearlyRate =
+    !windowed &&
+    metrics.data?.window === "all" &&
+    metrics.data.xirr != null &&
+    metrics.data.from &&
+    lastPoint &&
+    Date.parse(lastPoint.date) - Date.parse(metrics.data.from) >= 365 * 86_400_000
+      ? metrics.data.xirr
+      : null;
 
   return (
     <div className="mx-auto grid w-full max-w-5xl grid-cols-1 gap-12">
@@ -569,6 +659,23 @@ export default function DashboardPage() {
           </p>
         )}
       </div>
+
+      <DashboardVerdict
+        windowLabel={windowed ? windowLabel : null}
+        money={
+          !windowed && lastInvested !== undefined
+            ? {
+                value: totals.value,
+                invested: lastInvested,
+                dividends: totals.dividends,
+                sold: Math.abs(lastInvested - totals.cost) >= 0.01,
+              }
+            : undefined
+        }
+        periodGain={totals.periodGain}
+        periodGainPct={totals.periodGainPct}
+        yearlyRate={yearlyRate}
+      />
 
       {data.dataIssues.length > 0 && (
         <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-muted-foreground">
