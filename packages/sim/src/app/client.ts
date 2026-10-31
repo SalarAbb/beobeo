@@ -108,15 +108,20 @@ export class AppClient {
 
   /**
    * What opening /chat does: the page warms the portfolio snapshot while the
-   * user types. A persona "types" instantly, so callers await this (untimed,
-   * standing in for typing) before `chat`. Failures are ignored, like the page.
+   * user types. `chat.warm` answers at once and works on after the response,
+   * so this then waits as long as a person takes to read the page and type
+   * `question` (1.5s + 0.1s a character, at most 10s; untimed) before the
+   * caller sends it. Failures are ignored, like the page.
    */
-  async openChat(): Promise<number | null> {
+  async openChat(question = ""): Promise<number | null> {
+    let ms: number | null = null;
     try {
-      return (await this.mutate("chat.warm", {})).ms;
+      ms = (await this.mutate("chat.warm", {})).ms;
     } catch {
-      return null;
+      // the page ignores a failed warm-up too
     }
+    await new Promise((r) => setTimeout(r, Math.min(10_000, 1_500 + 100 * question.length)));
+    return ms;
   }
 
   /** One chat turn over SSE; times first text token and the whole answer. */

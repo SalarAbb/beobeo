@@ -1,4 +1,5 @@
 import { and, asc, desc, eq } from "drizzle-orm";
+import { after } from "next/server";
 import { z } from "zod";
 import { schema } from "@beobeo/db";
 import { warmContextSnapshot } from "../agent-api";
@@ -34,11 +35,16 @@ export const chatRouter = router({
         .orderBy(asc(schema.chatMessages.createdAt));
     }),
 
-  /** Preload what the next question's snapshot reads (see warmContextSnapshot). */
+  /**
+   * Preload what the next question's snapshot reads (see warmContextSnapshot).
+   * Answers at once and keeps working after the response (`after`): nothing
+   * waits on the result, and awaiting it held the chat page's network open
+   * for the 2.3s a cold snapshot + prompt-cache prime takes.
+   */
   warm: protectedProcedure
     .input(z.object({ portfolioId: z.uuid().optional() }))
-    .mutation(async ({ ctx, input }) => {
-      await warmContextSnapshot(ctx.userId, input.portfolioId).catch(() => {});
+    .mutation(({ ctx, input }) => {
+      after(() => warmContextSnapshot(ctx.userId, input.portfolioId).catch(() => {}));
       return null;
     }),
 

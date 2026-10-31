@@ -23,7 +23,7 @@ if (!persona || !question) {
 const client = new AppClient(APP_URL);
 await client.signIn(`sim+${persona}@beobeo.sim`, `sim-${persona}-pass-0`);
 const s = (ms: number | null) => (ms === null ? "never" : `${(ms / 1000).toFixed(1)}s`);
-if (!cold) console.log(`warm-up (page open) ${s(await client.openChat())}`);
+if (!cold) console.log(`warm-up (page open) ${s(await client.openChat(question))}`);
 const r = await client.chat(question);
 console.log(r.text);
 console.log(

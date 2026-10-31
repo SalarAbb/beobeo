@@ -267,9 +267,9 @@ for (const p of personas) {
   if (decision.question && !budgetHit) {
     const q = decision.question;
     console.log(`    asks: ${q}`);
-    // Opening /chat warms the snapshot while a person types; the warm-up
-    // stands in for that typing time, so it isn't counted as chat latency.
-    const warmMs = await client.openChat();
+    // Opening /chat warms the snapshot while a person types; openChat waits
+    // out that typing time, so it isn't counted as chat latency.
+    const warmMs = await client.openChat(q);
     if (warmMs !== null) journal.latency(runId, p.id, "chat:warm", warmMs);
     const answer = await client.chat(q);
     if (answer.firstTokenMs !== null) timed(p, "chat:first-token", answer.firstTokenMs);
