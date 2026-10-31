@@ -39,7 +39,15 @@ const usd = (s: string | undefined) => fmtUsd(Number(s ?? 0));
  *  without opening it (petyr, missions 70/71: a bare "downloading" left him
  *  no way to check the sums). */
 function describe(kind: ExportKind, s: ExportSummary): string {
-  if (kind === "transactions") return `${plural(s.rows, "transaction", "transactions")}. Opens in any spreadsheet.`;
+  if (kind === "transactions") {
+    const t = s.byType ?? {};
+    const parts = [
+      t.Buy && `bought ${usd(t.Buy)}`,
+      t.Sell && `sold ${usd(t.Sell)}`,
+      t.Dividend && `dividends ${usd(t.Dividend)}`,
+    ].filter(Boolean);
+    return `${plural(s.rows, "transaction", "transactions")}${parts.length ? `: ${parts.join(", ")} (the Amount column, after fees)` : ""}.`;
+  }
   if (kind === "realized") {
     if (s.rows === 0) return "No sales recorded yet.";
     const year = s.taxableGainThisYear;
@@ -55,6 +63,31 @@ function describe(kind: ExportKind, s: ExportSummary): string {
   }
   if (s.rows === 0) return "No purchases held.";
   return `${plural(s.rows, "purchase", "purchases")}: cost basis ${usd(s.sums["Cost basis"])}, worth ${usd(s.sums.Value)}, gain ${usd(s.sums.Gain)}.`;
+}
+
+const PER_ASSET = 8;
+
+/** Open purchases per asset, so one coin's units and cost can be checked
+ *  against the broker without a pivot table (fred, mission 74). */
+function PerAsset({ rows }: { rows: NonNullable<ExportSummary["bySymbol"]> }) {
+  if (rows.length < 2) return null;
+  const more = rows.length - PER_ASSET;
+  return (
+    <>
+      <span className="mt-1.5 grid grid-cols-[auto_1fr_auto] gap-x-3 data">
+        {rows.slice(0, PER_ASSET).map((r) => (
+          <span key={r.symbol} className="contents">
+            <span className="font-medium text-foreground">{r.symbol}</span>
+            <span className="text-right">
+              {Number(r.units).toLocaleString("en-US", { maximumFractionDigits: 8 })} units
+            </span>
+            <span className="text-right">{usd(r.costBasis)}</span>
+          </span>
+        ))}
+      </span>
+      {more > 0 && <span className="mt-1 block">{plural(more, "more asset", "more assets")} in the file.</span>}
+    </>
+  );
 }
 
 /** Fetch an export, save it, and say in the toast what the file holds.
@@ -75,10 +108,20 @@ export async function downloadExport(kind: ExportKind, portfolioId: string | nul
     a.download = name;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    // Stays until closed: the totals are there to be checked against a
+    // statement, and a timed toast vanished mid-check (fred, mission 74).
     toast.success(`Downloaded ${name}`, {
       id,
-      description: summary ? describe(kind, summary) : "It's in your Downloads folder.",
-      duration: 15_000,
+      description: summary ? (
+        <span className="block">
+          {describe(kind, summary)}
+          {summary.bySymbol && <PerAsset rows={summary.bySymbol} />}
+        </span>
+      ) : (
+        "It's in your Downloads folder."
+      ),
+      duration: Infinity,
+      closeButton: true,
     });
   } catch {
     toast.error(`Couldn't download ${title}`, {

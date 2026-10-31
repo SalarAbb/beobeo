@@ -64,6 +64,11 @@ export type ExportSummary = {
   sums: Record<string, string>;
   /** Realized only: this tax year's gain in taxable accounts. */
   taxableGainThisYear?: { year: number; rows: number; gain: string };
+  /** Open purchases only: per asset, biggest cost first, so one coin's units
+   *  and basis can be tied to a broker without a pivot table (fred, mission 74). */
+  bySymbol?: { symbol: string; rows: number; units: string; costBasis: string }[];
+  /** All transactions only: the Amount column per type ("Buy" → total). */
+  byType?: Record<string, string>;
 };
 export type ExportFile = { body: string; summary: ExportSummary };
 
@@ -85,9 +90,7 @@ function longTermOn(openedAt: Date): string {
 }
 
 function transactionsCsv(rows: ScopedTxnRow[]): ExportFile {
-  return file(
-    ["Date", "Type", "Symbol", "Name", "Asset class", "Account", "Account type", "Quantity", "Price per unit", "Fees", "Amount", "Source", "Note"],
-    rows
+  const cells: Cell[][] = rows
       .slice()
       .reverse() // newest first, like the Transactions list
       .map(({ txn, asset, account }) => {
@@ -118,8 +121,20 @@ function transactionsCsv(rows: ScopedTxnRow[]): ExportFile {
           txn.source,
           text(txn.note),
         ];
-      }),
+      });
+  const out = file(
+    ["Date", "Type", "Symbol", "Name", "Asset class", "Account", "Account type", "Quantity", "Price per unit", "Fees", "Amount", "Source", "Note"],
+    cells,
   );
+  // The Amount column per type, from the rounded cells: buys and sales summed
+  // together mean nothing, so the toast quotes each (fred, mission 94).
+  const byType = new Map<string, Decimal>();
+  for (const r of cells) {
+    const [type, amount] = [String(r[1]), r[10]];
+    if (amount != null) byType.set(type, (byType.get(type) ?? D(0)).add(D(amount)));
+  }
+  out.summary.byType = Object.fromEntries([...byType].map(([k, v]) => [k, money(v)]));
+  return out;
 }
 
 async function replay(rows: ScopedTxnRow[]) {
@@ -193,7 +208,18 @@ async function lotsCsv(rows: ScopedTxnRow[], asOf: Date): Promise<ExportFile> {
       a.lot.openedAt.getTime() - b.lot.openedAt.getTime(),
   );
   const today = toIsoDate(asOf);
-  return file(
+  // From the rounded Cost basis cells, so the per-asset figures add up to
+  // the file's column total.
+  const perSymbol = new Map<string, { rows: number; units: Decimal; cost: Decimal }>();
+  for (const { lot, asset } of lots) {
+    const t = perSymbol.get(asset.symbol) ?? { rows: 0, units: D(0), cost: D(0) };
+    perSymbol.set(asset.symbol, {
+      rows: t.rows + 1,
+      units: t.units.add(lot.quantity),
+      cost: t.cost.add(money(lot.costBasis)),
+    });
+  }
+  const out = file(
     ["Symbol", "Account", "Account type", "Bought", "Quantity", "Cost basis", "Cost per unit", "Price", "Price date", "Value", "Gain", "Term", "Long-term from"],
     lots.map(({ lot, account, asset }) => {
       const price = latest.get(asset.id);
@@ -217,6 +243,10 @@ async function lotsCsv(rows: ScopedTxnRow[], asOf: Date): Promise<ExportFile> {
     }),
     ["Cost basis", "Value", "Gain"],
   );
+  out.summary.bySymbol = [...perSymbol]
+    .sort(([a, x], [b, y]) => y.cost.cmp(x.cost) || a.localeCompare(b))
+    .map(([symbol, t]) => ({ symbol, rows: t.rows, units: t.units.toString(), costBasis: money(t.cost) }));
+  return out;
 }
 
 export async function buildExport(

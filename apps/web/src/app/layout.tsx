@@ -40,8 +40,11 @@ export default function RootLayout({
         <Providers>{children}</Providers>
         {/* One toaster for every route: per-layout ones dropped a toast when
             the route changed under it, so setup's "VOO buy recorded" vanished
-            as the dashboard opened (hermione, mission 46). */}
-        <Toaster />
+            as the dashboard opened (hermione, mission 46). Expanded, so a
+            newer toast sits above an older one instead of covering it: two
+            export summaries collapsed into one card read as "vanished"
+            (fred, mission 94). */}
+        <Toaster expand />
       </body>
     </html>
   );
