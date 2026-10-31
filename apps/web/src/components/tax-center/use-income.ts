@@ -10,6 +10,10 @@ export interface StoredIncome {
   status: FilingStatus | null;
   /** Taxable income this year (after deductions), before investment gains. */
   taxableIncomeUsd: number | null;
+  /** The pay it was worked out from (pay minus the standard deduction), when
+   *  pay was typed in setup or Tax Profile. Absent when taxable income was
+   *  typed directly, a band was tapped, or for incomes saved before 2026-10-30. */
+  payUsd?: number | null;
   /** The taxable-income band tapped in setup instead of typing pay (its
    *  lower edge, under that filing status), so Tax Profile can say which
    *  band set the rates. Absent when pay was typed or setup was skipped. */

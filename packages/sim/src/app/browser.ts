@@ -60,6 +60,8 @@ export function deviceStorage(
   taxableIncomeUsd?: number,
   /** Lower edge of the taxable-income band tapped in setup (no pay typed). */
   bandFrom?: number,
+  /** Pay typed into setup or Tax Profile (the taxable income passed is its taxable part). */
+  payUsd?: number,
 ): Record<string, string> {
   if (!userId) return {};
   const out: Record<string, string> = {};
@@ -75,6 +77,7 @@ export function deviceStorage(
     out[`beobeo.tax.income.${userId}`] = JSON.stringify({
       status,
       taxableIncomeUsd: taxableIncomeUsd ?? null,
+      payUsd: payUsd ?? null,
       band: bandFrom === undefined ? null : { status, incomeFrom: bandFrom },
     });
   }

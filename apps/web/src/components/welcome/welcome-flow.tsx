@@ -203,6 +203,7 @@ function TaxStep({
       setIncome({
         status,
         taxableIncomeUsd: usesPay ? taxable : income.taxableIncomeUsd,
+        payUsd: usesPay ? pay : (income.payUsd ?? null),
         band: usesPay ? null : { status, incomeFrom: picked.incomeFrom },
       });
     if (!rates && stateRate.trim() === "") return onDone(null);

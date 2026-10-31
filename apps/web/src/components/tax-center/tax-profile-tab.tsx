@@ -6,6 +6,7 @@ import {
   ltcgZeroUpTo,
   ratesAtIncome,
   STANDARD_DEDUCTION,
+  taxableFromPay,
   type FilingStatus,
 } from "@beobeo/core/tax-brackets";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -295,7 +296,13 @@ function RatesCheck({
   return (
     <p className="text-xs text-muted-foreground">
       At about <span className="data">{fmtUsd(complete.taxableIncomeUsd, 0)}</span> of taxable
-      income ({FILING_STATUS_LABEL[complete.status].toLowerCase()}), 2026 brackets put you at{" "}
+      income ({FILING_STATUS_LABEL[complete.status].toLowerCase()}
+      {income.payUsd != null && (
+        <>
+          , from pay of <span className="data">{fmtUsd(income.payUsd, 0)}</span>
+        </>
+      )}
+      ), 2026 brackets put you at{" "}
       <span className="data">{at.ordinaryRatePct}%</span> on short-term gains and{" "}
       <span className="data">{at.ltcgRatePct}%</span> on long-term ones
       {matches ? ", which is what these say." : "."}{" "}
@@ -337,27 +344,60 @@ const STATUS_OPTIONS: { value: FilingStatus; label: string }[] = [
   { value: "head_of_household", label: "Head of household" },
 ];
 
+function parseAmount(v: string): number | null {
+  const clean = v.replace(/[$,\s]/g, "");
+  const amount = Number(clean);
+  return clean === "" || !Number.isFinite(amount) || amount < 0 ? null : amount;
+}
+
 /**
  * Optional, saved on this device as you type (`useIncome`): the only thing it
- * changes is whether the Now tab can offer long-term gains at 0%.
+ * changes is whether the Now tab can offer long-term gains at 0%. It asks for
+ * pay, like setup, and says the taxable figure it works out: luna typed $55,000
+ * in setup and found an unexplained "38900" here (mission 69). Anyone who
+ * itemizes can type taxable income instead.
  */
 function IncomeSection() {
   const { income, setIncome } = useIncome();
-  const [text, setText] = useState(
-    income.taxableIncomeUsd === null ? "" : String(income.taxableIncomeUsd),
+  const [byPay, setByPay] = useState(
+    !(income.taxableIncomeUsd !== null && income.payUsd == null),
   );
+  const shown = byPay ? (income.payUsd ?? null) : income.taxableIncomeUsd;
+  const [text, setText] = useState(shown === null ? "" : String(shown));
   const status = income.status ?? "single";
   const top = ltcgZeroUpTo(status);
+  const deduction = STANDARD_DEDUCTION[status];
 
-  function onIncome(v: string) {
+  function onAmount(v: string) {
     setText(v);
-    const clean = v.replace(/[$,\s]/g, "");
-    const amount = Number(clean);
-    setIncome({
-      ...income,
-      status,
-      taxableIncomeUsd: clean === "" || !Number.isFinite(amount) || amount < 0 ? null : amount,
-    });
+    const amount = parseAmount(v);
+    setIncome(
+      byPay
+        ? {
+            ...income,
+            status,
+            payUsd: amount,
+            taxableIncomeUsd: amount === null ? null : taxableFromPay(status, amount),
+          }
+        : { ...income, status, payUsd: null, taxableIncomeUsd: amount },
+    );
+  }
+
+  function onStatus(s: FilingStatus) {
+    // Pay stays what it is; its taxable part moves with the standard deduction.
+    setIncome(
+      byPay && income.payUsd != null
+        ? { ...income, status: s, taxableIncomeUsd: taxableFromPay(s, income.payUsd) }
+        : { ...income, status: s },
+    );
+  }
+
+  function switchEntry() {
+    const next = !byPay;
+    setByPay(next);
+    // Carry the figure across so switching never drops what was saved.
+    const value = next ? (income.payUsd ?? null) : income.taxableIncomeUsd;
+    setText(value === null ? "" : String(value));
   }
 
   return (
@@ -373,31 +413,54 @@ function IncomeSection() {
           <Label className="text-xs text-muted-foreground">How you file</Label>
           <SegmentedControl
             value={status}
-            onChange={(s) => setIncome({ ...income, status: s })}
+            onChange={onStatus}
             options={STATUS_OPTIONS}
           />
         </div>
         <div className="grid max-w-xs gap-1.5">
           <Label htmlFor="taxable-income" className="text-xs text-muted-foreground">
-            Taxable income this year, before investment gains
+            {byPay
+              ? "Your pay this year, roughly, before investment gains"
+              : "Taxable income this year, before investment gains"}
           </Label>
           <div className="flex items-center gap-1.5">
             <Input
               id="taxable-income"
               value={text}
-              onChange={(e) => onIncome(e.target.value)}
+              onChange={(e) => onAmount(e.target.value)}
               inputMode="decimal"
-              placeholder="e.g. 42000"
+              placeholder={byPay ? "e.g. 60000" : "e.g. 42000"}
               className="data"
             />
             <span className="text-xs text-muted-foreground">$</span>
           </div>
         </div>
       </div>
+      {byPay && income.payUsd != null && income.taxableIncomeUsd !== null ? (
+        <p className="text-sm">
+          After the <span className="data">{fmtUsd(deduction, 0)}</span> standard deduction, about{" "}
+          <span className="data">{fmtUsd(income.taxableIncomeUsd, 0)}</span> of your{" "}
+          <span className="data">{fmtUsd(income.payUsd, 0)}</span> is taxable income, the figure the
+          tax brackets use.
+        </p>
+      ) : !byPay && income.taxableIncomeUsd !== null ? (
+        <p className="text-sm">
+          That&apos;s pay of about{" "}
+          <span className="data">{fmtUsd(income.taxableIncomeUsd + deduction, 0)}</span> with the{" "}
+          <span className="data">{fmtUsd(deduction, 0)}</span> standard deduction.
+        </p>
+      ) : null}
       <p className="text-xs text-muted-foreground">
-        Taxable income is pay and other income minus deductions; for most people that&apos;s
-        income minus the standard deduction (
-        <span className="data">{fmtUsd(STANDARD_DEDUCTION[status], 0)}</span> in 2026).
+        {byPay
+          ? "Taxable income is your pay minus the standard deduction. "
+          : "Taxable income is pay and other income minus deductions. "}
+        <button
+          type="button"
+          onClick={switchEntry}
+          className="text-primary underline-offset-2 hover:underline"
+        >
+          {byPay ? "I itemize: enter taxable income instead" : "Enter my pay instead"}
+        </button>
       </p>
     </Section>
   );

@@ -5,9 +5,11 @@
  * Run: pnpm --filter @beobeo/sim shoot --persona samwell --routes /dashboard,/tax-center [--out DIR]
  *      [--click '<css> | <css>']   (clicked in order after each route loads, e.g. to open a dialog)
  *      [--income 42000]            (as if typed into Tax Profile → Your income)
- *      [--band 211400]             (as if setup's band with that lower edge was tapped, no pay)
+ *      [--pay 55000]               (pay typed there instead; its taxable part is worked out)
+ *      [--band 211400]            (as if setup's band with that lower edge was tapped, no pay)
  */
 import "../src/env";
+import { taxableFromPay } from "@beobeo/core/tax-brackets";
 import { AppClient } from "../src/app/client";
 import { deviceStorage, launchBrowser, newContext, walkthrough } from "../src/app/browser";
 import { simDir } from "../src/journal";
@@ -31,11 +33,13 @@ const client = new AppClient();
 await client.signIn(simEmail(persona), simPassword(persona));
 const browser = await launchBrowser();
 const band = opt("band"); // a setup band tapped instead of typing pay (its lower edge)
+const pay = opt("pay"); // pay typed into Tax Profile → Your income (its taxable part is worked out)
 const storage = deviceStorage(
   p,
   client.userId,
-  income ? Number(income) : undefined,
+  pay ? taxableFromPay(p.tax.filingStatus, Number(pay)) : income ? Number(income) : undefined,
   band ? Number(band) : undefined,
+  pay ? Number(pay) : undefined,
 );
 for (const [viewport, scheme] of [["desktop", "light"], ["desktop", "dark"], ["mobile", "light"]] as const) {
   const ctx = await newContext(browser, {
