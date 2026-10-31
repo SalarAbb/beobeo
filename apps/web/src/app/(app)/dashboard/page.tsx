@@ -574,6 +574,13 @@ export default function DashboardPage() {
     ...trpc.portfolio.metrics.queryOptions({ ...scope, window: pnlWindow }),
     placeholderData: samePortfolio,
   });
+  // The same query Dividend income runs (one request): with none recorded,
+  // the tile's $0 sat above "your holdings paid about $240" and read as a
+  // contradiction (olenna mission 76, augusta).
+  const dividends = useQuery({
+    ...trpc.portfolio.dividends.queryOptions(scope),
+    enabled: overview.data?.holdings.some((h) => h.class !== "crypto") ?? false,
+  });
 
   const toggleSort = (key: SortKey) =>
     setSort((s) =>
@@ -719,16 +726,21 @@ export default function DashboardPage() {
           subTone="text-muted-foreground"
         />
         <StatTile
-          label={windowed ? `Dividends · ${windowLabel}` : "Dividends"}
+          label={windowed ? `Dividends received · ${windowLabel}` : "Dividends received"}
           value={fmtUsd(totals.dividends)}
           // A bare $0 next to dividend payers read as "not tracking them"
-          // (olenna): say none are recorded and where to add one.
+          // (olenna): say none are recorded, what the holdings pay, and
+          // where to add one.
           sub={
             totals.dividends !== 0 ? undefined : windowed ? (
               "None recorded in this period"
             ) : (
               <>
-                None recorded ·{" "}
+                None recorded
+                {(dividends.data?.yearlyUsd ?? 0) > 0 && (
+                  <> · yours pay about {fmtUsd(dividends.data!.yearlyUsd)} a year</>
+                )}{" "}
+                ·{" "}
                 <Link href="/transactions?add=dividend" className="underline underline-offset-2">
                   add a payout
                 </Link>

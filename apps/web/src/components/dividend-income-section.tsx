@@ -190,8 +190,8 @@ export function DividendIncomeSection({ holdings }: { holdings: { symbol: string
         {d.holdings.length > 0 && (
           <>
             An estimate from what each holding paid per share over the last 12 months (bars by
-            the month it went ex-dividend; the cash usually arrives a few weeks later), not a
-            promise: companies can raise or cut payouts.
+            the month you had to own the shares to get the payout; the cash usually arrives a
+            few weeks later), not a promise: companies can raise or cut payouts.
             {d.noPayments.length > 0 && <> {list(d.noPayments)} paid nothing in that time.</>}
             {d.unavailable.length > 0 && (
               <> Couldn&apos;t get payouts for {list(d.unavailable)} right now.</>
@@ -199,10 +199,14 @@ export function DividendIncomeSection({ holdings }: { holdings: { symbol: string
           </>
         )}
         {d.recordedLast12MonthsUsd > 0 ? (
-          <>You recorded {fmtUsd(d.recordedLast12MonthsUsd)} of dividends in Beobeo over the same year.</>
+          <>
+            You recorded {fmtUsd(d.recordedLast12MonthsUsd)} of dividends in Beobeo over the same
+            year. Dividends received at the top counts only what you record.
+          </>
         ) : (
           <>
-            None recorded in Beobeo yet ·{" "}
+            Dividends received at the top counts only payouts you record, and none are recorded
+            yet ·{" "}
             <Link href="/transactions?add=dividend" className="underline underline-offset-2">
               add a payout
             </Link>
