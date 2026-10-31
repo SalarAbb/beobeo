@@ -25,7 +25,7 @@ import {
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { METRIC_LABEL_CLASS, MetricHover } from "@/components/metric-hover";
-import { lastDeposit, nextBuyHoldings } from "@/lib/next-buy-defaults";
+import { lastDeposit, nextBuyHoldings, usualDeposit } from "@/lib/next-buy-defaults";
 import { useTRPC } from "@/lib/trpc";
 import { fmtPct, fmtQty, fmtUsd, gainClass } from "@/lib/viz";
 
@@ -803,7 +803,7 @@ export default function DashboardPage() {
           name: h.name,
           class: h.class,
         }))}
-        lastDeposit={timeseries.isPending ? undefined : lastDeposit(timeseries.data)}
+        deposit={timeseries.isPending ? undefined : usualDeposit(timeseries.data)}
       />
     </div>
   );

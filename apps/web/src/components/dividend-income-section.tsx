@@ -76,6 +76,7 @@ export function DividendIncomeSection({ holdings }: { holdings: { symbol: string
   const payersIn = (month: number) =>
     d.holdings.filter((h) => h.months.includes(month)).map((h) => h.key);
   const bars = d.byMonth.map((m) => ({ ...m, label: MONTHS[m.month - 1]! }));
+  const maxMonth = Math.max(0, ...d.byMonth.map((m) => m.usd));
 
   return (
     <Section title="Dividend income">
@@ -115,7 +116,9 @@ export function DividendIncomeSection({ holdings }: { holdings: { symbol: string
                   tickLine={false}
                   axisLine={false}
                   tick={{ fill: theme.muted, fontSize: 11 }}
-                  tickFormatter={(v: number) => fmtCompactUsd(v)}
+                  // Under $10 a month the compact format rounded ticks into
+                  // "$1, $1, $1, $0" (luna's $3.54 a year), so small axes keep cents.
+                  tickFormatter={(v: number) => (maxMonth < 10 ? fmtUsd(v) : fmtCompactUsd(v))}
                   width={56}
                   domain={[0, "auto"]}
                 />

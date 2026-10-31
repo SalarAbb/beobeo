@@ -32,12 +32,12 @@ const pctText = (x: number) => `${Number((Math.abs(x) * 100).toFixed(1))}%`;
  */
 export function NextBuySection({
   holdings,
-  lastDeposit,
+  deposit,
 }: {
   /** Largest first, like the overview. */
   holdings: PickedAsset[];
   /** undefined while the history is still loading (null = no deposit in it). */
-  lastDeposit: number | null | undefined;
+  deposit: { usd: number; usual: boolean } | null | undefined;
 }) {
   const trpc = useTRPC();
   const { portfolioId } = usePortfolio();
@@ -49,10 +49,10 @@ export function NextBuySection({
   const [howOpen, setHowOpen] = useState(false);
 
   const options = picked ?? holdings.slice(0, 3);
-  const defaultAmount = defaultNextBuyAmount(lastDeposit ?? null);
-  // Until the history says what the last deposit was, the box stays empty
+  const defaultAmount = defaultNextBuyAmount(deposit?.usd ?? null);
+  // Until the history says what the usual deposit is, the box stays empty
   // rather than showing $500 and then changing under the reader.
-  const waiting = amount === null && lastDeposit === undefined;
+  const waiting = amount === null && deposit === undefined;
   const amountStr = amount ?? (waiting ? "" : String(defaultAmount));
   const amountUsd = Math.max(0, Number(amountStr) || 0);
   // Only typing is debounced: the default goes out at once, and exactly as the
@@ -154,6 +154,15 @@ export function NextBuySection({
           )
         )}
       </div>
+      {/* An unexplained starting amount read as a wrong guess (luna, missions
+          64/66/67), so it says where it came from until the user types. */}
+      {amount === null && !waiting && (
+        <p className="-mt-1 text-xs text-muted-foreground">
+          {deposit
+            ? `$${defaultAmount.toLocaleString("en-US")} is ${deposit.usual ? "what you usually put in" : "your last deposit"}. Type the amount you have.`
+            : "Type the amount you have."}
+        </p>
+      )}
 
       {!ready ? (
         <p className="text-sm text-muted-foreground">
