@@ -33,6 +33,16 @@ export class TiingoProvider implements PriceProvider {
   // Search and quotes are interactive (typed by a user waiting on a dropdown/
   // form) — don't queue them behind slow historical backfills.
   private interactiveThrottle = new Throttle(250);
+  // A dashboard asks dividends for every holding at once, one request each:
+  // one at a time, 10 holdings kept the page loading ~2.5s, and live quotes
+  // and searches queued behind them. Same number of requests, a few at a time.
+  private dividendThrottle = new Throttle(100, 4);
+  /** After a 429, every call (the cap is one per key, shared by prices,
+   *  quotes, search and dividends) fails at once for a minute instead of
+   *  queueing for its own refusal: a rate-limited dashboard spent ~2s
+   *  collecting one 429 per holding. */
+  static readonly RATE_LIMIT_PAUSE_MS = 60_000;
+  private limitedUntil = 0;
 
   constructor(
     private readonly apiKey: string,
@@ -55,15 +65,15 @@ export class TiingoProvider implements PriceProvider {
   }
 
   /** Cash dividends from the same EOD endpoint (`divCash` is per share on the
-   *  ex-date, 0 on other days). Interactive throttle: someone is waiting on it,
-   *  and the service memoizes the answer for hours. */
+   *  ex-date, 0 on other days). Its own throttle: someone is waiting on it, it
+   *  comes in bursts, and the service memoizes the answer for hours. */
   async getDividends(asset: AssetRef, from: string, to: string): Promise<DividendPayment[]> {
     const url =
       `https://api.tiingo.com/tiingo/daily/${encodeURIComponent(asset.symbol.toLowerCase())}/prices` +
       `?startDate=${from}&endDate=${to}&columns=date,divCash&token=${this.apiKey}`;
     const rows = z
       .array(z.object({ date: z.string(), divCash: z.number().nullish() }))
-      .parse(await this.request(url, this.interactiveThrottle));
+      .parse(await this.request(url, this.dividendThrottle));
     return rows
       .filter((r) => (r.divCash ?? 0) > 0)
       .map((r) => ({ date: r.date.slice(0, 10), amount: String(r.divCash) }));
@@ -117,13 +127,17 @@ export class TiingoProvider implements PriceProvider {
     url: string,
     throttle: Throttle = this.throttle,
   ): Promise<unknown> {
+    const limited = () => Date.now() < this.limitedUntil;
     return throttle.run(async () => {
+      if (limited()) throw new ProviderError(this.name, "RATE_LIMITED", "rate limited (pausing)");
       const res = await this.fetchImpl(url, {
         headers: { "content-type": "application/json" },
         signal: providerSignal(),
       });
-      if (res.status === 429)
+      if (res.status === 429) {
+        this.limitedUntil = Date.now() + TiingoProvider.RATE_LIMIT_PAUSE_MS;
         throw new ProviderError(this.name, "RATE_LIMITED", "rate limited");
+      }
       if (res.status === 401 || res.status === 403)
         throw new ProviderError(this.name, "AUTH", "invalid API key");
       if (res.status === 404)
@@ -131,6 +145,6 @@ export class TiingoProvider implements PriceProvider {
       if (!res.ok)
         throw new ProviderError(this.name, "UPSTREAM", `HTTP ${res.status}`);
       return res.json();
-    });
+    }, limited);
   }
 }

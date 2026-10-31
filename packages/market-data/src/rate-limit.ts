@@ -12,27 +12,44 @@ export function providerSignal(): AbortSignal {
 }
 
 /**
- * Minimal per-provider throttle: serializes calls and enforces a minimum
- * interval between them. Free-tier APIs are generous enough that this plus
- * DB caching keeps us well under limits.
+ * Minimal per-provider throttle: calls start in order, at least
+ * `minIntervalMs` apart, with at most `concurrency` in flight (default 1 =
+ * fully serialized). Free-tier APIs are generous enough that this plus DB
+ * caching keeps us well under limits; their caps count requests, not how
+ * many overlap.
  */
 export class Throttle {
   private last = 0;
-  private queue: Promise<void> = Promise.resolve();
+  private active = 0;
+  private freed: (() => void)[] = [];
+  private gate: Promise<void> = Promise.resolve();
 
-  constructor(private readonly minIntervalMs: number) {}
+  constructor(
+    private readonly minIntervalMs: number,
+    private readonly concurrency = 1,
+  ) {}
 
-  run<T>(fn: () => Promise<T>): Promise<T> {
-    const result = this.queue.then(async () => {
+  /** `bypass` is asked when a call's turn comes: true runs it at once without
+   *  a slot or the interval (a call that will fail without a request, e.g.
+   *  while the provider is rate limiting us). */
+  run<T>(fn: () => Promise<T>, bypass?: () => boolean): Promise<T> {
+    let slot = false;
+    const start = this.gate.then(async () => {
+      if (bypass?.()) return;
+      slot = true;
+      while (this.active >= this.concurrency) {
+        await new Promise<void>((r) => this.freed.push(r));
+      }
       const wait = this.last + this.minIntervalMs - Date.now();
       if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       this.last = Date.now();
-      return fn();
+      this.active++;
     });
-    this.queue = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
+    this.gate = start;
+    return start.then(fn).finally(() => {
+      if (!slot) return;
+      this.active--;
+      this.freed.shift()?.();
+    });
   }
 }

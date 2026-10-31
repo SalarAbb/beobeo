@@ -58,6 +58,42 @@ describe("TiingoProvider", () => {
     ).rejects.toMatchObject({ kind: "RATE_LIMITED" });
   });
 
+  it("after a 429, fails every call at once for a minute without asking, then asks again", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+    try {
+      const mockFetch = vi
+        .fn()
+        .mockResolvedValueOnce(jsonResponse({}, 429))
+        .mockResolvedValue(jsonResponse([{ date: "2026-03-13T00:00:00.000Z", divCash: 0.51 }]));
+      const provider = new TiingoProvider("key", mockFetch);
+      const ko = { symbol: "KO", class: "stock" } as const;
+      // A dashboard's burst: one request is refused, the other nine never go out.
+      const burst = Array.from({ length: 10 }, () =>
+        provider.getDividends(ko, "2025-10-30", "2026-10-30").then(
+          () => "ok",
+          (e: ProviderError) => e.kind,
+        ),
+      );
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(await Promise.all(burst)).toEqual(Array(10).fill("RATE_LIMITED"));
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      // Prices and quotes pause too: the cap is one per key.
+      await expect(
+        provider.getDailyCloses({ symbol: "AAPL", class: "stock" }, "2024-01-01", "2024-01-05"),
+      ).rejects.toMatchObject({ kind: "RATE_LIMITED" });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(TiingoProvider.RATE_LIMIT_PAUSE_MS);
+      const after = provider.getDividends(ko, "2025-10-30", "2026-10-30");
+      await vi.advanceTimersByTimeAsync(1_000);
+      await expect(after).resolves.toEqual([{ date: "2026-03-13", amount: "0.51" }]);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("quotes many tickers in one request, skipping ones without a price", async () => {
     const mockFetch = vi.fn().mockResolvedValue(
       jsonResponse([
