@@ -583,7 +583,7 @@ export function lossLocks(
   profile: TaxProfile,
   asOf: Date,
   opts: WashSaleOpts = {},
-): { locks: LossLock[]; totalTaxSavedUsd: Decimal } {
+): { locks: LossLock[]; totalTaxSavedUsd: Decimal; plan: TaxPlan } {
   const plan = planSale({
     objective: "harvest_losses",
     targetProceeds: ZERO,
@@ -593,7 +593,7 @@ export function lossLocks(
     asOf,
   });
   const locks = groupSalesByAsset(plan.sales);
-  return { locks, totalTaxSavedUsd: ZERO.sub(plan.totalTaxCost) };
+  return { locks, totalTaxSavedUsd: ZERO.sub(plan.totalTaxCost), plan };
 }
 
 /** Per-asset totals of a harvest plan's sales, biggest saving first. */
@@ -624,11 +624,82 @@ function groupSalesByAsset(sales: PlannedSale[]): LossLock[] {
   return [...byAsset.values()].sort((a, b) => b.taxSavedUsd.cmp(a.taxSavedUsd));
 }
 
+/**
+ * Where one move's loss lands in the year's netting, in dollars of loss (all
+ * ≥ 0): the gains it cancels, by the rate they were taxed at after
+ * cross-netting (a short-term loss can cancel long-term gains), the part that
+ * comes off ordinary income (the $3,000) and the part that carries forward.
+ * The move's saving is exactly cancelsShortTerm × ordinaryRate +
+ * cancelsLongTerm × ltcgRate + offIncome × ordinaryRate + carriedForward ×
+ * ordinaryRate × carryforwardDiscount, so the UI can show the arithmetic
+ * behind "saves ~$X" (barristan: "I don't see how it gets that number").
+ */
+export interface LossLanding {
+  cancelsShortTermUsd: Decimal;
+  cancelsLongTermUsd: Decimal;
+  offIncomeUsd: Decimal;
+  carriedForwardUsd: Decimal;
+}
+
+const NO_LANDING: LossLanding = {
+  cancelsShortTermUsd: ZERO,
+  cancelsLongTermUsd: ZERO,
+  offIncomeUsd: ZERO,
+  carriedForwardUsd: ZERO,
+};
+
+type YearPosition = { st: Decimal; lt: Decimal };
+
+/** The netting difference between two year positions, as a `LossLanding`. */
+function landingBetween(before: YearPosition, after: YearPosition, r: TaxRates): LossLanding {
+  const b = explainNetting(before.st, before.lt, r);
+  const a = explainNetting(after.st, after.lt, r);
+  return {
+    cancelsShortTermUsd: b.shortTermGainTaxed.sub(a.shortTermGainTaxed),
+    cancelsLongTermUsd: b.longTermGainTaxed.sub(a.longTermGainTaxed),
+    offIncomeUsd: a.ordinaryDeduction.sub(b.ordinaryDeduction),
+    carriedForwardUsd: a.carryforward.sub(b.carryforward),
+  };
+}
+
+/** Each asset's landing for sales replayed in the engine's own order from
+ *  `start`, so per-asset landings stack exactly like their `taxSavedUsd`. */
+function landingsByAsset(
+  sales: PlannedSale[],
+  start: YearPosition,
+  r: TaxRates,
+): Map<string, LossLanding> {
+  const out = new Map<string, LossLanding>();
+  let pos = start;
+  for (const s of sales) {
+    const next = s.isLongTerm
+      ? { st: pos.st, lt: pos.lt.add(s.realizedGain) }
+      : { st: pos.st.add(s.realizedGain), lt: pos.lt };
+    const step = landingBetween(pos, next, r);
+    const sum = out.get(s.lot.assetId) ?? NO_LANDING;
+    out.set(s.lot.assetId, {
+      cancelsShortTermUsd: sum.cancelsShortTermUsd.add(step.cancelsShortTermUsd),
+      cancelsLongTermUsd: sum.cancelsLongTermUsd.add(step.cancelsLongTermUsd),
+      offIncomeUsd: sum.offIncomeUsd.add(step.offIncomeUsd),
+      carriedForwardUsd: sum.carriedForwardUsd.add(step.carriedForwardUsd),
+    });
+    pos = next;
+  }
+  return out;
+}
+
 /** One line of the "Moves available now" list. `valueUsd` is the tax it
- *  saves (null when it can't be priced against this year's profile). */
+ *  saves (null when it can't be priced against this year's profile). Loss
+ *  moves carry where their loss lands (null for a hold that clears next year). */
 export type TaxMove =
-  | { kind: "lock"; lock: LossLock; valueUsd: Decimal }
-  | { kind: "harvest"; lock: LossLock; valueUsd: Decimal; rebuyAfter: Date }
+  | { kind: "lock"; lock: LossLock; valueUsd: Decimal; landing: LossLanding }
+  | {
+      kind: "harvest";
+      lock: LossLock;
+      valueUsd: Decimal;
+      rebuyAfter: Date;
+      landing: LossLanding;
+    }
   | {
       kind: "wait";
       assetId: string;
@@ -652,6 +723,7 @@ export type TaxMove =
       /** Selling before `clearsOn` loses the loss for good (IRA rebuy). */
       permanentlyDisallowed: boolean;
       valueUsd: Decimal | null;
+      landing: LossLanding | null;
     }
   | { kind: "zero_gain"; gain: ZeroRateGain; valueUsd: Decimal };
 
@@ -853,8 +925,17 @@ export function taxMoves(
   const moves: TaxMove[] = [];
 
   const locks = lossLocks(lots, profile, asOf, opts);
-  for (const lock of locks.locks) moves.push({ kind: "lock", lock, valueUsd: lock.taxSavedUsd });
-  const lockSales = locks.locks.flatMap((l) => l.sales);
+  // In the plan's own sale order: the locks are regrouped per asset.
+  const lockSales = locks.plan.sales;
+  const lockLandings = landingsByAsset(lockSales, effectiveStart(profile), r);
+  for (const lock of locks.locks) {
+    moves.push({
+      kind: "lock",
+      lock,
+      valueUsd: lock.taxSavedUsd,
+      landing: lockLandings.get(lock.assetId) ?? NO_LANDING,
+    });
+  }
 
   const afterLocks = afterSales(profile, lockSales);
   const harvest = planSale({
@@ -866,8 +947,15 @@ export function taxMoves(
     asOf,
   });
   const rebuyAfter = addDays(utcDay(asOf), 31);
+  const harvestLandings = landingsByAsset(harvest.sales, effectiveStart(afterLocks), r);
   for (const lock of groupSalesByAsset(harvest.sales)) {
-    moves.push({ kind: "harvest", lock, valueUsd: lock.taxSavedUsd, rebuyAfter });
+    moves.push({
+      kind: "harvest",
+      lock,
+      valueUsd: lock.taxSavedUsd,
+      rebuyAfter,
+      landing: harvestLandings.get(lock.assetId) ?? NO_LANDING,
+    });
   }
   const harvestSales = [...lockSales, ...harvest.sales];
 
@@ -897,8 +985,10 @@ export function taxMoves(
       else st = st.add(gain);
     }
     let valueUsd: Decimal | null = null;
+    let landing: LossLanding | null = null;
     if (clearsOn.getTime() <= deadline.getTime()) {
       valueUsd = totalTax(afterSt, afterLt, r).sub(totalTax(st, lt, r));
+      landing = landingBetween({ st: afterSt, lt: afterLt }, { st, lt }, r);
       afterSt = st;
       afterLt = lt;
     }
@@ -913,6 +1003,7 @@ export function taxMoves(
       clearsOn,
       permanentlyDisallowed: h.blocks.some((b) => b.permanentlyDisallowed),
       valueUsd,
+      landing,
     });
   }
 

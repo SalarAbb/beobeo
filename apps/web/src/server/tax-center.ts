@@ -12,6 +12,7 @@ import {
   profileAtIncome,
   sellEverything,
   type IncomeInfo,
+  type LossLanding,
   type LossLotCandidate,
   type TaxMove,
   type PlannedSale,
@@ -240,7 +241,7 @@ export function computeAccountHoldings(userId: string, portfolioId?: string) {
 export function computeTaxNow(userId: string, portfolioId?: string, income?: IncomeInfo) {
   const scope = portfolioKey(portfolioId);
   const incomeKey = income ? `${income.status}:${Math.round(income.taxableIncomeUsd)}` : "none";
-  return cached(userCacheKey(userId, "tax-now8", scope, incomeKey), TTL.now, async () => {
+  return cached(userCacheKey(userId, "tax-now9", scope, incomeKey), TTL.now, async () => {
     const asOf = new Date();
     const [
       { lots, profile: saved, blocked, profileRow, ytdSales, ytdTaxAdvantagedGain, accountPositions },
@@ -363,6 +364,13 @@ export function computeTaxNow(userId: string, portfolioId?: string, income?: Inc
         thisYear: overview.totals.realizedThisYear,
       },
       moves: tm.moves.map(serializeMove),
+      // The rates every move's saving is worked out at (after the income
+      // adjustment), so a move's landing × these = its "saves ~$X".
+      ratesUsed: {
+        shortTermPct: profile.ordinaryRate * 100,
+        longTermPct: profile.ltcgRate * 100,
+        carryforwardCountsPct: profile.carryforwardDiscount * 100,
+      },
       movesTaxSavedUsd: tm.lockAndHarvestSavedUsd.toNumber(),
       movesBreakdown: {
         totalHarvestedLossUsd: tm.breakdown.totalHarvestedLossUsd.toNumber(),
@@ -382,6 +390,18 @@ export function computeTaxNow(userId: string, portfolioId?: string, income?: Inc
   });
 }
 
+const cents = (d: { toNumber(): number }) => Math.round(d.toNumber() * 100) / 100;
+
+/** Dollars of a move's loss by where they land; × `ratesUsed` = its saving. */
+function serializeLanding(l: LossLanding) {
+  return {
+    cancelsShortTermGainsUsd: cents(l.cancelsShortTermUsd),
+    cancelsLongTermGainsUsd: cents(l.cancelsLongTermUsd),
+    offIncomeUsd: cents(l.offIncomeUsd),
+    carriedForwardUsd: cents(l.carriedForwardUsd),
+  };
+}
+
 /** Plain-JSON move for the Now tab and the chat snapshot. */
 function serializeMove(m: TaxMove) {
   const value = m.valueUsd === null ? null : m.valueUsd.toNumber();
@@ -398,6 +418,7 @@ function serializeMove(m: TaxMove) {
         accounts: [...new Set(m.lock.sales.map((s) => s.lot.accountName))],
         rebuyAfter: m.kind === "harvest" ? toIsoDate(m.rebuyAfter) : null,
         taxSavedUsd: value,
+        landing: serializeLanding(m.landing),
       };
     case "on_hold":
       return {
@@ -410,6 +431,7 @@ function serializeMove(m: TaxMove) {
         clearsOn: toIsoDate(m.clearsOn),
         permanentlyDisallowed: m.permanentlyDisallowed,
         taxSavedUsd: value,
+        landing: m.landing && serializeLanding(m.landing),
       };
     case "wait":
       return {

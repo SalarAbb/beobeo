@@ -170,6 +170,7 @@ async function loadContextSnapshotUncached(userId: string, portfolioId?: string)
     // should make?" gets the same lines and dollars as the page.
     taxMovesNow: taxNow && {
       moves: taxNow.moves,
+      ratesUsed: taxNow.ratesUsed,
       sellMovesTaxSavedUsd: round2(taxNow.movesTaxSavedUsd),
       sellMovesLossBreakdown: taxNow.movesBreakdown,
       incomeDeductionRoomUsd: round2(taxNow.deductionRoomUsd),

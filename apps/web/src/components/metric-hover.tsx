@@ -24,17 +24,21 @@ export function MetricHover({
   yardstick,
   children,
   className,
+  align = "start",
 }: {
   label: string;
   term?: string;
   /** One-line reading of the user's own number ("fair reward for the risk"). */
   insight: string;
-  meaning: string;
+  /** One muted sentence, or a short worked list (the Tax Center's savings). */
+  meaning: ReactNode;
   /** Footer comparison; omitted for plain terms that have none. */
   yardstick?: string;
   /** The trigger's content. */
   children: ReactNode;
   className?: string;
+  /** "end" for a trigger at the right edge, so the card opens leftward. */
+  align?: "start" | "end";
 }) {
   const [open, setOpen] = useState(false);
   // A clicked card is pinned: Radix closes a tooltip on any scroll around its
@@ -70,7 +74,7 @@ export function MetricHover({
       </TooltipTrigger>
       <TooltipContent
         side="bottom"
-        align="start"
+        align={align}
         className="w-64 p-0"
         onEscapeKeyDown={() => {
           pinned.current = false;
@@ -87,7 +91,7 @@ export function MetricHover({
             {term && <span className="opacity-60"> · {term}</span>}
           </p>
           <p className="mt-1 text-sm font-semibold leading-snug first-letter:uppercase">{insight}</p>
-          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{meaning}</p>
+          <div className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{meaning}</div>
         </div>
         {yardstick && (
           <div className="mt-2.5 flex items-center gap-1.5 border-t px-3.5 py-2 text-[11px] text-muted-foreground">

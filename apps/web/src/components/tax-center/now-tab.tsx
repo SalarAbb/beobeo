@@ -154,6 +154,89 @@ function MoveText({ move: m }: { move: Move }) {
 }
 
 /**
+ * How a loss move's "saves ~$X" is worked out: each part of the loss, where
+ * it lands (cancels gains taxed at their rate, comes off your pay, carries to
+ * next year) and what that part saves. Core's landing × the rates used is the
+ * saving exactly (barristan: "saves about $442 on a $2,948 loss. I don't see
+ * how it gets that number"; hermione wanted the rate applied, to check it).
+ */
+function SavingMath({
+  move: m,
+  rates,
+  stacked,
+  children,
+}: {
+  move: Move;
+  rates: Now["ratesUsed"];
+  /** Other loss moves are counted before or after this one. */
+  stacked: boolean;
+  children: ReactNode;
+}) {
+  const l = "landing" in m ? m.landing : null;
+  if (!l || m.taxSavedUsd === null) return <>{children}</>;
+  const st = rates.shortTermPct;
+  const later = (st * rates.carryforwardCountsPct) / 100;
+  const parts = [
+    {
+      usd: l.cancelsShortTermGainsUsd,
+      what: <>cancels gains on things held a year or less, taxed at {pct(st)}</>,
+      rate: st,
+    },
+    {
+      usd: l.cancelsLongTermGainsUsd,
+      what: <>cancels gains on things held over a year, taxed at {pct(rates.longTermPct)}</>,
+      rate: rates.longTermPct,
+    },
+    {
+      usd: l.offIncomeUsd,
+      what: <>comes off your pay (up to $3,000 a year), taxed at {pct(st)}</>,
+      rate: st,
+    },
+    {
+      usd: l.carriedForwardUsd,
+      what: (
+        <>
+          carries to next year; it&apos;s only used later, so it counts as{" "}
+          {pct(rates.carryforwardCountsPct)} of {pct(st)} = {pct(later)}
+        </>
+      ),
+      rate: later,
+    },
+  ].filter((p) => p.usd >= 0.5);
+  const when = m.kind === "on_hold" ? `Sold on ${day(m.clearsOn)}, the` : "The";
+
+  return (
+    <MetricHover
+      label={`How ~${fmtUsd(m.taxSavedUsd, 0)} is worked out`}
+      insight={`${when} ${fmtUsd(m.lossUsd, 0)} loss saves about ${fmtUsd(m.taxSavedUsd, 0)} in tax.`}
+      meaning={
+        <>
+          <ul className="grid gap-1">
+            {parts.map((p, i) => (
+              <li key={i}>
+                <span className="data text-foreground">{fmtUsd(p.usd, 0)}</span> {p.what}:{" "}
+                <span className="data text-foreground">{fmtUsd((p.usd * p.rate) / 100, 0)}</span>
+              </li>
+            ))}
+          </ul>
+          {stacked && (
+            <p className="mt-1.5">
+              Each move is counted on top of the ones before it (crypto first, then other
+              sales, then the ones on hold), so no gain is cancelled twice.
+            </p>
+          )}
+        </>
+      }
+      yardstick="Your Tax Profile rates · today's prices"
+      align="end"
+      className={METRIC_LABEL_CLASS}
+    >
+      {children}
+    </MetricHover>
+  );
+}
+
+/**
  * Ties the year's totals to the sales they add up from, and to the
  * Dashboard's all-time "Gain from sales" tile: personas read that tile as
  * their tax number and called this page wrong (barristan: "$11,589 here but I
@@ -398,6 +481,7 @@ export function NowTab({
   );
   const canHarvest = d.movesTaxSavedUsd >= 5;
   const hasLocks = moves.some((m) => m.kind === "lock");
+  const lossMoves = d.moves.filter((m) => "landing" in m && m.landing).length;
   const hasZeroGains = moves.some((m) => m.kind === "zero_gain");
   // The welcome bracket says 0% long-term, but without an income figure the
   // room can't be sized (R-003).
@@ -526,11 +610,13 @@ export function NowTab({
                     {m.taxSavedUsd === null ? (
                       <span className="text-muted-foreground">clears next year</span>
                     ) : (
-                      <span className="text-gain">
-                        saves <span className="data">~{fmtUsd(m.taxSavedUsd, 0)}</span>
-                        {m.kind === "zero_gain" && " later"}
-                        {m.kind === "on_hold" && " by waiting"}
-                      </span>
+                      <SavingMath move={m} rates={d.ratesUsed} stacked={lossMoves > 1}>
+                        <span className="text-gain">
+                          saves <span className="data">~{fmtUsd(m.taxSavedUsd, 0)}</span>
+                          {m.kind === "zero_gain" && " later"}
+                          {m.kind === "on_hold" && " by waiting"}
+                        </span>
+                      </SavingMath>
                     )}
                   </span>
                 </li>

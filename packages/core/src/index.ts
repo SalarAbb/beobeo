@@ -84,6 +84,7 @@ export {
   taxMoves,
   type TaxMove,
   type TaxMoves,
+  type LossLanding,
   type TaxLot,
   type TaxProfile,
   type RipeningInfo,

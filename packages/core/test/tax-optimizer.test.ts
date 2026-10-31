@@ -683,6 +683,34 @@ describe("taxMoves (one ranked list of moves, R-003)", () => {
     expect(aaplWait.firstLongTermOn.toISOString().slice(0, 10)).toBe("2026-06-30");
     expect(aaplWait.lastLongTermOn.toISOString().slice(0, 10)).toBe("2026-07-10");
 
+    // Where each loss lands, in the engine's order (32% ordinary, 15% LT, carryforward
+    // counted at 70% of 32% = 22.4%):
+    //  BTC first (LT -4,000 from ST +2,000): cross-nets the 2,000 ST gain away, 2,000
+    //    off income -> 2,000 x .32 + 2,000 x .32 = 1,280.
+    //  ETH (ST -2,000): 1,000 more off income (3,000 cap), 1,000 carries forward
+    //    -> 320 + 224 = 544.
+    //  XYZ (LT -4,000): all 4,000 carries forward -> 896.
+    //  VTI hold (ST -1,000): carries forward -> 224.
+    const landing = (m: (typeof r.moves)[number]) => {
+      if (m.kind === "wait" || m.kind === "zero_gain" || !m.landing) throw new Error("no landing");
+      const l = m.landing;
+      return [l.cancelsShortTermUsd, l.cancelsLongTermUsd, l.offIncomeUsd, l.carriedForwardUsd].map(
+        (x) => x.toNumber(),
+      );
+    };
+    expect(landing(btcLock!)).toEqual([2000, 0, 2000, 0]);
+    expect(landing(ethLock!)).toEqual([0, 0, 1000, 1000]);
+    expect(landing(xyzHarvest!)).toEqual([0, 0, 0, 4000]);
+    expect(landing(vtiHold!)).toEqual([0, 0, 0, 1000]);
+    // The arithmetic the UI prints reproduces each saving exactly.
+    for (const m of [btcLock!, ethLock!, xyzHarvest!, vtiHold!]) {
+      const [cst, clt, inc, cf] = landing(m);
+      expect(cst! * 0.32 + clt! * 0.15 + inc! * 0.32 + cf! * 0.32 * 0.7).toBeCloseTo(
+        m.valueUsd!.toNumber(),
+        6,
+      );
+    }
+
     // Lock + harvest lines add up to the joint saving: 640 - (-2,080) = 2,720.
     expect(r.lockAndHarvestSavedUsd.toNumber()).toBeCloseTo(2720, 6);
     // 10,000 booked: 2,000 cancels the ST gain, 3,000 off income, 5,000 carries forward.
@@ -712,6 +740,14 @@ describe("taxMoves (one ranked list of moves, R-003)", () => {
     // XYZ on top of ST -1,000: LT -4,000 -> net -5,000 -> -960 - 2,000 x .224 = -1,408;
     // before: -1,000 x .32 = -320; saves 1,088.
     expect(r.moves[0]!.valueUsd!.toNumber()).toBeCloseTo(1088, 6);
+    // ...of which 2,000 comes off income (640) and 2,000 carries forward (448);
+    // the hold that clears next year has no landing.
+    const harvest = r.moves[0]!;
+    if (harvest.kind !== "harvest") throw new Error("expected harvest");
+    expect(harvest.landing.offIncomeUsd.toNumber()).toBe(2000);
+    expect(harvest.landing.carriedForwardUsd.toNumber()).toBe(4000 - 2000);
+    expect(harvest.landing.cancelsLongTermUsd.toNumber()).toBe(0);
+    expect(hold.landing).toBeNull();
   });
 
   it("is empty when nothing is down, blocked or ripening", () => {
