@@ -157,7 +157,12 @@ async function loadContextSnapshotUncached(userId: string, portfolioId?: string)
       type: a.type,
       value: held?.value ?? 0,
       costBasis: held?.costBasis ?? 0,
-      holdings: held?.holdings ?? [],
+      holdings: (held?.holdings ?? []).map((h) => ({
+        symbol: h.symbol,
+        quantity: h.quantity,
+        costBasis: h.costBasis,
+        marketValue: h.marketValue,
+      })),
     };
   });
   return {

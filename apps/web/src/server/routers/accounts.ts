@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { schema } from "@beobeo/db";
 import { invalidateUserComputations } from "../cache";
+import { computeAccountHoldings } from "../tax-center";
 import { loadAccountList } from "../transactions-list";
 import { protectedProcedure, router } from "../trpc";
 
@@ -17,6 +18,11 @@ export const accountsRouter = router({
   list: protectedProcedure
     .input(z.object({ portfolioId: z.uuid().optional() }).default({}))
     .query(({ ctx, input }) => loadAccountList(ctx.userId, input.portfolioId)),
+
+  /** What each account holds and is worth now (the Accounts page). */
+  holdings: protectedProcedure
+    .input(z.object({ portfolioId: z.uuid().optional() }).default({}))
+    .query(({ ctx, input }) => computeAccountHoldings(ctx.userId, input.portfolioId)),
 
   create: protectedProcedure
     .input(

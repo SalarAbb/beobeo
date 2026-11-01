@@ -42,8 +42,10 @@ export interface TaxLotBundle {
 }
 
 export interface AccountPosition {
+  accountId: string;
   accountName: string;
   accountType: string;
+  assetId: string;
   symbol: string;
   quantity: ReturnType<typeof D>;
   costBasis: ReturnType<typeof D>;
@@ -162,8 +164,10 @@ export async function loadTaxLots(
     if (quantity.gt(0)) {
       const latest = latestByAsset.get(asset.id);
       accountPositions.push({
+        accountId: account.id,
         accountName: account.name,
         accountType: account.accountType,
+        assetId: asset.id,
         symbol: asset.symbol,
         quantity,
         costBasis,
