@@ -252,7 +252,7 @@ export function NextBuySection({
       )}
 
       <p className="text-xs text-muted-foreground">
-        An analysis of the options you entered, not investment advice.
+        An analysis of the options you entered, not investment advice. Nothing is bought here.
       </p>
     </Section>
   );

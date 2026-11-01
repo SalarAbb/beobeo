@@ -7,7 +7,7 @@ import Link from "next/link";
 import { AssetLogo } from "@/components/asset-logo";
 import { usePortfolio } from "@/components/portfolio-context";
 import { Section, StatStrip, StatTile } from "@/components/page-section";
-import { AllocationSection } from "@/components/allocation-section";
+import { AllocationSection, useTargetMix } from "@/components/allocation-section";
 import { NextBuySection } from "@/components/next-buy-section";
 import { DividendIncomeSection } from "@/components/dividend-income-section";
 import { ValueChart } from "@/components/charts/value-chart";
@@ -587,6 +587,7 @@ export default function DashboardPage() {
     ...trpc.portfolio.dividends.queryOptions(scope),
     enabled: overview.data?.holdings.some((h) => h.class !== "crypto") ?? false,
   });
+  const hasTargets = useTargetMix() !== null;
 
   const toggleSort = (key: SortKey) =>
     setSort((s) =>
@@ -657,6 +658,18 @@ export default function DashboardPage() {
     Date.parse(lastPoint.date) - Date.parse(metrics.data.from) >= 365 * 86_400_000
       ? metrics.data.xirr
       : null;
+  const pace = withdrawalPace(timeseries.data);
+  const nextBuy = (
+    <NextBuySection
+      holdings={nextBuyHoldings(data.holdings).map((h) => ({
+        id: h.assetId,
+        symbol: h.symbol,
+        name: h.name,
+        class: h.class,
+      }))}
+      deposit={timeseries.isPending ? undefined : usualDeposit(timeseries.data)}
+    />
+  );
 
   return (
     <div className="mx-auto grid w-full max-w-5xl grid-cols-1 gap-12">
@@ -917,44 +930,26 @@ export default function DashboardPage() {
             </Table>
       </Section>
 
+      {/* Asked once, with the real last deposit: a $500 placeholder asked first
+          meant two next-buy requests on every cold dashboard. Someone who
+          mostly takes money out sees what they've taken and the tax instead,
+          with the buy question one tap away. With a target mix, Allocation's
+          deposit split is the answer and the one-pick question opens from it. */}
       <AllocationSection
         holdings={data.holdings
           .filter((h) => h.marketValue !== null)
           .map((h) => ({ symbol: h.symbol, value: h.marketValue!, class: h.class }))}
         lastDeposit={lastDeposit(timeseries.data)}
+        oneBuy={pace ? undefined : nextBuy}
       />
 
       <DividendIncomeSection holdings={data.holdings} />
 
-      {/* Asked once, with the real last deposit: a $500 placeholder asked first
-          meant two next-buy requests on every cold dashboard. Someone who
-          mostly takes money out sees what they've taken and the tax instead,
-          with the buy question one tap away. */}
-      <NextOrWithdrawal
-        nextBuy={
-          <NextBuySection
-            holdings={nextBuyHoldings(data.holdings).map((h) => ({
-              id: h.assetId,
-              symbol: h.symbol,
-              name: h.name,
-              class: h.class,
-            }))}
-            deposit={timeseries.isPending ? undefined : usualDeposit(timeseries.data)}
-          />
-        }
-        points={timeseries.data}
-      />
+      {pace ? (
+        <WithdrawalSection pace={pace} nextBuy={nextBuy} />
+      ) : (
+        !hasTargets && nextBuy
+      )}
     </div>
   );
-}
-
-function NextOrWithdrawal({
-  nextBuy,
-  points,
-}: {
-  nextBuy: ReactNode;
-  points: { date: string; invested: number }[] | undefined;
-}) {
-  const pace = withdrawalPace(points);
-  return pace ? <WithdrawalSection pace={pace} nextBuy={nextBuy} /> : nextBuy;
 }

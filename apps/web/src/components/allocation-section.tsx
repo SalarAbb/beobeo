@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { allocationDrift, fillToTarget, type TargetMix } from "@beobeo/core/allocation";
 import { AllocationDonut, allocationSlices } from "@/components/charts/allocation-donut";
 import { Section } from "@/components/page-section";
@@ -153,10 +153,14 @@ const offBy = (drift: number) => {
 export function AllocationSection({
   holdings,
   lastDeposit,
+  oneBuy,
 }: {
   holdings: AllocationHolding[];
   /** Size of the most recent net deposit, the default "next deposit". */
   lastDeposit: number | null;
+  /** "Where should my next buy go?". With a target mix it opens from the
+   *  deposit line instead of standing as a second answer below. */
+  oneBuy?: ReactNode;
 }) {
   const theme = useVizTheme();
   const { userId, portfolioId } = usePortfolio();
@@ -169,6 +173,7 @@ export function AllocationSection({
   const saved = parsePcts(raw);
   const [draft, setDraft] = useState<Record<string, string> | null>(null);
   const [deposit, setDeposit] = useState<string | null>(null);
+  const [buyingOne, setBuyingOne] = useState(false);
 
   const { colorFor } = allocationSlices(holdings, theme);
   const startEditing = () => {
@@ -295,6 +300,7 @@ export function AllocationSection({
   const scale = Math.max(...rows.map((r) => Math.max(r.current, r.target)), 0.01);
 
   return (
+    <>
     <Section title="Allocation" aside={aside}>
       <p className="text-sm">{verdict}</p>
       <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-6">
@@ -397,7 +403,21 @@ export function AllocationSection({
             your mix without selling anything.
           </p>
         )}
+        {/* The split and a separate one-pick section below read as two answers to
+            one question (minerva, 2026-11-01), so the single buy opens from here. */}
+        {oneBuy && (
+          <button
+            type="button"
+            onClick={() => setBuyingOne((b) => !b)}
+            aria-expanded={buyingOne}
+            className="justify-self-start text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+          >
+            {buyingOne ? "Hide the one-buy question" : "Making one buy instead of splitting it? Pick one"}
+          </button>
+        )}
       </div>
     </Section>
+    {buyingOne && oneBuy}
+    </>
   );
 }
