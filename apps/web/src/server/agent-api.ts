@@ -103,15 +103,50 @@ async function loadContextSnapshotUncached(userId: string, portfolioId?: string)
   // "Am I on track?" needs the saving pace; without it the agent spent a
   // slow round trip paging through transactions to estimate it.
   const contributions = contributionsFrom(series);
-  // "What would I owe if I sold X?" needs each holding's short/long-term
-  // split; without it the agent fetched lots one symbol per round trip.
-  const taxable = new Map<string, { shortTerm: number; longTerm: number }>();
+  // "What would I owe if I sold X?" / "split it by BTC, ETH and SOL, which
+  // part is long-term?" need each holding's units and gain by term, the next
+  // date more of it turns long-term and its tax if sold alone. Without them
+  // the agent fetched every lot (fred, 2026-11-01: get_tax_lots put ~5k
+  // uncached tokens in front of the answer, 5.2s to the first word).
+  const taxable = new Map<
+    string,
+    {
+      shortTerm: { units: number; gain: number };
+      longTerm: { units: number; gain: number };
+      next: { on: string; units: number } | null;
+    }
+  >();
   for (const l of taxLots) {
-    const t = taxable.get(l.symbol) ?? { shortTerm: 0, longTerm: 0 };
-    if (l.isLongTerm) t.longTerm += l.unrealizedGain;
-    else t.shortTerm += l.unrealizedGain;
-    taxable.set(l.symbol, t);
+    const t = taxable.get(l.assetId) ?? {
+      shortTerm: { units: 0, gain: 0 },
+      longTerm: { units: 0, gain: 0 },
+      next: null,
+    };
+    const side = l.isLongTerm ? t.longTerm : t.shortTerm;
+    side.units += l.quantity;
+    side.gain += l.unrealizedGain;
+    if (!l.isLongTerm) {
+      if (!t.next || l.longTermOn < t.next.on) t.next = { on: l.longTermOn, units: l.quantity };
+      else if (l.longTermOn === t.next.on) t.next.units += l.quantity;
+    }
+    taxable.set(l.assetId, t);
   }
+  const units = (n: number) => Number(n.toFixed(8));
+  /** The taxable part of one holding, sold today on its own. */
+  const ifSoldToday = (assetId: string) => {
+    const t = taxable.get(assetId);
+    if (!t) return {};
+    const alone = taxNow?.sellAllByAsset[assetId];
+    return {
+      ifSoldToday: {
+        taxableAccounts: alone?.accounts ?? [],
+        heldOverAYear: { units: units(t.longTerm.units), gainUsd: round2(t.longTerm.gain) },
+        heldUnderAYear: { units: units(t.shortTerm.units), gainUsd: round2(t.shortTerm.gain) },
+        nextTurnsLongTerm: t.next && { on: t.next.on, units: units(t.next.units) },
+        ...(alone && { taxUsd: round2(alone.taxUsd) }),
+      },
+    };
+  };
   // "What's in my IRA?" / "answer from the brokerage alone": without each
   // account's holdings the agent said it couldn't tell taxable from IRA.
   const heldIn = new Map(accountHoldings.map((a) => [a.accountName, a]));
@@ -149,12 +184,7 @@ async function loadContextSnapshotUncached(userId: string, portfolioId?: string)
       weightPct: value > 0 && h.marketValue !== null ? (h.marketValue / value) * 100 : null,
       unrealized: h.unrealizedGain,
       unrealizedPct: h.unrealizedGainPct,
-      ...(taxable.has(h.symbol) && {
-        taxableGainIfSoldNow: {
-          shortTerm: round2(taxable.get(h.symbol)!.shortTerm),
-          longTerm: round2(taxable.get(h.symbol)!.longTerm),
-        },
-      }),
+      ...ifSoldToday(h.assetId),
     })),
     dataIssues: overview.dataIssues,
     accounts,
