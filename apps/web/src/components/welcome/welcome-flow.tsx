@@ -564,14 +564,19 @@ function FirstHoldingStep({
   // The accounts still saving don't block anything: the import's account
   // pick comes after a file is chosen, and the add form waits on its Save.
   const busy = saving !== null;
-  const card = `${choice(false)} flex w-full items-start gap-3 py-3 disabled:pointer-events-none disabled:opacity-60`;
+  const card = `${choice(false)} flex w-full items-start gap-3 py-3`;
   return (
     <AuthShell
       tagline="Step 3 of 3 · Your first holding"
       title="Add what you own"
       subtitle="One holding is enough to start; the dashboard fills in as you add more."
+      // While the holding saves, the step shows only that: "Skip, show me the
+      // app" under the saving line made her wonder if Skip would drop her lot
+      // (hermione, mission 101). A failed save brings both back.
       footer={
-        <StepFooter label="Skip, show me the app" onSkip={() => router.push("/dashboard")} />
+        busy ? null : (
+          <StepFooter label="Skip, show me the app" onSkip={() => router.push("/dashboard")} />
+        )
       }
     >
       {saving && (
@@ -582,9 +587,18 @@ function FirstHoldingStep({
           ) : (
             <Loader2 className="size-3.5 animate-spin" aria-hidden />
           )}
-          {saved
-            ? `Your ${saving} is recorded. Opening your dashboard…`
-            : `Saving your ${saving}. Your dashboard opens as soon as it's in.`}
+          {/* Once it's recorded, the line is also a link: a step with no
+              control while the dashboard loaded read as a dead end (mission 102). */}
+          {saved ? (
+            <span>
+              Your {saving} is recorded.{" "}
+              <Link href="/dashboard" className="font-medium text-primary underline-offset-4 hover:underline">
+                Opening your dashboard…
+              </Link>
+            </span>
+          ) : (
+            `Saving your ${saving}. Your dashboard opens as soon as it's in.`
+          )}
         </p>
       )}
       {accountsError && (
@@ -603,7 +617,8 @@ function FirstHoldingStep({
           ))}
         </dl>
       )}
-      <div className="grid gap-1.5">
+      {/* Hidden, not unmounted, while saving: the dialog owns the save. */}
+      <div className={busy ? "hidden" : "grid gap-1.5"}>
         {/* The form opens right here (it used to send you to /transactions,
             which read as being dropped out of setup), then lands on the dashboard. */}
         <AddTransactionDialog
@@ -616,7 +631,7 @@ function FirstHoldingStep({
           defaultEntry="total"
           owned
           trigger={
-            <button type="button" className={card} disabled={busy}>
+            <button type="button" className={card}>
               <PenLine className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
               <OptionText
                 title="Type in a holding"
@@ -628,8 +643,7 @@ function FirstHoldingStep({
         />
         <Link
           href="/transactions?import=1"
-          aria-disabled={busy}
-          className={`${card} ${busy ? "pointer-events-none opacity-60" : ""}`}
+          className={card}
         >
           <FileUp className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
           <OptionText
