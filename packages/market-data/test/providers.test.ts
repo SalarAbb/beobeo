@@ -215,4 +215,30 @@ describe("CoinbaseExchangeProvider", () => {
     ]);
     expect(mockFetch.mock.calls[0]![0]).toContain("products/BTC-USD/candles");
   });
+
+  it("quotes several coins at once, not 350ms apart behind candle fetches", async () => {
+    const { CoinbaseExchangeProvider } = await import("../src/providers/coinbase-exchange");
+    let inFlight = 0;
+    let most = 0;
+    const mockFetch = vi.fn(async (url: string) => {
+      inFlight++;
+      most = Math.max(most, inFlight);
+      await new Promise((r) => setTimeout(r, 200));
+      inFlight--;
+      return new Response(JSON.stringify(url.includes("/ticker") ? { price: "100.5" } : []), { status: 200 });
+    });
+    const provider = new CoinbaseExchangeProvider(mockFetch as unknown as typeof fetch);
+    // A backfill holds the candle lane; quotes must not wait for it.
+    const backfill = provider.getDailyCloses({ symbol: "BTC", class: "crypto" }, "2024-01-01", "2024-01-02");
+    const t0 = Date.now();
+    const prices = await Promise.all(
+      ["BTC", "ETH", "SOL"].map((symbol) => provider.getIntradayQuote({ symbol, class: "crypto" })),
+    );
+    const ms = Date.now() - t0;
+    await backfill;
+    expect(prices).toEqual(["100.5", "100.5", "100.5"]);
+    expect(most).toBeGreaterThanOrEqual(3);
+    // Three 200ms requests spaced 150ms: ~500ms. Serialized at 350ms they took ~1.3s.
+    expect(ms).toBeLessThan(900);
+  });
 });

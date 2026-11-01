@@ -22,7 +22,12 @@ const DAY_S = 86_400;
  */
 export class CoinbaseExchangeProvider implements PriceProvider {
   readonly name = "coinbase-exchange";
-  private throttle = new Throttle(350); // public limit: 10 req/s — stay well under
+  // Public limit: 10 req/s per IP. Candle backfills page slowly; live quotes get
+  // their own lane (up to ~6/s, 3 in flight), so a crypto holder's page doesn't
+  // wait 350ms per coin, or behind a backfill, for today's prices (fred's Tax
+  // Center at 2.2-2.4s, 2026-11-01). Both lanes together stay under 10/s.
+  private throttle = new Throttle(350);
+  private quoteThrottle = new Throttle(150, 3);
 
   constructor(private readonly fetchImpl: typeof fetch = fetch) {}
 
@@ -54,13 +59,13 @@ export class CoinbaseExchangeProvider implements PriceProvider {
   async getIntradayQuote(asset: AssetRef): Promise<string | null> {
     const product = `${asset.symbol.toUpperCase()}-USD`;
     const url = `https://api.exchange.coinbase.com/products/${encodeURIComponent(product)}/ticker`;
-    const raw = await this.request(url, product);
+    const raw = await this.request(url, product, this.quoteThrottle);
     const parsed = z.object({ price: z.string() }).safeParse(raw);
     return parsed.success ? parsed.data.price : null;
   }
 
-  private async request(url: string, product: string): Promise<unknown> {
-    return this.throttle.run(async () => {
+  private async request(url: string, product: string, throttle = this.throttle): Promise<unknown> {
+    return throttle.run(async () => {
       const res = await this.fetchImpl(url, {
         headers: { "user-agent": "beobeo-portfolio" },
         signal: providerSignal(),

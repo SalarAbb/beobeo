@@ -166,7 +166,7 @@ for (const p of personas) {
 
   // Personas judge the app against what the app itself shows them (their own
   // avg-cost ledger at live quotes would manufacture "numbers don't match" noise).
-  const brief = overview ? appBrief(overview, date) : holdingsBrief(holdings, book, date);
+  let brief = overview ? appBrief(overview, date) : holdingsBrief(holdings, book, date);
   if (!overview) diary.push("Your dashboard failed to load.");
 
   // ---- curiosity: some days a persona wanders the app (seeded, so it can be replayed)
@@ -244,6 +244,7 @@ for (const p of personas) {
   console.log(`    mood: ${decision.mood}`);
 
   let left = Math.max(0, p.discretionaryUsdPerMonth - spentThisMonth);
+  let traded = false;
   for (const t of decision.trades) {
     const inst = p.universe.find((i) => i.symbol === t.symbol.toUpperCase());
     const close = inst ? book.closeAsOf(inst.symbol, date) : null;
@@ -262,6 +263,16 @@ for (const p of personas) {
     await executeTrade(p, client, sim.accounts, assets, { ...fill, reason: "mind" }, date, `sim:mind — ${t.why.slice(0, 200)}`);
     diary.push(`You decided to ${t.type} $${usd.toFixed(0)} of ${inst.symbol} and entered it in the app.`);
     console.log(`    mind: ${t.type} ${inst.symbol} $${usd.toFixed(0)} — ${t.why}`);
+    traded = true;
+  }
+  // A person who just traded sees the new numbers; judging the answer against the
+  // pre-trade dashboard made hermione's correct chat read "$1,000 off" (2026-11-01).
+  if (traded) {
+    const fresh = await guard("overview", async () => (await client.query<Overview>("portfolio.overview", { window: "all" })).data);
+    if (fresh) {
+      brief = appBrief(fresh, date);
+      sessions.set(p.id, { client, brief, book, diary, explored });
+    }
   }
 
   if (decision.question && !budgetHit) {
