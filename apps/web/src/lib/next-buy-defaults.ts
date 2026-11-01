@@ -76,11 +76,23 @@ const USUAL_WITHDRAWAL_FROM = 6;
  * where his "usual" $80,000 should go, his one lump deposit (2026-10-31: "I'm
  * not buying, I'm selling"). `usualUsd` is the median of the last few falls,
  * `thisYearUsd` the net taken out since Jan 1 (sales minus money put back),
- * `monthlyUsd` the last 12 months' net out ÷ 12. Null when money goes in.
+ * `monthlyUsd` the last 12 months' net out ÷ 12, `byMonth` this year's net out
+ * per calendar month, oldest first (negative = more put in than taken out),
+ * which sums to `thisYearUsd`: barristan's one $3,500 a month showed up as a
+ * VTI and a VXUS sale, and he couldn't tie the year's total to his paper
+ * record (mission 107). Null when money goes in.
  */
+export type WithdrawalPace = {
+  usualUsd: number;
+  thisYearUsd: number;
+  monthlyUsd: number;
+  year: number;
+  byMonth: { month: string; outUsd: number }[];
+};
+
 export function withdrawalPace(
   points: { date: string; invested: number }[] | undefined,
-): { usualUsd: number; thisYearUsd: number; monthlyUsd: number; year: number } | null {
+): WithdrawalPace | null {
   if (!points || points.length < 2) return null;
   const last = points[points.length - 1]!;
   const from = new Date(`${last.date}T00:00:00Z`);
@@ -92,10 +104,18 @@ export function withdrawalPace(
   const recent: number[] = [];
   // The invested line just before Jan 1 (0 when the series starts this year).
   let yearStart = points[0]!.date < `${year}-01-01` ? points[0]!.invested : 0;
+  const months = new Map<string, number>();
+  if (points[0]!.date >= `${year}-01-01`) {
+    months.set(points[0]!.date.slice(0, 7), -points[0]!.invested);
+  }
   for (let i = 1; i < points.length; i++) {
     const p = points[i]!;
     const step = p.invested - points[i - 1]!.invested;
     if (p.date < `${year}-01-01`) yearStart = p.invested;
+    else if (step !== 0) {
+      const month = p.date.slice(0, 7);
+      months.set(month, (months.get(month) ?? 0) - step);
+    }
     if (p.date <= cutoff) continue;
     if (step >= 1) rises += step;
     else if (step <= -1) {
@@ -112,5 +132,9 @@ export function withdrawalPace(
     thisYearUsd: Math.max(0, yearStart - last.invested),
     monthlyUsd: (falls - rises) / 12,
     year: Number(year),
+    byMonth: [...months]
+      .filter(([, out]) => Math.abs(out) >= 0.005)
+      .sort(([a], [b]) => (a < b ? -1 : 1))
+      .map(([month, outUsd]) => ({ month, outUsd })),
   };
 }

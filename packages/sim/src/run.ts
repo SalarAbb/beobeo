@@ -108,13 +108,20 @@ export interface Overview {
 
 /** What the dashboard's "Taking money out" section says, for someone who mostly withdraws. */
 export function withdrawalBrief(
-  pace: { usualUsd: number; thisYearUsd: number; monthlyUsd: number; year: number },
+  pace: {
+    usualUsd: number;
+    thisYearUsd: number;
+    monthlyUsd: number;
+    year: number;
+    byMonth?: { month: string; outUsd: number }[];
+  },
   taxOwedUsd: number | null,
 ): string {
   const usd = (x: number) => `$${x.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+  const months = (pace.byMonth ?? []).map((m) => `${m.month} ${usd(m.outUsd)}`).join(", ");
   const out =
     pace.thisYearUsd >= 1
-      ? `you've taken out ${usd(pace.thisYearUsd)} so far in ${pace.year}, about ${usd(pace.monthlyUsd)} a month over the last 12 months`
+      ? `you've taken out ${usd(pace.thisYearUsd)} so far in ${pace.year}, about ${usd(pace.monthlyUsd)} a month over the last 12 months${months ? ` (month by month: ${months})` : ""}`
       : `you haven't taken anything out yet in ${pace.year}`;
   const tax =
     taxOwedUsd === null
