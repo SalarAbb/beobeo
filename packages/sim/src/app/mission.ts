@@ -172,7 +172,18 @@ async function act(page: Page, a: Step["action"], o: Observation, csvFile: strin
       if (meta!.role === "select") await el!.selectOption({ label: a.text ?? "" }, { timeout: 6000 });
       else {
         await el!.click({ timeout: 6000 });
-        await page.getByRole("option", { name: a.text ?? "" }).first().click({ timeout: 6000 });
+        // Exact name first, then one that starts with it, then any containing it:
+        // a plain substring match turned olenna's "O" into "KO · 23" every time.
+        const want = (a.text ?? "").trim().toLowerCase();
+        const options = page.getByRole("option");
+        await options.first().waitFor({ timeout: 6000 });
+        const names = (await options.allInnerTexts()).map((t) => t.replace(/\s+/g, " ").trim().toLowerCase());
+        const lead = (n: string) => n.startsWith(want) && !/[a-z0-9]/.test(n.charAt(want.length));
+        const i = [(n: string) => n === want, lead, (n: string) => n.includes(want)]
+          .map((test) => names.findIndex(test))
+          .find((x) => x >= 0);
+        if (i === undefined) return `there is no option "${a.text ?? ""}" in that list`;
+        await options.nth(i).click({ timeout: 6000 });
       }
       return null;
     case "press":

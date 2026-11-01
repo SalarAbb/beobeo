@@ -83,11 +83,19 @@ export default function TransactionsPage({
   );
   // A pick the current portfolio doesn't hold reads as "All assets".
   const assetFilter = assets.data?.find((a) => a.id === assetPick) ?? null;
+  // One account's trades: petyr scrolled the whole list to find BND in his IRA
+  // (mission 97). Same input as the nav's warm-up, so it shares that entry.
+  const [accountPick, setAccountPick] = useState<string | null>(null);
+  const accounts = useQuery(
+    trpc.accounts.list.queryOptions({ portfolioId: portfolioId ?? undefined }),
+  );
+  const accountFilter = accounts.data?.find((a) => a.id === accountPick) ?? null;
   const list = useQuery({
     ...trpc.transactions.list.queryOptions({
       limit: 200,
       portfolioId: portfolioId ?? undefined,
       assetId: assetFilter?.id,
+      accountId: accountFilter?.id,
     }),
     // Switching the asset keeps the old rows (dimmed) instead of flashing a
     // loading line, but never across portfolios.
@@ -97,6 +105,21 @@ export default function TransactionsPage({
       return input?.portfolioId === (portfolioId ?? undefined) ? keepPreviousData(prev) : undefined;
     },
   });
+  // While a pick's rows load, the old list is narrowed to it at once: every
+  // coin's rows under "23 O transactions" read as a filter that didn't apply
+  // (olenna, mission 99).
+  const narrowing = list.isPlaceholderData && (assetFilter !== null || accountFilter !== null);
+  const rows = narrowing
+    ? list.data?.filter(
+        (r) =>
+          (!assetFilter || r.asset.id === assetFilter.id) &&
+          (!accountFilter || r.account.id === accountFilter.id),
+      )
+    : list.data;
+  // How many rows the pick will show, when the asset counts say (not per account).
+  const expected = assetFilter && !accountFilter ? Math.min(assetFilter.count, 200) : null;
+  // "your O transactions in Roth IRA", for the labels.
+  const what = `your ${assetFilter ? `${assetFilter.symbol} ` : ""}transactions${accountFilter ? ` in ${accountFilter.name}` : ""}`;
   const remove = useMutation(trpc.transactions.remove.mutationOptions());
   const restore = useMutation(trpc.transactions.restore.mutationOptions());
   const update = useMutation(trpc.transactions.update.mutationOptions());
@@ -227,7 +250,7 @@ export default function TransactionsPage({
   // the pair doesn't read as a double entry.
   const swapIds = new Set<string>();
   const byDay = new Map<string, TransactionRow["txn"][]>();
-  for (const { txn } of list.data ?? []) {
+  for (const { txn } of rows ?? []) {
     if (txn.type !== "buy" && txn.type !== "sell") continue;
     const key = `${txn.assetId}:${txn.tradedAt.toISOString().slice(0, 10)}:${Number(txn.quantity)}`;
     const same = byDay.get(key) ?? [];
@@ -253,40 +276,69 @@ export default function TransactionsPage({
         }
       />
 
-      {(assets.data?.length ?? 0) > 1 && (
+      {((assets.data?.length ?? 0) > 1 || (accounts.data?.length ?? 0) > 1) && (
         <div className="-mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
-          <span id="txn-asset" className="eyebrow">
+          <span id="txn-show" className="eyebrow">
             Show
           </span>
-          <Select
-            value={assetFilter?.id ?? "all"}
-            onValueChange={(v) => setAssetPick(v === "all" ? null : v)}
-          >
-            <SelectTrigger
-              aria-labelledby="txn-asset"
-              className={cn("w-48", assetFilter && "bg-accent text-primary")}
+          {(assets.data?.length ?? 0) > 1 && (
+            <Select
+              value={assetFilter?.id ?? "all"}
+              onValueChange={(v) => setAssetPick(v === "all" ? null : v)}
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All assets</SelectItem>
-              {assets.data!.map((a) => (
-                <SelectItem key={a.id} value={a.id}>
-                  {a.symbol}
-                  <span className="data text-muted-foreground"> · {a.count}</span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {assetFilter && (
+              <SelectTrigger
+                aria-labelledby="txn-show"
+                aria-label="Asset"
+                className={cn("w-40", assetFilter && "bg-accent text-primary")}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All assets</SelectItem>
+                {assets.data!.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.symbol}
+                    <span className="data text-muted-foreground"> · {a.count}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {(accounts.data?.length ?? 0) > 1 && (
+            <Select
+              value={accountFilter?.id ?? "all"}
+              onValueChange={(v) => setAccountPick(v === "all" ? null : v)}
+            >
+              <SelectTrigger
+                aria-label="Account"
+                className={cn("w-48", accountFilter && "bg-accent text-primary")}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All accounts</SelectItem>
+                {accounts.data!.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {(assetFilter || accountFilter) && (
             <span className="text-sm text-muted-foreground">
-              {assetFilter.count > 200
-                ? `The newest 200 of ${assetFilter.count} ${assetFilter.symbol} transactions.`
-                : `${assetFilter.count} ${assetFilter.symbol} transaction${assetFilter.count === 1 ? "" : "s"}, newest first.`}{" "}
+              {expected === null
+                ? `${(rows?.length ?? 0) >= 200 ? "The newest 200 of" : "All"} ${what}, newest first.`
+                : assetFilter!.count > 200
+                  ? `The newest 200 of ${assetFilter!.count} ${assetFilter!.symbol} transactions.`
+                  : `${assetFilter!.count} ${assetFilter!.symbol} transaction${assetFilter!.count === 1 ? "" : "s"}, newest first.`}{" "}
               <button
                 type="button"
                 className="text-primary underline-offset-4 hover:underline"
-                onClick={() => setAssetPick(null)}
+                onClick={() => {
+                  setAssetPick(null);
+                  setAccountPick(null);
+                }}
               >
                 Show all
               </button>
@@ -296,14 +348,14 @@ export default function TransactionsPage({
       )}
 
       <div className={cn("min-w-0 border-t transition-opacity", list.isPlaceholderData && "opacity-60")}>
-        {list.isLoading ? (
-          <TabLoading label="Loading your transactions…" className="my-4 h-24" />
+        {list.isLoading || (narrowing && rows?.length === 0) ? (
+          <TabLoading label={`Loading ${what}…`} className="my-4 h-24" />
         ) : list.isError && !list.data ? (
-          <TabError what="your transactions" onRetry={() => void list.refetch()} />
-        ) : (list.data?.length ?? 0) === 0 ? (
+          <TabError what={what} onRetry={() => void list.refetch()} />
+        ) : (rows?.length ?? 0) === 0 ? (
           <div className="py-12 text-center text-sm text-muted-foreground">
-            {assetFilter
-              ? `No ${assetFilter.symbol} transactions left.`
+            {assetFilter || accountFilter
+              ? `No ${what.replace(/^your /, "")} yet.`
               : "No transactions yet. Add one manually or import a broker CSV."}
           </div>
         ) : (
@@ -320,7 +372,7 @@ export default function TransactionsPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {list.data!.filter(({ txn }) => !pendingDelete.has(txn.id)).map(({ txn, asset, account }) => (
+              {rows!.filter(({ txn }) => !pendingDelete.has(txn.id)).map(({ txn, asset, account }) => (
                 <TableRow
                   key={txn.id}
                   className="cursor-pointer"
@@ -386,6 +438,9 @@ export default function TransactionsPage({
               ))}
             </TableBody>
           </Table>
+        )}
+        {narrowing && (rows?.length ?? 0) > 0 && (expected === null || rows!.length < expected) && (
+          <TabLoading label={`Loading the rest of ${what}…`} className="my-3 h-10" />
         )}
       </div>
 
