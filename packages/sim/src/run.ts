@@ -106,6 +106,25 @@ export interface Overview {
   totals: { value: number; cost: number; unrealizedPct: number | null; realized: number; dividends: number };
 }
 
+/** What the dashboard's "Taking money out" section says, for someone who mostly withdraws. */
+export function withdrawalBrief(
+  pace: { usualUsd: number; thisYearUsd: number; monthlyUsd: number; year: number },
+  taxOwedUsd: number | null,
+): string {
+  const usd = (x: number) => `$${x.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+  const out =
+    pace.thisYearUsd >= 1
+      ? `you've taken out ${usd(pace.thisYearUsd)} so far in ${pace.year}, about ${usd(pace.monthlyUsd)} a month over the last 12 months`
+      : `you haven't taken anything out yet in ${pace.year}`;
+  const tax =
+    taxOwedUsd === null
+      ? "the tax line didn't load"
+      : taxOwedUsd >= 1
+        ? `tax on this year's sales so far: about ${usd(taxOwedUsd)}, settled with your April return`
+        : "this year's sales owe no capital-gains tax so far";
+  return `Your dashboard's "Taking money out" section (right under the value chart) says: ${out}; ${tax}. It offers "Plan the next ${usd(pace.usualUsd)} at the least tax" (opens the Tax Center's Raise Cash).`;
+}
+
 /**
  * The persona's holdings as their Beobeo dashboard shows them: personas judge the app by its own numbers.
  * A live quote is dated by the server's UTC day, tomorrow on a US evening, so anything dated `today`

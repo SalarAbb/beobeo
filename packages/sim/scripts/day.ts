@@ -29,6 +29,7 @@ import {
   marketBrief,
   replayPolicy,
   appBrief,
+  withdrawalBrief,
   rotation,
   savePolicyState,
   type Overview,
@@ -38,6 +39,8 @@ import { assignMissions, runOneMission } from "../src/missions";
 import { ensureAssets, findUserId, loadHoldings, loadPriceBook, loadSimUser, marketData, type AssetRow } from "../src/store";
 import { budgetFor } from "../src/themes";
 import { addDays, fmtQty, todayIso, type PriceBook } from "../src/world";
+// Pure (no imports): the exact rule the dashboard uses to show "Taking money out".
+import { withdrawalPace } from "../../../apps/web/src/lib/next-buy-defaults";
 
 const args = process.argv.slice(2);
 const flag = (name: string) => args.includes(`--${name}`);
@@ -162,11 +165,26 @@ for (const p of personas) {
     diary.push(`Your dashboard numbers loaded in ${secs(r.ms)}.`);
     return r.data;
   });
-  await guard("timeseries", async () => timed(p, "trpc:portfolio.timeseries", (await client.query("portfolio.timeseries", {})).ms));
+  const series = await guard("timeseries", async () => {
+    const r = await client.query<{ date: string; invested: number }[]>("portfolio.timeseries", {});
+    timed(p, "trpc:portfolio.timeseries", r.ms);
+    return r.data;
+  });
 
   // Personas judge the app against what the app itself shows them (their own
   // avg-cost ledger at live quotes would manufacture "numbers don't match" noise).
   let brief = overview ? appBrief(overview, date) : holdingsBrief(holdings, book, date);
+  // The dashboard's "Taking money out" section, in its own words: the brief held
+  // only holdings, so barristan said for days that he "still can't see what I've
+  // taken out this year or what I'll owe in April" while the page showed both.
+  const pace = series ? withdrawalPace(series) : null;
+  let withdrawals = "";
+  if (pace) {
+    const owed = await guard("tax.now", async () => (await client.query<{ taxOwedSoFarUsd: number }>("tax.now", {})).data.taxOwedSoFarUsd);
+    withdrawals = withdrawalBrief(pace, owed ?? null);
+    brief += `\n${withdrawals}`;
+    diary.push(withdrawals);
+  }
   if (!overview) diary.push("Your dashboard failed to load.");
 
   // ---- curiosity: some days a persona wanders the app (seeded, so it can be replayed)
@@ -270,7 +288,7 @@ for (const p of personas) {
   if (traded) {
     const fresh = await guard("overview", async () => (await client.query<Overview>("portfolio.overview", { window: "all" })).data);
     if (fresh) {
-      brief = appBrief(fresh, date);
+      brief = appBrief(fresh, date) + (withdrawals ? `\n${withdrawals}` : "");
       sessions.set(p.id, { client, brief, book, diary, explored });
     }
   }

@@ -834,6 +834,12 @@ export default function DashboardPage() {
         )}
       </div>
 
+      {/* Someone living off the portfolio comes for what they've taken out and
+          what they'll owe in April. At the bottom of the page barristan read
+          past it two days running ("I still can't see what I've taken out this
+          year"), so it sits right under the chart. */}
+      {pace && <WithdrawalSection pace={pace} nextBuy={nextBuy} />}
+
       <Section title="Holdings">
             <Table className={stale}>
               <TableHeader>
@@ -932,8 +938,8 @@ export default function DashboardPage() {
 
       {/* Asked once, with the real last deposit: a $500 placeholder asked first
           meant two next-buy requests on every cold dashboard. Someone who
-          mostly takes money out sees what they've taken and the tax instead,
-          with the buy question one tap away. With a target mix, Allocation's
+          mostly takes money out gets "Taking money out" above Holdings
+          instead, with the buy question one tap away. With a target mix, Allocation's
           deposit split is the answer and the one-pick question opens from it. */}
       <AllocationSection
         holdings={data.holdings
@@ -945,11 +951,7 @@ export default function DashboardPage() {
 
       <DividendIncomeSection holdings={data.holdings} />
 
-      {pace ? (
-        <WithdrawalSection pace={pace} nextBuy={nextBuy} />
-      ) : (
-        !hasTargets && nextBuy
-      )}
+      {!pace && !hasTargets && nextBuy}
     </div>
   );
 }
