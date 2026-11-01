@@ -7,6 +7,8 @@
  */
 import "../src/env";
 import { AppClient, APP_URL } from "../src/app/client";
+import { targetMixPcts } from "../src/app/browser";
+import { loadPersonas } from "../src/persona";
 
 const all = process.argv.slice(2);
 // --cold skips the page-open warm-up, to measure a question sent the instant the page opens.
@@ -24,7 +26,8 @@ const client = new AppClient(APP_URL);
 await client.signIn(`sim+${persona}@beobeo.sim`, `sim-${persona}-pass-0`);
 const s = (ms: number | null) => (ms === null ? "never" : `${(ms / 1000).toFixed(1)}s`);
 if (!cold) console.log(`warm-up (page open) ${s(await client.openChat(question))}`);
-const r = await client.chat(question);
+const self = loadPersonas().find((p) => p.id === persona);
+const r = await client.chat(question, undefined, self && targetMixPcts(self));
 console.log(r.text);
 console.log(
   `\nfirst token ${s(r.firstTokenMs)} · total ${s(r.totalMs)} · tools: ${r.tools.join(", ") || "none"}${r.error ? ` · error: ${r.error}` : ""}`,

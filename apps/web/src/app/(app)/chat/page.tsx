@@ -16,13 +16,24 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTRPC } from "@/lib/trpc";
-import { useStoredState } from "@/lib/use-stored-state";
+import { readStored, useStoredState } from "@/lib/use-stored-state";
 import { cn } from "@/lib/utils";
 
 interface UiMessage {
   role: "user" | "assistant";
   text: string;
   toolCalls?: string[];
+}
+
+/** The target mix saved on this device (Dashboard → Allocation), sent with
+ *  each question so "how far am I from my targets?" uses it. */
+function savedTargetMix(userId: string, portfolioId: string | null) {
+  const stored = readStored<unknown>(`beobeo.targets.${userId}.${portfolioId ?? "all"}`, null);
+  if (!stored || typeof stored !== "object") return undefined;
+  const out = Object.fromEntries(
+    Object.entries(stored).filter(([, v]) => typeof v === "number" && v > 0 && v <= 100),
+  );
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 const SUGGESTIONS = [
@@ -141,6 +152,7 @@ export default function ChatPage() {
           threadId: threadId ?? undefined,
           message: text,
           portfolioId: portfolioId ?? undefined,
+          targets: savedTargetMix(userId, portfolioId),
         }),
       });
       if (!res.ok || !res.body) throw new Error(`Request failed (${res.status})`);

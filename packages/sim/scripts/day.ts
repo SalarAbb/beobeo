@@ -15,7 +15,7 @@
  */
 import "../src/env";
 import { AppClient, AppError } from "../src/app/client";
-import { deviceStorage, launchBrowser, newContext, signUpViaUi, walkthrough, type Shot } from "../src/app/browser";
+import { deviceStorage, targetMixPcts, launchBrowser, newContext, signUpViaUi, walkthrough, type Shot } from "../src/app/browser";
 import { explore, type ExploreResult } from "../src/app/explore";
 import { exploreProfile, mulberry32, seedFrom } from "../src/explore-rules";
 import { BudgetExceeded } from "../src/budget";
@@ -300,7 +300,7 @@ for (const p of personas) {
     // out that typing time, so it isn't counted as chat latency.
     const warmMs = await client.openChat(q);
     if (warmMs !== null) journal.latency(runId, p.id, "chat:warm", warmMs);
-    const answer = await client.chat(q);
+    const answer = await client.chat(q, undefined, targetMixPcts(p));
     if (answer.firstTokenMs !== null) timed(p, "chat:first-token", answer.firstTokenMs);
     journal.latency(runId, p.id, "chat:total", answer.totalMs);
     const rating = await guard("rate", () =>

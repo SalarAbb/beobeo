@@ -124,13 +124,18 @@ export class AppClient {
     return ms;
   }
 
-  /** One chat turn over SSE; times first text token and the whole answer. */
-  async chat(message: string, threadId?: string): Promise<ChatResult & { threadId?: string }> {
+  /** One chat turn over SSE; times first text token and the whole answer.
+   *  `targets` = the target mix saved on the device, which the page sends too. */
+  async chat(
+    message: string,
+    threadId?: string,
+    targets?: Record<string, number>,
+  ): Promise<ChatResult & { threadId?: string }> {
     const t0 = performance.now();
     const res = await fetch(`${this.baseUrl}/api/chat`, {
       method: "POST",
       headers: this.headers({ "content-type": "application/json" }),
-      body: JSON.stringify({ message, ...(threadId ? { threadId } : {}) }),
+      body: JSON.stringify({ message, ...(threadId ? { threadId } : {}), ...(targets ? { targets } : {}) }),
     });
     if (!res.ok || !res.body) {
       return { text: "", tools: [], firstTokenMs: null, totalMs: performance.now() - t0, error: `HTTP ${res.status}` };

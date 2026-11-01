@@ -3,6 +3,7 @@ export type {
   PortfolioApi,
   ProjectionRequest,
   RaiseCashRequest,
+  TargetMixRequest,
   TaxLotFilter,
 } from "./api";
 export { buildPortfolioTools } from "./tools";

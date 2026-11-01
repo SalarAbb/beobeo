@@ -2,7 +2,9 @@ import { and, desc, eq, ilike } from "drizzle-orm";
 import { db, schema } from "@beobeo/db";
 import {
   adjustForSplits,
+  allocationDrift,
   buysVsBenchmark,
+  fillToTarget,
   D,
   projectGrowth,
   realizedByYear,
@@ -33,6 +35,10 @@ import { computeNextBuy } from "./next-buy";
 import { computeDividendEstimate } from "./dividends";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** {VTI: 60} → {VTI: 0.6}, tickers upper-cased like the holdings. */
+const fractions = (pcts: Record<string, number>) =>
+  Object.fromEntries(Object.entries(pcts).map(([k, p]) => [k.toUpperCase(), p / 100]));
 
 /** Resolve a symbol to an asset the user actually holds/held. */
 async function findUserAsset(userId: string, symbol: string) {
@@ -264,8 +270,14 @@ export async function warmContextSnapshot(userId: string, portfolioId?: string) 
   }
 }
 
-/** Read-only PortfolioApi bound to one authenticated user. */
-export function makePortfolioApi(userId: string, portfolioId?: string): PortfolioApi {
+/** Read-only PortfolioApi bound to one authenticated user. `savedTargets` is
+ *  the target mix saved on the user's device (percent by ticker; the app keeps
+ *  it in localStorage until it has a server table), sent with the question. */
+export function makePortfolioApi(
+  userId: string,
+  portfolioId?: string,
+  savedTargets?: Record<string, number> | null,
+): PortfolioApi {
   // Memoized per api instance: the chat route starts the snapshot as soon as
   // the request arrives, alongside its thread writes, and the turn picks up
   // the same promise.
@@ -413,6 +425,73 @@ export function makePortfolioApi(userId: string, portfolioId?: string): Portfoli
       };
     },
 
+    async checkTargetMix({ targets, depositUsd }) {
+      const given = targets && Object.keys(targets).length > 0;
+      const pcts = given ? targets : savedTargets;
+      const overview = await computeOverview(userId, portfolioId);
+      const holdings = overview.holdings
+        .filter((h) => (h.marketValue ?? 0) > 0)
+        .map((h) => ({ key: h.symbol.toUpperCase(), value: h.marketValue ?? 0 }));
+      if (!pcts || Object.keys(pcts).length === 0) {
+        const total = holdings.reduce((s, h) => s + h.value, 0);
+        return {
+          error:
+            "No target mix saved on this device (Dashboard → Allocation → Set a target mix) and none given in the conversation.",
+          weightsNow: {
+            columns: ["symbol", "valueNow", "weightNowPct"],
+            rows: holdings
+              .sort((a, b) => b.value - a.value)
+              .map((h) => [h.key, round2(h.value), total > 0 ? round2((h.value / total) * 100) : 0]),
+          },
+        };
+      }
+      const mix = fractions(pcts);
+      const targetsSumPct = round2(Object.values(pcts).reduce((s, p) => s + p, 0));
+      const { total, rows } = allocationDrift(holdings, mix);
+      const furthest = rows.reduce((a, b) => (Math.abs(b.drift) > Math.abs(a.drift) ? b : a));
+      const untargeted = rows.filter((r) => r.target === 0 && r.value > 0).map((r) => r.key);
+      const buys = depositUsd ? fillToTarget(holdings, mix, depositUsd) : [];
+      return {
+        targetsFrom: given ? "the conversation" : "the mix saved on Dashboard → Allocation",
+        targetsSumPct,
+        ...(Math.abs(targetsSumPct - 100) > 0.5 && {
+          note: `The targets add up to ${targetsSumPct}%, not 100%.`,
+        }),
+        // Say these out loud: a quarter of a portfolio silently at "0% target"
+        // read as a quirk of the app (hermione, mission 109).
+        ...(untargeted.length > 0 && {
+          heldWithNoTarget: {
+            symbols: untargeted,
+            meaning: "Not in the target mix, so they count as 0% target and show as over by their whole value; a deposit never goes to them.",
+          },
+        }),
+        portfolioValue: round2(total),
+        furthestOff: furthest.key,
+        // offByPts: + = over target. toTargetUsd: + = buy this much, − = over by this much.
+        columns: ["symbol", "valueNow", "weightNowPct", "targetPct", "offByPts", "toTargetUsd"],
+        rows: rows.map((r) => [
+          r.key,
+          round2(r.value),
+          round2(r.current * 100),
+          round2(r.target * 100),
+          round2(r.drift * 100),
+          round2(r.gapUsd),
+        ]),
+        ...(depositUsd && {
+          depositSplit: {
+            depositUsd,
+            buys: buys.map((b) => [b.key, b.amountUsd]),
+            how: "Tops up the holding furthest under its target first, then the next once they're level, and never needs a sale (the dashboard's next-deposit split).",
+            // "BTC is under target yet gets $0 — tell me why" (mission 109).
+            underTargetButNothing: rows
+              .filter((r) => r.target > 0 && r.gapUsd > 0 && !buys.some((b) => b.key === r.key))
+              .map((r) => r.key),
+            underTargetButNothingWhy: "Closer to target than the others; this deposit runs out before they catch up to it.",
+          },
+        }),
+      };
+    },
+
     async estimateDividendIncome() {
       const e = await computeDividendEstimate(userId, portfolioId);
       const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -456,7 +535,8 @@ export function makePortfolioApi(userId: string, portfolioId?: string): Portfoli
       if (assetIds.length === 0) {
         return { error: `Unknown symbols: ${notFound.join(", ")}. Add them on the dashboard's "Where should my next buy go?" first.` };
       }
-      const { picks } = await computeNextBuy(userId, { portfolioId, amountUsd, assetIds });
+      const targets = savedTargets && fractions(savedTargets);
+      const { picks } = await computeNextBuy(userId, { portfolioId, amountUsd, assetIds, targets });
       return {
         amountUsd,
         picks: picks.map((p) => ({
@@ -470,7 +550,7 @@ export function makePortfolioApi(userId: string, portfolioId?: string): Portfoli
           score: round2(p.score),
         })),
         ...(notFound.length > 0 ? { notFound } : {}),
-        note: "Target mixes are saved on the user's device, so this ranking ignores them.",
+        ...(targets && { rankedAgainstSavedTargetMixPct: savedTargets }),
       };
     },
 

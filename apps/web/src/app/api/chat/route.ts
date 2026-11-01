@@ -11,6 +11,8 @@ const bodySchema = z.object({
   threadId: z.uuid().optional(),
   message: z.string().min(1).max(4000),
   portfolioId: z.uuid().optional(),
+  /** The target mix saved on this device for the portfolio, percent by ticker. */
+  targets: z.record(z.string().max(20), z.number().min(0).max(100)).optional(),
 });
 
 /**
@@ -29,7 +31,7 @@ export async function POST(req: Request) {
 
   // The snapshot is the model's first input; start it now so it loads while
   // the thread is found and the question saved, not after.
-  const api = makePortfolioApi(userId, parsed.data.portfolioId);
+  const api = makePortfolioApi(userId, parsed.data.portfolioId, parsed.data.targets);
   void api.getContextSnapshot().catch(() => {});
 
   // Find or create the thread (scoped to this user), reading prior turns in

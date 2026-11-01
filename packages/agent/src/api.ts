@@ -40,6 +40,17 @@ export interface PortfolioApi {
   /** "What do my shares pay me a year / a month?": last 12 months' dividends
    *  per share times the units held now, per holding and by month. */
   estimateDividendIncome(): Promise<unknown>;
+  /** "How far am I from my target weights?": each holding's weight now
+   *  against a target mix (the user's, or the one saved on their device),
+   *  the dollars to reach it, and where a deposit should go. */
+  checkTargetMix(request: TargetMixRequest): Promise<unknown>;
+}
+
+export interface TargetMixRequest {
+  /** Target weights in percent by ticker; omit to use the saved mix. */
+  targets?: Record<string, number>;
+  /** A deposit to split toward the targets without selling anything. */
+  depositUsd?: number;
 }
 
 export interface ProjectionRequest {

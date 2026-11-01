@@ -48,6 +48,16 @@ export async function newContext(
   return ctx;
 }
 
+/** A `rebalance` persona's target mix in percent by ticker, as the dashboard
+ *  saves it on the device (and the chat page sends it with each question). */
+export function targetMixPcts(p: Persona): Record<string, number> | undefined {
+  const rule = p.policy.find((r) => r.kind === "rebalance");
+  if (!rule || rule.kind !== "rebalance") return undefined;
+  return Object.fromEntries(
+    Object.entries(rule.targets).map(([sym, w]) => [sym, Math.round(w * 10000) / 100]),
+  );
+}
+
 /**
  * Settings a persona has saved on their device. A persona with a `rebalance`
  * rule has a target mix, so the dashboard's Allocation section starts with it
@@ -65,13 +75,8 @@ export function deviceStorage(
 ): Record<string, string> {
   if (!userId) return {};
   const out: Record<string, string> = {};
-  const rule = p.policy.find((r) => r.kind === "rebalance");
-  if (rule && rule.kind === "rebalance") {
-    const pcts = Object.fromEntries(
-      Object.entries(rule.targets).map(([sym, w]) => [sym, Math.round(w * 10000) / 100]),
-    );
-    out[`beobeo.targets.${userId}.all`] = JSON.stringify(pcts);
-  }
+  const pcts = targetMixPcts(p);
+  if (pcts) out[`beobeo.targets.${userId}.all`] = JSON.stringify(pcts);
   if (taxableIncomeUsd !== undefined || bandFrom !== undefined) {
     const status = p.tax.filingStatus;
     out[`beobeo.tax.income.${userId}`] = JSON.stringify({

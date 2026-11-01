@@ -5,6 +5,7 @@ import type {
   PortfolioApi,
   ProjectionRequest,
   RaiseCashRequest,
+  TargetMixRequest,
   TaxLotFilter,
 } from "./api";
 
@@ -189,6 +190,21 @@ export function buildPortfolioTools(
         "'What will my shares pay me a year / a month?', 'what's my yield on cost?', 'which holding pays me the most?', 'can I live on the dividends?'. For every holding: the cash it paid per share over the last 12 months (from market data, split-adjusted) times the units held now = yearly income, with yield on value and on cost, payments a year and the last ex-dividend date; totals, a Jan–Dec month-by-month line (by ex-dividend month), holdings that paid nothing, and the dividends the user recorded in the app over the same year. Works with no dividends recorded. Never estimate yields or payouts yourself.",
       inputSchema: z.object({}),
       run: timed("estimate_dividend_income", async () => json(await api.estimateDividendIncome())),
+    }),
+    betaZodTool({
+      name: "check_target_mix",
+      description:
+        "'How far have I drifted from my targets?', 'am I still 60/40?', 'what do I buy to rebalance?'. Each holding's weight now against target weights: the user's (pass the ones they gave in the conversation, in percent; tickers they left out count as 0% target) or, with none passed, the mix saved on Dashboard → Allocation. Returns per holding the value now, weight now and target, how many points over or under, the dollars to buy (positive) or sell (negative) to land on target, and with depositUsd how to split a deposit toward the targets without selling (the dashboard's next-deposit split). Never work drift or a split out yourself.",
+      inputSchema: z.object({
+        targets: z
+          .record(z.string(), z.number().min(0).max(100))
+          .optional()
+          .describe("Target percent by ticker, e.g. {\"VTI\": 60, \"BND\": 30, \"BTC\": 10}; omit to use the saved mix"),
+        depositUsd: z.number().positive().optional().describe("A deposit to split toward the targets"),
+      }),
+      run: timed("check_target_mix", async (request: TargetMixRequest) =>
+        json(await api.checkTargetMix(request)),
+      ),
     }),
     betaZodTool({
       name: "pick_next_buy",
