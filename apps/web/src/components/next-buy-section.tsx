@@ -319,54 +319,58 @@ function HowPicked({
   const decided = !priceDecided
     ? null
     : pick.key === first.key
-      ? `Here price decided it: ${first.key}'s price has dropped more than ${runnerUp.key}'s, enough to outweigh ${runnerUp.key} keeping your money more spread out.`
+      ? `This time price decided it: ${first.key} has dropped more than ${runnerUp.key}.`
       : pick.fit > first.fit
-        ? `${pick.key} keeps your money more spread out, but ${first.key}'s price has dropped more, enough to put ${first.key} first.`
+        ? `This time price decided it: ${first.key} has dropped more than ${pick.key}.`
         : null;
+  // Three short lines, each led by what it's about: a paragraph of dollars, then a
+  // paragraph on the rule, read as "a wall of text… I'm not reading all that"
+  // (luna, missions 84–86). The exact dollars stay for anyone checking.
   const held = pick.weightNow * portfolioValue;
-  const lines: string[] = [
-    portfolioValue > 0
-      ? `You have ${fmtUsd(held)} of ${pick.key} out of ${fmtUsd(portfolioValue)} in all (${pctText(pick.weightNow)}). After this ${fmtUsd(amountUsd)} it would be ${fmtUsd(held + amountUsd)} of ${fmtUsd(portfolioValue + amountUsd)} (${pctText(pick.weightAfter)}).`
-      : `${pick.key} would be ${pctText(pick.weightAfter)} of your money after this buy.`,
-  ];
-  if (pick.target !== null && pick.gapUsd !== null)
-    lines.push(
-      pick.target > 0
-        ? `Your target for it is ${pctText(pick.target)}: ${
-            pick.gapUsd <= 0
-              ? "already reached"
-              : pick.weightAfter > pick.target + 0.0005
-                ? `${fmtUsd(pick.gapUsd)} short, so all of this buy carries it past the target`
-                : `${fmtUsd(pick.gapUsd)} short`
-          }.`
-        : "It has no share in your target mix.",
-    );
-  lines.push(
+  const money =
+    pick.target !== null && pick.gapUsd !== null
+      ? pick.target > 0
+        ? pick.gapUsd <= 0
+          ? `Already at its ${pctText(pick.target)} target.`
+          : `${fmtUsd(pick.gapUsd)} short of its ${pctText(pick.target)} target${
+              pick.weightAfter > pick.target + 0.0005 ? ", so this buy takes it past" : ""
+            }.`
+        : "Not in your target mix."
+      : portfolioValue > 0
+        ? `After this ${fmtUsd(amountUsd)}, ${pick.key} would be ${fmtUsd(held + amountUsd)} of your ${fmtUsd(portfolioValue + amountUsd)}, or ${pctText(pick.weightAfter)}.`
+        : `${pick.key} would be ${pctText(pick.weightAfter)} of your money after this buy.`;
+  const price =
     (pick.offHigh === null
-      ? "There's no price history yet to compare it with its past year"
+      ? "No past year of prices yet"
       : pick.offHigh > -0.005
-        ? "Its price is at its highest of the past year"
-        : `Its price is ${pctText(pick.offHigh)} below its highest of the past year`) +
-      (pick.vsCost === null
-        ? "."
-        : `, and ${pctText(pick.vsCost)} ${pick.vsCost < 0 ? "below" : "above"} what you paid for it on average.`),
-  );
+        ? "At its highest of the past year"
+        : `${pctText(pick.offHigh)} below its high of the past year`) +
+    (pick.vsCost === null
+      ? "."
+      : ` and ${pctText(pick.vsCost)} ${pick.vsCost < 0 ? "below" : "above"} what you paid.`);
+  // Mirrors NEXT_BUY_WEIGHTS / NEXT_BUY_TARGET_WEIGHTS and SINGLE_NAME_WEIGHT in
+  // @beobeo/core. Plain words: "60/40 score", "counts double", "lopsided" and
+  // "concentration" read as homework (luna, missions 64, 84–86).
+  const rule =
+    pick.target !== null
+      ? "Being furthest short of your target counts most (90%). A lower price only settles close calls."
+      : "Keeping your money spread out counts most (60%), and one company or coin is less spread out than a fund of many. A lower price counts for the rest (40%).";
+  const rows: [string, string][] = [
+    ["Your money", money],
+    ["Price", price],
+    ["The rule", rule],
+  ];
 
   return (
-    <div id={id} className="mt-1 grid max-w-xl gap-2 border-l-2 border-accent pl-3 text-sm">
-      <ul className="grid gap-1">
-        {lines.map((l) => (
-          <li key={l}>{l}</li>
+    <div id={id} className="mt-1 grid max-w-xl gap-1.5 border-l-2 border-accent pl-3 text-sm">
+      <dl className="grid gap-1 sm:grid-cols-[auto_1fr] sm:gap-x-3">
+        {rows.map(([label, text]) => (
+          <div key={label} className="contents">
+            <dt className="font-medium">{label}</dt>
+            <dd className={label === "The rule" ? "text-muted-foreground" : undefined}>{text}</dd>
+          </div>
         ))}
-      </ul>
-      {/* Mirrors NEXT_BUY_WEIGHTS / NEXT_BUY_TARGET_WEIGHTS and SINGLE_NAME_WEIGHT in
-          @beobeo/core. Plain words: "60/40 score" and "counts double" read as
-          homework (luna, mission 64). */}
-      <p className="text-muted-foreground">
-        {pick.target !== null
-          ? "What decides it, mostly (90%): which option is furthest short of your target mix. Price only settles close calls (10%): one further below its past-year high, or below what you paid, gets a small edge."
-          : "What decides it, mostly (60%): not putting too much of your money in one place. Money in one company or coin counts as more lopsided than the same money in a fund, because one company can drop on its own in a way a fund of hundreds rarely does. The rest (40%) is price: one further below its past-year high, or below what you paid, gets an edge."}
-      </p>
+      </dl>
       {decided && <p>{decided}</p>}
     </div>
   );
