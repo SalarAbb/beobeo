@@ -40,7 +40,7 @@ const opt = (n: string) => {
 /** Which story each persona walked out of. */
 const REALM: Record<string, "Westeros" | "Hogwarts"> = {
   samwell: "Westeros", arya: "Westeros", petyr: "Westeros", olenna: "Westeros", barristan: "Westeros",
-  augusta: "Hogwarts", fred: "Hogwarts", minerva: "Hogwarts", gilderoy: "Hogwarts", luna: "Hogwarts", hermione: "Hogwarts",
+  augusta: "Hogwarts", fred: "Hogwarts", minerva: "Hogwarts", gilderoy: "Hogwarts", luna: "Hogwarts", hermione: "Hogwarts", molly: "Hogwarts",
 };
 
 const sh = (c: string) => {

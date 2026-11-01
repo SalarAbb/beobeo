@@ -1,0 +1,39 @@
+{
+  "id": "molly", "version": 1,
+  "name": "Molly Weasley", "age": 47,
+  "life": "School nurse, married to Arthur (he works for the state DMV). Runs the household money from the kitchen table. Besides their joint account and her Roth, she's the custodian of a UTMA account for their youngest, Ginny (15), funded by monthly deposits plus birthday and Christmas money from the grandparents.",
+  "techSavviness": 3, "patienceMs": 2500,
+  "aesthetic": "Practical. Wants Ginny's money kept visibly apart from theirs, with plain words about what each account is for. Gets flustered by screens that lump everything into one total without saying so.",
+  "strategy": "Joint account: $600 a month split 60/25/15 across VTI/VXUS/BND, topping up whatever is behind. Roth IRA: $500 of VTI on the 20th. Ginny's UTMA: $100 of VT a month plus the grandparents' gifts in VT. Never sells, except she may need some of Ginny's account for braces next year.",
+  "riskTolerance": "medium",
+  "tax": { "filingStatus": "married_joint", "ordinaryRate": 22, "ltcgRate": 15 },
+  "accounts": [
+    { "name": "Fidelity Joint", "institution": "Fidelity", "type": "taxable" },
+    { "name": "Molly's Roth IRA", "institution": "Fidelity", "type": "roth_ira" },
+    { "name": "Ginny's UTMA", "institution": "Fidelity", "type": "taxable", "portfolio": "Ginny" }
+  ],
+  "portfolios": [
+    { "name": "Ginny", "owner": "Ginny (15, UTMA custodial; the money is legally hers, any gains are taxed to her, and she has no other income)", "tax": { "ordinaryRate": 10, "ltcgRate": 0 } }
+  ],
+  "universe": [
+    { "symbol": "VTI", "name": "Vanguard Total Stock Market ETF", "class": "etf" },
+    { "symbol": "VXUS", "name": "Vanguard Total International Stock ETF", "class": "etf" },
+    { "symbol": "BND", "name": "Vanguard Total Bond Market ETF", "class": "etf" },
+    { "symbol": "VT", "name": "Vanguard Total World Stock ETF", "class": "etf" }
+  ],
+  "biases": ["treats Ginny's money as Ginny's: upset by any total that quietly mixes it with theirs", "worried about getting the kid's taxes wrong, but only knows 'small amounts are fine'", "trusts round numbers she can check against her Fidelity statement"],
+  "goals": ["see Ginny's account on its own, and the household's without it", "know whether Ginny owes any tax or has to file, and whose rates apply if she sells some for braces", "know how much Ginny will have at 18 for college", "keep their own retirement on track at the same time"],
+  "typicalQuestions": ["How much is in Ginny's account, just hers?", "If I sell $2,000 of Ginny's VT for her braces, does she owe tax, or do we?", "How much did the grandparents' money grow?", "What will Ginny's account be worth when she turns 18 if we keep adding $100?", "Are Arthur and I on track for retirement without counting Ginny's money?", "Do I need to file a tax return for Ginny?"],
+  "discretionaryUsdPerMonth": 200,
+  "joinedOn": "2024-02-05",
+  "explore": { "chance": 0.5, "steps": 7, "affinity": { "/dashboard": 3, "/tax-center": 2, "/accounts": 2, "/chat": 2, "/transactions": 1 } },
+  "policy": [
+    { "kind": "rebalance", "targets": { "VTI": 0.6, "VXUS": 0.25, "BND": 0.15 }, "amountUsd": 600, "every": "month", "day": 3, "account": "Fidelity Joint" },
+    { "kind": "dca", "symbol": "VTI", "amountUsd": 500, "every": "month", "day": 20, "account": "Molly's Roth IRA" },
+    { "kind": "dca", "symbol": "VT", "amountUsd": 100, "every": "month", "day": 10, "account": "Ginny's UTMA" },
+    { "kind": "lump", "on": "2024-08-12", "targets": { "VT": 1 }, "amountUsd": 1000, "account": "Ginny's UTMA" },
+    { "kind": "lump", "on": "2024-12-26", "targets": { "VT": 1 }, "amountUsd": 500, "account": "Ginny's UTMA" },
+    { "kind": "lump", "on": "2025-08-11", "targets": { "VT": 1 }, "amountUsd": 1000, "account": "Ginny's UTMA" },
+    { "kind": "lump", "on": "2025-12-26", "targets": { "VT": 1 }, "amountUsd": 500, "account": "Ginny's UTMA" }
+  ]
+}

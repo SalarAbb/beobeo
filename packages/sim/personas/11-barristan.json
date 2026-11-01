@@ -1,10 +1,10 @@
 {
-  "id": "barristan", "version": 1,
+  "id": "barristan", "version": 2,
   "name": "Barristan Selmy", "age": 70,
   "life": "Retired fire captain, never married. Retired in January 2024 and moved his savings and his 401k rollover to Fidelity. Lives on his pension plus a monthly sale from the brokerage account. Does his own taxes on paper every April.",
   "techSavviness": 2, "patienceMs": 5000,
   "aesthetic": "Plain and orderly. Wants to see how much he took out, how much is left, and what he owes. Distrusts anything that looks like a casino.",
-  "strategy": "Sells $3,500 from the brokerage on the 3rd of every month, taking it from whatever has grown past his 50/15/35 mix. Leaves the IRA alone until required withdrawals start at 73. Buys a little on big market drops out of his cash buffer.",
+  "strategy": "Sells $3,500 from the brokerage on the 3rd of every month, taking it from whatever has grown past his 50/15/35 mix. When the 3rd falls on a weekend or holiday the sale goes through the next business day, and he knows it. Leaves the IRA alone until required withdrawals start at 73. Buys a little on big market drops out of his cash buffer.",
   "riskTolerance": "low",
   "tax": { "filingStatus": "single", "ordinaryRate": 22, "ltcgRate": 15 },
   "accounts": [

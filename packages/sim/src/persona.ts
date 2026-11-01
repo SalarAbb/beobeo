@@ -121,9 +121,20 @@ export const personaSchema = z.object({
         name: z.string(),
         institution: z.string(),
         type: z.enum(["taxable", "traditional_ira", "roth_ira", "401k", "other_tax_advantaged"]),
+        /** Portfolio it sits in (one of `portfolios`); default "Main". */
+        portfolio: z.string().optional(),
       }),
     )
     .min(1),
+  /**
+   * Extra portfolios beyond "Main", e.g. a child's custodial account: a
+   * separate taxpayer, so it gets its own Tax Center profile at these rates.
+   */
+  portfolios: z
+    .array(z.object({ name: z.string(), owner: z.string(), tax: z.object({ ordinaryRate: z.number(), ltcgRate: z.number() }) }))
+    .optional(),
+  /** Logs every cash dividend the broker pays (real per-share payouts × units held on the ex-date). */
+  recordsDividends: z.boolean().optional(),
   universe: z.array(instrumentSchema).min(1),
   /** Biases the mind should play honestly (FOMO, loss aversion, …). */
   biases: z.array(z.string()),

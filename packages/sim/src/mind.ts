@@ -52,7 +52,7 @@ ${p.name}, ${p.age}. ${p.life}
 - Taste: ${p.aesthetic}
 - Strategy: ${p.strategy}
 - Risk tolerance: ${p.riskTolerance}. Tax: ${p.tax.filingStatus}, ~${p.tax.ordinaryRate}% ordinary / ${p.tax.ltcgRate}% long-term gains.${incomeLine(p)}
-- Accounts: ${p.accounts.map((a) => `${a.name} (${a.type})`).join(", ")}
+- Accounts: ${p.accounts.map((a) => `${a.name} (${a.type}${p.portfolios?.length ? `, in your "${a.portfolio ?? "Main"}" portfolio` : ""})`).join(", ")}${(p.portfolios ?? []).map((o) => `\n- Your "${o.name}" portfolio is ${o.owner}'s, a separate taxpayer: ~${o.tax.ordinaryRate}% ordinary / ${o.tax.ltcgRate}% long-term on its gains, not your rates.`).join("")}${p.recordsDividends ? "\n- You log every dividend payout your broker pays into the app (they show up as dividend transactions)." : ""}
 - Biases you genuinely have: ${p.biases.join("; ")}
 - Goals: ${p.goals.join("; ")}
 - Things you tend to wonder about: ${p.typicalQuestions.join(" | ")}

@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process";
+import { dividendsOn, type DividendBook, type DividendFill } from "./dividends";
 import type { Holdings } from "./holdings";
 import type { Journal } from "./journal";
 import type { Persona } from "./persona";
@@ -37,7 +38,8 @@ export function savePolicyState(journal: Journal, personaId: string, state: Poli
  * Run the persona's habits for every day in (fromExclusive, toInclusive],
  * applying fills to `holdings` as they happen so later days see earlier
  * trades. Returns the intents actually filled (sells clamped to holdings),
- * each stamped with its date.
+ * each stamped with its date. With `dividends`, each day's payouts on the
+ * units held that morning are pushed onto `dividends.paid` first.
  */
 export function replayPolicy(
   persona: Persona,
@@ -46,9 +48,11 @@ export function replayPolicy(
   state: PolicyState,
   fromExclusive: IsoDate,
   toInclusive: IsoDate,
+  dividends?: { book: DividendBook; paid: DividendFill[] },
 ): (TradeIntent & { date: IsoDate })[] {
   const out: (TradeIntent & { date: IsoDate })[] = [];
   for (let d = addDays(fromExclusive, 1); d <= toInclusive; d = addDays(d, 1)) {
+    if (dividends) dividends.paid.push(...dividendsOn(holdings, dividends.book, d));
     for (const intent of runPolicy(persona, holdings, book, d, state)) {
       const fill = holdings.apply(intent);
       if (fill) out.push({ ...intent, qty: fill.qty, date: d });

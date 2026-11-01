@@ -36,7 +36,8 @@ import {
   themesBrief,
 } from "../src/run";
 import { assignMissions, runOneMission } from "../src/missions";
-import { ensureAssets, findUserId, loadHoldings, loadPriceBook, loadSimUser, marketData, type AssetRow } from "../src/store";
+import type { DividendFill } from "../src/dividends";
+import { ensureAssets, findUserId, loadDividendBook, loadHoldings, loadPriceBook, loadSimUser, marketData, type AssetRow } from "../src/store";
 import { budgetFor } from "../src/themes";
 import { addDays, fmtQty, todayIso, type PriceBook } from "../src/world";
 // Pure (no imports): the exact rule the dashboard uses to show "Taking money out".
@@ -149,7 +150,12 @@ for (const p of personas) {
   if (date === todayIso()) await injectLiveQuotes(book, [...assets.values()], date);
 
   // ---- habits since the last run, executed through the real API
-  const fills = replayPolicy(p, holdings, book, state, from, date);
+  const dividends = p.recordsDividends
+    ? { book: await loadDividendBook(p.universe, addDays(from, 1), date), paid: [] as DividendFill[] }
+    : undefined;
+  const fills = replayPolicy(p, holdings, book, state, from, date, dividends);
+  for (const d of dividends?.paid ?? []) await recordDividend(p, client, sim.accounts, assets, d);
+  if (dividends?.paid.length) diary.push(`Dividends came in and you logged them: ${dividends.paid.map((d) => `${d.symbol} $${d.cash.toFixed(2)}`).join(", ")}.`);
   for (const f of fills) await executeTrade(p, client, sim.accounts, assets, f, f.date, `sim:${f.reason}`);
   savePolicyState(journal, p.id, state, date);
   const habitsToday = fills
@@ -474,6 +480,30 @@ async function injectLiveQuotes(book: PriceBook, assets: AssetRow[], day: string
       .getPriceForDate({ id: a.id, symbol: a.symbol, class: a.class, providerRef: a.providerRef }, day)
       .catch(() => null);
     if (q?.source === "quote") book.setClose(a.symbol, day, Number(q.price));
+  }
+}
+
+/** A payout the persona types in as the app expects it: quantity 1 × the cash. */
+async function recordDividend(p: Persona, client: AppClient, accounts: Map<string, string>, assets: Map<string, AssetRow>, d: DividendFill) {
+  const detail = { type: "dividend", symbol: d.symbol, account: d.account, usd: d.cash };
+  try {
+    const r = await client.mutate("transactions.create", {
+      accountId: accounts.get(d.account)!,
+      assetId: assets.get(d.symbol)!.id,
+      type: "dividend",
+      quantity: "1",
+      pricePerUnit: d.cash.toFixed(2),
+      fees: "0",
+      tradedAt: new Date(`${d.date}T20:00:00Z`),
+      note: "sim:dividend",
+      source: "sim",
+    });
+    timed(p, "trpc:transactions.create", r.ms);
+    journal.action({ runId, personaId: p.id, simDate: d.date, kind: "dividend", detail, ok: true, latencyMs: Math.round(r.ms) });
+  } catch (e) {
+    const msg = (e as Error).message;
+    journal.action({ runId, personaId: p.id, simDate: d.date, kind: "dividend", detail, ok: false, error: msg });
+    notes.push(`${p.id}: dividend failed ${d.symbol}: ${msg}`);
   }
 }
 

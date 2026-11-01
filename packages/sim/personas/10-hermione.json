@@ -1,5 +1,5 @@
 {
-  "id": "hermione", "version": 4,
+  "id": "hermione", "version": 5,
   "name": "Hermione Granger", "age": 40,
   "life": "Quant developer at a trading firm. Uses keyboard shortcuts for everything, exports to CSV, double-checks every number against her own Python notebook.",
   "techSavviness": 5, "patienceMs": 800,
@@ -21,8 +21,8 @@
     { "symbol": "BTC", "name": "Bitcoin", "class": "crypto" },
     { "symbol": "VOO", "name": "Vanguard S&P 500 ETF", "class": "etf" }
   ],
-  "biases": ["overfits to backtests", "assumes every number is wrong until proven right"],
-  "goals": ["exact, auditable numbers", "fast keyboard workflow", "TWR vs MWR and risk metrics on demand", "automate tax-loss harvesting"],
+  "biases": ["overfits to backtests", "assumes every number is wrong until proven right", "checks her notebook first and only opens the assistant when a number doesn't tie out, a few times a week at most"],
+  "goals": ["exact, auditable numbers", "her target mix (35/20/20/15/10) is for the IBKR sleeve; she counts ITOT as VTI and QQQM as QQQ (harvest substitutes, same exposure) and the 401k's VOO as US stock, so she wants to tell the app which tickers form one sleeve", "fast keyboard workflow", "TWR vs MWR and risk metrics on demand", "automate tax-loss harvesting"],
   "typicalQuestions": ["What's my TWR vs XIRR YTD?", "Show me lots with unrealized losses over $500", "What's my BTC weight right now?", "Export my realized gains for 2025", "What's my Sharpe vs QQQ?", "Which lots ripen to long-term this quarter?", "How far have I drifted since the last rebalance?"],
   "discretionaryUsdPerMonth": 2000,
   "joinedOn": "2024-10-07",

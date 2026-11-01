@@ -1,7 +1,8 @@
 import { and, asc, eq, inArray, like } from "drizzle-orm";
 import { hashPassword } from "better-auth/crypto";
 import { db, schema } from "@beobeo/db";
-import { MarketDataService } from "@beobeo/market-data";
+import { MarketDataService, TiingoProvider } from "@beobeo/market-data";
+import type { DividendBook } from "./dividends";
 import { Holdings } from "./holdings";
 import type { Instrument, Persona } from "./persona";
 import { fmtQty, PriceBook, type IsoDate } from "./world";
@@ -39,13 +40,17 @@ export async function recreateSimUser(persona: Persona, email: string, password:
     userId,
     password: await hashPassword(password),
   });
-  const [portfolio] = await db.insert(schema.portfolios).values({ userId, name: "Main" }).returning();
+  const portfolioIds = new Map<string, string>();
+  for (const name of ["Main", ...(persona.portfolios ?? []).map((p) => p.name)]) {
+    const [row] = await db.insert(schema.portfolios).values({ userId, name }).returning({ id: schema.portfolios.id });
+    portfolioIds.set(name, row!.id);
+  }
   const rows = await db
     .insert(schema.accounts)
     .values(
       persona.accounts.map((a) => ({
         userId,
-        portfolioId: portfolio!.id,
+        portfolioId: portfolioIds.get(a.portfolio ?? "Main")!,
         name: a.name,
         institution: a.institution,
         accountType: a.type,
@@ -58,6 +63,15 @@ export async function recreateSimUser(persona: Persona, email: string, password:
     federalOrdinaryRatePct: String(persona.tax.ordinaryRate),
     federalLtcgRatePct: String(persona.tax.ltcgRate),
   });
+  // Another taxpayer's portfolio (a kid's custodial account) keeps its own rates.
+  for (const p of persona.portfolios ?? []) {
+    await db.insert(schema.taxProfiles).values({
+      userId,
+      portfolioKey: portfolioIds.get(p.name)!,
+      federalOrdinaryRatePct: String(p.tax.ordinaryRate),
+      federalLtcgRatePct: String(p.tax.ltcgRate),
+    });
+  }
   return { userId, accounts: new Map(rows.map((r) => [r.name, r.id])) };
 }
 
@@ -159,10 +173,33 @@ export async function loadPriceBook(assets: AssetRow[], from: IsoDate, to: IsoDa
   return new PriceBook(bySymbol);
 }
 
+/**
+ * Real cash dividends per share for the universe's non-crypto members, straight
+ * from Tiingo (the app's service only serves a trailing year). A symbol whose
+ * fetch fails simply pays nothing, and the run goes on.
+ */
+export async function loadDividendBook(universe: Instrument[], from: IsoDate, to: IsoDate): Promise<DividendBook> {
+  const book: DividendBook = new Map();
+  const key = process.env.TIINGO_API_KEY;
+  if (!key) return book;
+  const tiingo = new TiingoProvider(key);
+  for (const i of universe) {
+    if (i.class === "crypto") continue;
+    try {
+      const rows = await tiingo.getDividends({ symbol: i.symbol, class: i.class }, from, to);
+      book.set(i.symbol, new Map(rows.map((r) => [r.date, Number(r.amount)])));
+    } catch (e) {
+      console.warn(`    dividends for ${i.symbol} unavailable: ${(e as Error).message}`);
+    }
+  }
+  return book;
+}
+
 export interface NewTxn {
   accountId: string;
   assetId: string;
-  type: "buy" | "sell";
+  /** A dividend is quantity 1 × its cash, as the importers write it. */
+  type: "buy" | "sell" | "dividend";
   qty: number;
   price: number;
   tradedAt: Date;

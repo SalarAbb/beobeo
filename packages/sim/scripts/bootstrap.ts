@@ -12,7 +12,8 @@ import { loadPersonas, qtyDecimals, simEmail, simPassword } from "../src/persona
 import { emptyPolicyState } from "../src/policy";
 import { Holdings } from "../src/holdings";
 import { gitInfo, replayPolicy, savePolicyState } from "../src/run";
-import { ensureAssets, insertTxns, loadPriceBook, recreateSimUser } from "../src/store";
+import type { DividendFill } from "../src/dividends";
+import { ensureAssets, insertTxns, loadDividendBook, loadPriceBook, recreateSimUser, type NewTxn } from "../src/store";
 import { addDays, todayIso } from "../src/world";
 
 const only = new Set(process.argv.slice(2));
@@ -39,10 +40,13 @@ for (const persona of loadPersonas()) {
     const missing = persona.universe.filter((i) => !book.closeAsOf(i.symbol, yesterday)).map((i) => i.symbol);
 
     const state = emptyPolicyState();
-    const fills = replayPolicy(persona, new Holdings(qtyDecimals(persona)), book, state, addDays(persona.joinedOn, -1), yesterday);
+    const dividends = persona.recordsDividends
+      ? { book: await loadDividendBook(persona.universe, persona.joinedOn, yesterday), paid: [] as DividendFill[] }
+      : undefined;
+    const fills = replayPolicy(persona, new Holdings(qtyDecimals(persona)), book, state, addDays(persona.joinedOn, -1), yesterday, dividends);
     await insertTxns(
       sim.userId,
-      fills.map((f) => ({
+      fills.map((f): NewTxn => ({
         accountId: sim.accounts.get(f.account)!,
         assetId: assets.get(f.symbol)!.id,
         type: f.type,
@@ -52,7 +56,16 @@ for (const persona of loadPersonas()) {
         tradedAt: new Date(`${f.date}T20:00:00Z`),
         note: `sim:${f.reason}`,
         isCrypto: assets.get(f.symbol)!.class === "crypto",
-      })),
+      })).concat((dividends?.paid ?? []).map((d): NewTxn => ({
+        accountId: sim.accounts.get(d.account)!,
+        assetId: assets.get(d.symbol)!.id,
+        type: "dividend",
+        qty: 1,
+        price: d.cash,
+        tradedAt: new Date(`${d.date}T20:00:00Z`),
+        note: "sim:dividend",
+        isCrypto: false,
+      }))),
     );
     savePolicyState(journal, persona.id, state, yesterday);
     journal.action({
@@ -60,11 +73,11 @@ for (const persona of loadPersonas()) {
       personaId: persona.id,
       simDate: yesterday,
       kind: "bootstrap",
-      detail: { trades: fills.length, from: persona.joinedOn, missingPrices: missing },
+      detail: { trades: fills.length, dividends: dividends?.paid.length ?? 0, from: persona.joinedOn, missingPrices: missing },
       ok: missing.length === 0,
       error: missing.length ? `no prices for ${missing.join(",")}` : undefined,
     });
-    console.log(`${fills.length} trades since ${persona.joinedOn}${missing.length ? `  ⚠ no prices: ${missing.join(", ")}` : ""}`);
+    console.log(`${fills.length} trades${dividends ? `, ${dividends.paid.length} dividends` : ""} since ${persona.joinedOn}${missing.length ? `  ⚠ no prices: ${missing.join(", ")}` : ""}`);
   } catch (e) {
     failures++;
     console.log(`FAILED: ${(e as Error).message}`);
