@@ -747,7 +747,16 @@ export default function DashboardPage() {
               ? undefined
               : totals.realized === 0 && totals.realizedThisYear === 0
                 ? "Nothing gained or lost from sales yet"
-                : `All time · ${fmtUsd(totals.realizedThisYear)} this year`
+                : (
+                  // The sales it adds up from (petyr, mission 104: "Show me
+                  // the sales that add up to that number").
+                  <>
+                    All time · {fmtUsd(totals.realizedThisYear)} this year ·{" "}
+                    <Link href="/tax-center?tab=now" className="underline underline-offset-2">
+                      see the sales
+                    </Link>
+                  </>
+                )
           }
           subTone="text-muted-foreground"
         />

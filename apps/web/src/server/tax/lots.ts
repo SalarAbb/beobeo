@@ -36,6 +36,10 @@ export interface TaxLotBundle {
   /** This year's realized gain inside IRAs/401(k)s: counted in the
    *  dashboard's "this year" figure, never taxed. */
   ytdTaxAdvantagedGain: ReturnType<typeof D>;
+  /** Every sale in scope, every year and account, one per sell transaction,
+   *  oldest first: the rows the Dashboard's all-time "Gain from sales" adds
+   *  up from (petyr, mission 104, couldn't trace his −$1,523 to its sales). */
+  allSales: PastSale[];
   /** What each account holds now, retirement accounts included: one row per
    *  (account, asset) with units left. `price` is null when unpriced. */
   accountPositions: AccountPosition[];
@@ -61,6 +65,11 @@ export interface YtdSale {
   proceeds: ReturnType<typeof D>;
   shortTermGain: ReturnType<typeof D>;
   longTermGain: ReturnType<typeof D>;
+}
+
+export interface PastSale extends YtdSale {
+  /** False for sales inside an IRA/401(k): counted, never taxed. */
+  taxed: boolean;
 }
 
 export { loadScopedRows, type ScopedTxnRow };
@@ -132,6 +141,7 @@ export async function loadTaxLots(
       ytdLongTermGain: ZERO,
       ytdSales: [],
       ytdTaxAdvantagedGain: ZERO,
+      allSales: [],
       accountPositions: [],
     };
   }
@@ -151,6 +161,7 @@ export async function loadTaxLots(
   let ytdLongTermGain = ZERO;
   let ytdTaxAdvantagedGain = ZERO;
   const salesById = new Map<string, YtdSale>();
+  const allSalesById = new Map<string, PastSale>();
   const accountPositions: AccountPosition[] = [];
   const thisYear = asOf.getUTCFullYear();
 
@@ -173,6 +184,25 @@ export async function loadTaxLots(
         costBasis,
         price: latest ? D(latest.close) : null,
       });
+    }
+
+    for (const g of engineResult.realized) {
+      const sale = allSalesById.get(g.sourceTxnId) ?? {
+        txnId: g.sourceTxnId,
+        soldAt: g.soldAt,
+        symbol: asset.symbol,
+        accountName: account.name,
+        taxed: account.accountType === "taxable",
+        quantity: ZERO,
+        proceeds: ZERO,
+        shortTermGain: ZERO,
+        longTermGain: ZERO,
+      };
+      sale.quantity = sale.quantity.add(g.quantity);
+      sale.proceeds = sale.proceeds.add(g.proceeds);
+      if (g.longTerm) sale.longTermGain = sale.longTermGain.add(g.gain);
+      else sale.shortTermGain = sale.shortTermGain.add(g.gain);
+      allSalesById.set(g.sourceTxnId, sale);
     }
 
     if (account.accountType !== "taxable") {
@@ -254,9 +284,10 @@ export async function loadTaxLots(
     });
   }
 
-  const ytdSales = [...salesById.values()].sort(
-    (a, b) => a.soldAt.getTime() - b.soldAt.getTime() || a.symbol.localeCompare(b.symbol),
-  );
+  const bySaleDate = (a: YtdSale, b: YtdSale) =>
+    a.soldAt.getTime() - b.soldAt.getTime() || a.symbol.localeCompare(b.symbol);
+  const ytdSales = [...salesById.values()].sort(bySaleDate);
+  const allSales = [...allSalesById.values()].sort(bySaleDate);
   return {
     lots,
     recentBuys,
@@ -264,6 +295,7 @@ export async function loadTaxLots(
     ytdLongTermGain,
     ytdSales,
     ytdTaxAdvantagedGain,
+    allSales,
     accountPositions,
   };
 }

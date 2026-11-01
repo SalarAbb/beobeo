@@ -77,6 +77,7 @@ async function assembleScope(userId: string, scope: string, asOf: Date) {
     ytdLongTermGain,
     ytdSales: bundle.ytdSales,
     ytdTaxAdvantagedGain: bundle.ytdTaxAdvantagedGain,
+    allSales: bundle.allSales,
     accountPositions: bundle.accountPositions,
   };
 }
@@ -259,10 +260,19 @@ export function computeAccountHoldings(userId: string, portfolioId?: string) {
 export function computeTaxNow(userId: string, portfolioId?: string, income?: IncomeInfo) {
   const scope = portfolioKey(portfolioId);
   const incomeKey = income ? `${income.status}:${Math.round(income.taxableIncomeUsd)}` : "none";
-  return cached(userCacheKey(userId, "tax-now10", scope, incomeKey), TTL.now, async () => {
+  return cached(userCacheKey(userId, "tax-now11", scope, incomeKey), TTL.now, async () => {
     const asOf = new Date();
     const [
-      { lots, profile: saved, blocked, profileRow, ytdSales, ytdTaxAdvantagedGain, accountPositions },
+      {
+        lots,
+        profile: saved,
+        blocked,
+        profileRow,
+        ytdSales,
+        ytdTaxAdvantagedGain,
+        allSales,
+        accountPositions,
+      },
       overview,
     ] = await Promise.all([
         assembleScope(userId, scope, asOf),
@@ -377,6 +387,19 @@ export function computeTaxNow(userId: string, portfolioId?: string, income?: Inc
         longTermGain: s.longTermGain.toNumber(),
       })),
       ytdTaxAdvantagedGain: ytdTaxAdvantagedGain.toNumber(),
+      // Every year's sales, retirement accounts included: what the Dashboard's
+      // all-time "Gain from sales" adds up from (petyr, mission 104).
+      allSales: allSales.map((s) => ({
+        txnId: s.txnId,
+        soldAt: toIsoDate(s.soldAt),
+        symbol: s.symbol,
+        accountName: s.accountName,
+        taxed: s.taxed,
+        quantity: s.quantity.toNumber(),
+        proceeds: s.proceeds.toNumber(),
+        shortTermGain: s.shortTermGain.toNumber(),
+        longTermGain: s.longTermGain.toNumber(),
+      })),
       dashboardRealized: overview && {
         allTime: overview.totals.realized,
         thisYear: overview.totals.realizedThisYear,

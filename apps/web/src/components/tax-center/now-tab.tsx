@@ -395,7 +395,96 @@ function SalesBehindTotals({ data: d }: { data: Now }) {
           </ul>
         </details>
       )}
+      {showsAllTime && d.allSales.length > 0 && (
+        <AllTimeSales sales={d.allSales} dashboardTotal={allTime} />
+      )}
     </div>
+  );
+}
+
+/**
+ * Every year's sales, retirement accounts included, grouped by year: the
+ * rows the Dashboard's all-time "Gain from sales" adds up from. Petyr
+ * (mission 104) read "counts every year" and still couldn't tie his −$1,523
+ * to anything: "Show me the sales that add up to that number."
+ */
+function AllTimeSales({ sales, dashboardTotal }: { sales: Now["allSales"]; dashboardTotal: number }) {
+  const gainOf = (s: Now["allSales"][number]) => s.shortTermGain + s.longTermGain;
+  const years = new Map<string, Now["allSales"]>();
+  for (const s of sales) {
+    const y = s.soldAt.slice(0, 4);
+    years.set(y, [...(years.get(y) ?? []), s]);
+  }
+  const total = sales.reduce((s, x) => s + gainOf(x), 0);
+  return (
+    <details className="group">
+      <summary className="w-fit cursor-pointer text-primary marker:text-muted-foreground">
+        Show {sales.length === 1 ? "the sale" : <>all <span className="data">{sales.length}</span> sales</>}
+        {Math.abs(total - dashboardTotal) < 1 ? (
+          <>
+            {" "}
+            behind the Dashboard&apos;s <span className="data">{fmtUsd(dashboardTotal, 0)}</span>
+          </>
+        ) : (
+          ", every year"
+        )}
+      </summary>
+      <div className="mt-2 grid gap-3">
+        {[...years].reverse().map(([year, rows]) => {
+          const sum = rows.reduce((s, x) => s + gainOf(x), 0);
+          return (
+            <div key={year} className="grid gap-1">
+              <p className="flex items-baseline justify-between gap-4 border-b pb-1">
+                <span className="font-medium">
+                  {year} <span className="font-normal text-muted-foreground">· {plural(rows.length, "sale")}</span>
+                </span>
+                <span className={cn("data", gainClass(sum))}>{fmtUsd(sum)}</span>
+              </p>
+              <ul className="grid divide-y">
+                {rows.map((s) => {
+                  const gain = gainOf(s);
+                  const mixed =
+                    Math.abs(s.shortTermGain) >= 0.005 && Math.abs(s.longTermGain) >= 0.005;
+                  return (
+                    <li
+                      key={s.txnId}
+                      className="grid grid-cols-[1fr_auto] items-baseline gap-x-4 gap-y-0.5 py-1.5"
+                    >
+                      <span>
+                        <span className="font-medium">{s.symbol}</span>{" "}
+                        <span className="text-muted-foreground">
+                          sold <span className="data">{s.soldAt}</span>
+                        </span>
+                      </span>
+                      <span className={cn("data text-right", gainClass(gain))}>{fmtUsd(gain)}</span>
+                      <span className="data text-xs text-muted-foreground">
+                        {fmtQty(s.quantity)} in {s.accountName} · sold for {fmtUsd(s.proceeds)}, paid{" "}
+                        {fmtUsd(s.proceeds - gain)}
+                      </span>
+                      <span className="data text-right text-xs text-muted-foreground">
+                        {!s.taxed
+                          ? "retirement account, not taxed"
+                          : mixed
+                            ? `${fmtUsd(s.shortTermGain, 0)} short · ${fmtUsd(s.longTermGain, 0)} long`
+                            : Math.abs(s.longTermGain) >= 0.005
+                              ? "long-term"
+                              : "short-term"}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          );
+        })}
+        {years.size > 1 && (
+          <p className="flex items-baseline justify-between gap-4 border-t pt-1 font-medium">
+            <span>All years together</span>
+            <span className={cn("data", gainClass(total))}>{fmtUsd(total)}</span>
+          </p>
+        )}
+      </div>
+    </details>
   );
 }
 
