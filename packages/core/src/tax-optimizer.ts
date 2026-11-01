@@ -688,6 +688,13 @@ function landingsByAsset(
   return out;
 }
 
+/** One purchase behind a wait or on-hold move, with what waiting on it alone
+ *  saves (wait only; an on-hold asset is valued as a whole). */
+export interface MovePurchase {
+  lot: TaxLot;
+  valueUsd: Decimal | null;
+}
+
 /** One line of the "Moves available now" list. `valueUsd` is the tax it
  *  saves (null when it can't be priced against this year's profile). Loss
  *  moves carry where their loss lands (null for a hold that clears next year). */
@@ -706,10 +713,13 @@ export type TaxMove =
       symbol: string;
       assetClass: string;
       lots: number;
-      /** First day each of these lots counts as long-term (UTC date). */
+      /** First day a sale of these lots is safely long-term (UTC date): the
+       *  day after the purchase's anniversary, the date All Lots shows. */
       firstLongTermOn: Date;
       lastLongTermOn: Date;
       valueUsd: Decimal;
+      /** Each purchase, oldest first. */
+      purchases: MovePurchase[];
     }
   | {
       kind: "on_hold";
@@ -724,6 +734,8 @@ export type TaxMove =
       permanentlyDisallowed: boolean;
       valueUsd: Decimal | null;
       landing: LossLanding | null;
+      /** Each blocked purchase, oldest first (`valueUsd` null). */
+      purchases: MovePurchase[];
     }
   | { kind: "zero_gain"; gain: ZeroRateGain; valueUsd: Decimal };
 
@@ -886,6 +898,7 @@ export function zeroRateGains(
 }
 
 const addDays = (d: Date, n: number) => new Date(d.getTime() + n * DAY_MS);
+const byOpened = (a: TaxLot, b: TaxLot) => a.openedAt.getTime() - b.openedAt.getTime();
 const utcDay = (d: Date) =>
   new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 
@@ -1004,13 +1017,17 @@ export function taxMoves(
       permanentlyDisallowed: h.blocks.some((b) => b.permanentlyDisallowed),
       valueUsd,
       landing,
+      purchases: [...h.lots].sort(byOpened).map((lot) => ({ lot, valueUsd: null })),
     });
   }
 
   const waits = new Map<string, Extract<TaxMove, { kind: "wait" }>>();
   for (const { lot, ripening } of ripeningSoon(lots, profile, asOf)) {
     if (ripening.estSavingsIfWaited.lte(0)) continue; // a loss gains nothing by waiting
-    const on = utcDay(longTermQualifyingInstant(lot.openedAt));
+    // A sale on the anniversary itself is still short-term (IRS), so the date
+    // to wait for is the day after, the same date All Lots shows.
+    const on = addDays(utcDay(longTermQualifyingInstant(lot.openedAt)), 1);
+    const purchase = { lot, valueUsd: ripening.estSavingsIfWaited };
     const w = waits.get(lot.assetId);
     if (!w) {
       waits.set(lot.assetId, {
@@ -1022,14 +1039,17 @@ export function taxMoves(
         firstLongTermOn: on,
         lastLongTermOn: on,
         valueUsd: ripening.estSavingsIfWaited,
+        purchases: [purchase],
       });
       continue;
     }
     w.lots += 1;
+    w.purchases.push(purchase);
     if (on < w.firstLongTermOn) w.firstLongTermOn = on;
     if (on > w.lastLongTermOn) w.lastLongTermOn = on;
     w.valueUsd = w.valueUsd.add(ripening.estSavingsIfWaited);
   }
+  for (const w of waits.values()) w.purchases.sort((a, b) => byOpened(a.lot, b.lot));
   moves.push(...waits.values());
 
   // zero_gain: long-term gains inside the 0% bracket, measured from the year

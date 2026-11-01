@@ -153,6 +153,76 @@ function MoveText({ move: m }: { move: Move }) {
   );
 }
 
+/** "2026-11-27" → "Nov 27, 2026" */
+const fullDay = (iso: string) =>
+  new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+
+/**
+ * The purchases behind a "Hold…" or "Don't sell…" row, each with its exact
+ * long-term date, closed by default (petyr: "'Hold 2 purchases of VTI until
+ * Nov 5–Dec 5' is a date range, not an answer. I want lot, shares, basis,
+ * gain and the exact date each one flips to long-term").
+ */
+function MovePurchases({ move: m }: { move: Move }) {
+  const purchases = "purchases" in m ? (m.purchases ?? []) : [];
+  if (purchases.length === 0) return null;
+  return (
+    <details className="ml-[34px] text-sm">
+      <summary className="w-fit cursor-pointer text-xs text-primary marker:text-muted-foreground">
+        {purchases.length === 1 ? (
+          "Show the purchase"
+        ) : (
+          <>
+            Show the <span className="data">{purchases.length}</span> purchases
+          </>
+        )}
+      </summary>
+      <ul className="mt-1.5 grid divide-y border-y">
+        {purchases.map((p, i) => (
+          <li
+            key={`${p.boughtOn}-${p.accountName}-${i}`}
+            className="grid grid-cols-[1fr_auto] items-baseline gap-x-4 gap-y-0.5 py-1.5"
+          >
+            <span>
+              Bought <span className="data">{fullDay(p.boughtOn)}</span>{" "}
+              <span className="text-muted-foreground">in {p.accountName}</span>
+            </span>
+            <span className={cn("data text-right", gainClass(p.gainUsd))}>
+              {fmtUsd(p.gainUsd)}
+            </span>
+            <span className="data text-xs text-muted-foreground">
+              {fmtQty(p.quantity)} {p.quantity === 1 ? "unit" : "units"} · paid{" "}
+              {fmtUsd(p.costUsd)}
+            </span>
+            {/* Its own line on phones, where beside the units it squeezed the
+                purchase into a narrow column. */}
+            <span className="col-span-2 text-xs text-muted-foreground sm:col-span-1 sm:text-right">
+              {p.isLongTerm ? (
+                "held over a year"
+              ) : (
+                <>
+                  long-term from <span className="data">{fullDay(p.longTermOn)}</span>
+                </>
+              )}
+              {p.savedUsd !== null && p.savedUsd >= 0.5 && (
+                <>
+                  {" "}
+                  · waiting saves <span className="data">~{fmtUsd(p.savedUsd, 0)}</span>
+                </>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 /**
  * How a loss move's "saves ~$X" is worked out: each part of the loss, where
  * it lands (cancels gains taxed at their rate, comes off your pay, carries to
@@ -600,25 +670,25 @@ export function NowTab({
           <TooltipProvider delayDuration={150}>
             <ul className="grid grid-cols-1 divide-y border-y">
               {moves.map((m) => (
-                <li
-                  key={`${m.kind}-${m.assetId}`}
-                  className="flex items-center gap-3 py-2.5 text-sm"
-                >
-                  <AssetLogo symbol={m.symbol} assetClass={m.assetClass} size={22} />
-                  <MoveText move={m} />
-                  <span className="ml-auto shrink-0 text-right">
-                    {m.taxSavedUsd === null ? (
-                      <span className="text-muted-foreground">clears next year</span>
-                    ) : (
-                      <SavingMath move={m} rates={d.ratesUsed} stacked={lossMoves > 1}>
-                        <span className="text-gain">
-                          saves <span className="data">~{fmtUsd(m.taxSavedUsd, 0)}</span>
-                          {m.kind === "zero_gain" && " later"}
-                          {m.kind === "on_hold" && " by waiting"}
-                        </span>
-                      </SavingMath>
-                    )}
-                  </span>
+                <li key={`${m.kind}-${m.assetId}`} className="grid gap-1.5 py-2.5 text-sm">
+                  <div className="flex items-center gap-3">
+                    <AssetLogo symbol={m.symbol} assetClass={m.assetClass} size={22} />
+                    <MoveText move={m} />
+                    <span className="ml-auto shrink-0 text-right">
+                      {m.taxSavedUsd === null ? (
+                        <span className="text-muted-foreground">clears next year</span>
+                      ) : (
+                        <SavingMath move={m} rates={d.ratesUsed} stacked={lossMoves > 1}>
+                          <span className="text-gain">
+                            saves <span className="data">~{fmtUsd(m.taxSavedUsd, 0)}</span>
+                            {m.kind === "zero_gain" && " later"}
+                            {m.kind === "on_hold" && " by waiting"}
+                          </span>
+                        </SavingMath>
+                      )}
+                    </span>
+                  </div>
+                  <MovePurchases move={m} />
                 </li>
               ))}
             </ul>

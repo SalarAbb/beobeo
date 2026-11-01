@@ -678,10 +678,20 @@ describe("taxMoves (one ranked list of moves, R-003)", () => {
     if (vtiHold?.kind !== "on_hold") throw new Error("expected on_hold");
     expect(vtiHold.clearsOn.toISOString().slice(0, 10)).toBe("2026-07-06");
     expect(vtiHold.lossUsd.toNumber()).toBeCloseTo(1000, 6);
+    expect(vtiHold.purchases.map((p) => [p.lot.lotId, p.valueUsd])).toEqual([["m-vti", null]]);
     if (aaplWait?.kind !== "wait") throw new Error("expected wait");
     expect(aaplWait.lots).toBe(2);
-    expect(aaplWait.firstLongTermOn.toISOString().slice(0, 10)).toBe("2026-06-30");
-    expect(aaplWait.lastLongTermOn.toISOString().slice(0, 10)).toBe("2026-07-10");
+    // Bought 2025-06-30 and 2025-07-10: a sale on the anniversary is still
+    // short-term, so each is safely long-term the day after.
+    expect(aaplWait.firstLongTermOn.toISOString().slice(0, 10)).toBe("2026-07-01");
+    expect(aaplWait.lastLongTermOn.toISOString().slice(0, 10)).toBe("2026-07-11");
+    // Each purchase, oldest first, with its own 85 from waiting (sums to the 170).
+    expect(
+      aaplWait.purchases.map((p) => [p.lot.lotId, p.valueUsd!.toNumber()]),
+    ).toEqual([
+      ["m-aapl1", expect.closeTo(85, 6)],
+      ["m-aapl2", expect.closeTo(85, 6)],
+    ]);
 
     // Where each loss lands, in the engine's order (32% ordinary, 15% LT, carryforward
     // counted at 70% of 32% = 22.4%):

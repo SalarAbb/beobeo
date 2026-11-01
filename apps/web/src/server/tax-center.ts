@@ -14,6 +14,7 @@ import {
   type IncomeInfo,
   type LossLanding,
   type LossLotCandidate,
+  type MovePurchase,
   type TaxMove,
   type PlannedSale,
   type TaxLot,
@@ -258,7 +259,7 @@ export function computeAccountHoldings(userId: string, portfolioId?: string) {
 export function computeTaxNow(userId: string, portfolioId?: string, income?: IncomeInfo) {
   const scope = portfolioKey(portfolioId);
   const incomeKey = income ? `${income.status}:${Math.round(income.taxableIncomeUsd)}` : "none";
-  return cached(userCacheKey(userId, "tax-now9", scope, incomeKey), TTL.now, async () => {
+  return cached(userCacheKey(userId, "tax-now10", scope, incomeKey), TTL.now, async () => {
     const asOf = new Date();
     const [
       { lots, profile: saved, blocked, profileRow, ytdSales, ytdTaxAdvantagedGain, accountPositions },
@@ -380,7 +381,7 @@ export function computeTaxNow(userId: string, portfolioId?: string, income?: Inc
         allTime: overview.totals.realized,
         thisYear: overview.totals.realizedThisYear,
       },
-      moves: tm.moves.map(serializeMove),
+      moves: tm.moves.map((m) => serializeMove(m, asOf)),
       // The rates every move's saving is worked out at (after the income
       // adjustment), so a move's landing × these = its "saves ~$X".
       ratesUsed: {
@@ -419,8 +420,21 @@ function serializeLanding(l: LossLanding) {
   };
 }
 
+/** One purchase behind a wait / on-hold row (petyr: "'Hold 2 purchases of VTI
+ *  until Nov 5–Dec 5' never shows me the lots"). */
+const serializePurchase = (p: MovePurchase, asOf: Date) => ({
+  boughtOn: toIsoDate(p.lot.openedAt),
+  isLongTerm: isLongTerm(p.lot.openedAt, asOf),
+  accountName: p.lot.accountName,
+  quantity: p.lot.quantity.toNumber(),
+  costUsd: p.lot.costBasis.toNumber(),
+  gainUsd: p.lot.quantity.mul(p.lot.price).sub(p.lot.costBasis).toNumber(),
+  longTermOn: toIsoDate(longTermOn(p.lot.openedAt)),
+  savedUsd: p.valueUsd === null ? null : p.valueUsd.toNumber(),
+});
+
 /** Plain-JSON move for the Now tab and the chat snapshot. */
-function serializeMove(m: TaxMove) {
+function serializeMove(m: TaxMove, asOf: Date) {
   const value = m.valueUsd === null ? null : m.valueUsd.toNumber();
   switch (m.kind) {
     case "lock":
@@ -449,6 +463,7 @@ function serializeMove(m: TaxMove) {
         permanentlyDisallowed: m.permanentlyDisallowed,
         taxSavedUsd: value,
         landing: m.landing && serializeLanding(m.landing),
+        purchases: m.purchases.map((p) => serializePurchase(p, asOf)),
       };
     case "wait":
       return {
@@ -460,6 +475,7 @@ function serializeMove(m: TaxMove) {
         firstLongTermOn: toIsoDate(m.firstLongTermOn),
         lastLongTermOn: toIsoDate(m.lastLongTermOn),
         taxSavedUsd: value,
+        purchases: m.purchases.map((p) => serializePurchase(p, asOf)),
       };
     case "zero_gain":
       return {

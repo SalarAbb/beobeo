@@ -90,6 +90,7 @@ export {
   taxMoves,
   type TaxMove,
   type TaxMoves,
+  type MovePurchase,
   type LossLanding,
   type TaxLot,
   type TaxProfile,
