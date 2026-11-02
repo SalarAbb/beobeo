@@ -98,11 +98,46 @@ function SellAllNote({
   heldUnits: number;
 }) {
   const trpc = useTRPC();
-  const { portfolioId } = usePortfolio();
+  const { portfolioId, portfolios } = usePortfolio();
   const { complete: income } = useIncome();
-  const now = useQuery(trpc.tax.now.queryOptions({ portfolioId: portfolioId ?? undefined, income }));
+  // A portfolio can be another taxpayer (molly's daughter's UTMA, "Ginny").
+  // On All, a holding whose taxable shares sit in one portfolio is priced at
+  // that portfolio's own Tax Profile, as Tax Center does with it picked; molly
+  // (mission 132) got her household's rates for Ginny's VT with nothing saying
+  // whose they were.
+  const onAllOfSeveral = !portfolioId && portfolios.length > 1;
+  const holdings = useQuery({
+    ...trpc.accounts.holdings.queryOptions({ portfolioId: undefined }),
+    enabled: onAllOfSeveral,
+  });
+  const accounts = useQuery({ ...trpc.accounts.list.queryOptions({}), enabled: onAllOfSeveral });
+  const portfolioOf = new Map((accounts.data ?? []).map((a) => [a.id, a.portfolioId]));
+  const holdingPortfolios = [
+    ...new Set(
+      (holdings.data ?? [])
+        .filter((a) => a.taxed && a.holdings.some((h) => h.assetId === assetId && h.quantity > 0))
+        .flatMap((a) => portfolioOf.get(a.accountId) ?? []),
+    ),
+  ];
+  const scopeId =
+    portfolioId ?? (onAllOfSeveral && holdingPortfolios.length === 1 ? holdingPortfolios[0] : undefined);
+  const waitingForScope = onAllOfSeveral && (!holdings.data || !accounts.data);
+  const now = useQuery({
+    ...trpc.tax.now.queryOptions({ portfolioId: scopeId, income }),
+    enabled: !waitingForScope,
+  });
   const s = now.data?.sellAllByAsset[assetId];
-  if (!s) return null;
+  if (waitingForScope || !s || !now.data) return null;
+
+  const nameOf = (id: string) => portfolios.find((p) => p.id === id)?.name ?? "this";
+  const whose =
+    portfolios.length < 2
+      ? "your"
+      : scopeId
+        ? `the ${nameOf(scopeId)} portfolio's`
+        : "the All portfolios";
+  const rates = now.data.ratesUsed;
+  const pct = (x: number) => `${Math.round(x * 10) / 10}%`;
 
   const gain = s.shortTermGainUsd + s.longTermGainUsd;
   const where = s.accounts.length === 1 ? s.accounts[0] : "your taxable accounts";
@@ -115,7 +150,7 @@ function SellAllNote({
         : "";
   const tax =
     s.taxUsd > 0.5
-      ? `about ${fmtUsd(s.taxUsd)} in tax at your Tax Profile's rates`
+      ? `about ${fmtUsd(s.taxUsd)} in tax at ${whose} Tax Profile rates (${pct(rates.shortTermPct)} on gains from a year or less, ${pct(rates.longTermPct)} on older ones)`
       : s.taxUsd < -0.5
         ? `which would cut this year's tax by about ${fmtUsd(-s.taxUsd)}`
         : "no tax this year";
@@ -131,6 +166,8 @@ function SellAllNote({
         {split}, {tax}.
         {retirementUnits > 1e-9 &&
           ` The other ${fmtQty(retirementUnits)} in retirement accounts aren't taxed when sold.`}
+        {!scopeId && holdingPortfolios.length > 1 &&
+          ` Its taxable shares sit in ${holdingPortfolios.map(nameOf).join(" and ")}, each with its own Tax Profile: pick one in the portfolio switcher to see its tax at its own rates.`}
       </p>
       <p className="max-w-3xl text-sm text-muted-foreground">
         To sell only part of it, Tax Center →{" "}
