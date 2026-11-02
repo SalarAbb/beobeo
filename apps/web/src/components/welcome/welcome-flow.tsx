@@ -208,18 +208,23 @@ function TaxStep({
   first: string;
   onDone: (answers: TaxAnswers | null, recap?: RecapLine[]) => void;
 }) {
-  const [status, setStatus] = useState<FilingStatus>("single");
+  // Nothing picked at first: a preselected Single showed a married filer
+  // single-filer brackets before they'd said how they file (hermione,
+  // missions 101/102). Pay and the brackets appear once a status is picked.
+  const [status, setStatus] = useState<FilingStatus | null>(null);
   const [band, setBand] = useState<number | null>(null);
   // Optional pay before deductions. People know their pay, not their taxable
   // income: hermione ($250k, married) expected 32% and read the 24% band
   // setup chose as wrong. Typing it picks the band and says why.
   const [payText, setPayText] = useState("");
   const [stateRate, setStateRate] = useState("");
-  const bands = bracketOptions(status);
+  // For the hidden rows' text only; nothing is shown or saved for it.
+  const filing = status ?? "single";
+  const bands = status ? bracketOptions(status) : [];
   const payNum = Number(payText.replace(/[$,\s]/g, ""));
   const pay = payText.trim() !== "" && Number.isFinite(payNum) && payNum >= 0 ? payNum : null;
-  const taxable = pay === null ? null : taxableFromPay(status, pay);
-  const fromPay = taxable === null ? null : ratesAtIncome(status, taxable);
+  const taxable = pay === null || !status ? null : taxableFromPay(status, pay);
+  const fromPay = taxable === null || !status ? null : ratesAtIncome(status, taxable);
   // A tapped band wins over the typed pay.
   const chosen = band ?? fromPay?.band ?? null;
   const picked = chosen === null ? null : bands[chosen];
@@ -232,7 +237,7 @@ function TaxStep({
   const { income, setIncome } = useIncome();
 
   function onContinue() {
-    if (picked)
+    if (picked && status)
       setIncome({
         status,
         taxableIncomeUsd: usesPay ? taxable : income.taxableIncomeUsd,
@@ -244,7 +249,7 @@ function TaxStep({
     const recap = [
       {
         label: "Taxes",
-        value: rates
+        value: rates && status
           ? `${FILING_STATUS_LABEL[status]}: ${rates.ordinaryRatePct}% on sales held a year or less, ${rates.ltcgRatePct}% on longer ones${state && `, plus ${state}`}`
           : state,
       },
@@ -255,7 +260,7 @@ function TaxStep({
             {
               label: "Income",
               value: usesPay
-                ? `About ${usd(taxable!)} taxable (${usd(pay!)} pay minus the ${usd(STANDARD_DEDUCTION[status])} standard deduction), in the ${picked.ordinaryRatePct}% bracket: ${bandEdges(picked)}`
+                ? `About ${usd(taxable!)} taxable (${usd(pay!)} pay minus the ${usd(STANDARD_DEDUCTION[filing])} standard deduction), in the ${picked.ordinaryRatePct}% bracket: ${bandEdges(picked)}`
                 : `The ${picked.ordinaryRatePct}% bracket you picked: ${bandEdges(picked)}`,
             },
           ]
@@ -286,11 +291,20 @@ function TaxStep({
         <Label>How you file</Label>
         <SegmentedControl
           value={status}
-          onChange={(s) => setStatus(s)}
+          onChange={(s) => {
+            setStatus(s);
+            setBand(null);
+          }}
           options={STATUS_OPTIONS}
         />
+        {!status && (
+          <p className="text-xs text-muted-foreground">
+            Pick one to see your 2026 brackets. Not sure? Skip it and we&apos;ll assume the 24%
+            bracket (15% on long-term gains).
+          </p>
+        )}
       </div>
-      <div className="grid gap-2">
+      <div className={`${status ? "grid" : "hidden"} gap-2`}>
         <Label htmlFor="pay">Your pay this year, roughly</Label>
         <div className="flex items-center gap-1.5">
           <span className="text-sm text-muted-foreground">$</span>
@@ -317,7 +331,7 @@ function TaxStep({
                 : "."}
             </span>
             <span className="mt-0.5 block text-xs text-muted-foreground">
-              After the <span className="data">${STANDARD_DEDUCTION[status].toLocaleString("en-US")}</span>{" "}
+              After the <span className="data">${STANDARD_DEDUCTION[filing].toLocaleString("en-US")}</span>{" "}
               standard deduction, about{" "}
               <span className="data">${Math.round(taxable).toLocaleString("en-US")}</span> of your pay
               is taxable
@@ -328,7 +342,7 @@ function TaxStep({
           </p>
         )}
       </div>
-      <div className="grid gap-2">
+      <div className={`${status ? "grid" : "hidden"} gap-2`}>
         <Label id="band-label">Or pick your taxable income</Label>
         <p className="-mt-1 text-xs text-muted-foreground">
           2026 federal brackets. Taxable income is what&apos;s left after deductions, so it&apos;s
@@ -351,7 +365,7 @@ function TaxStep({
             >
               <span className="flex flex-col">
                 <span className="data font-medium">{bandLabel(b)} taxable</span>
-                <span className="data text-xs text-muted-foreground">{payLabel(status, b)}</span>
+                <span className="data text-xs text-muted-foreground">{payLabel(filing, b)}</span>
               </span>
               <span className="data text-xs text-muted-foreground">
                 {b.ordinaryRatePct}% bracket
@@ -360,7 +374,7 @@ function TaxStep({
           ))}
         </div>
         <p className="text-xs text-muted-foreground">
-          {picked && !usesPay && pay === null && `${payRange(status, picked)} `}
+          {picked && !usesPay && pay === null && `${payRange(filing, picked)} `}
           {/* With pay typed, the line under the pay box already says this. */}
           {!rates
             ? "Not sure? Skip it and we'll assume the 24% bracket (15% on long-term gains)."

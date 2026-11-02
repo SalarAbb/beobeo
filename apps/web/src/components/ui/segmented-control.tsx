@@ -8,7 +8,8 @@ export function SegmentedControl<T extends string>({
   onChange,
   options,
 }: {
-  value: T;
+  /** null = nothing picked yet. */
+  value: T | null;
   onChange: (v: T) => void;
   options: { value: T; label: string }[];
 }) {

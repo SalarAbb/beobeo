@@ -171,6 +171,8 @@ export async function signUpViaUi(
     // account, then skip to the app — the path a hurried new user takes.
     if (new URL(page.url()).pathname === "/welcome") {
       await shot("welcome-taxes", performance.now() - t0);
+      // No filing status is preselected; the brackets show once one is picked.
+      await page.getByRole("button", { name: "Single", exact: true }).click();
       await page.getByRole("radio").nth(1).click();
       await page.getByRole("button", { name: /^continue$/i }).click();
       await page.getByText(/where do you invest/i).waitFor({ timeout: 20_000 });
