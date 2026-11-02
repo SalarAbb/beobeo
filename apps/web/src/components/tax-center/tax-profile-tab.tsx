@@ -306,7 +306,7 @@ function RatesCheck({
   const next = bands[at.band + 1];
   return (
     <p className="text-xs text-muted-foreground">
-      At about <span className="data">{fmtUsd(complete.taxableIncomeUsd, 0)}</span> of taxable
+      At <span className="data">{fmtUsd(complete.taxableIncomeUsd, 0)}</span> of taxable
       income ({FILING_STATUS_LABEL[complete.status].toLowerCase()}
       {income.payUsd != null && (
         <>
@@ -449,7 +449,7 @@ function IncomeSection() {
       </div>
       {byPay && income.payUsd != null && income.taxableIncomeUsd !== null ? (
         <p className="text-sm">
-          After the <span className="data">{fmtUsd(deduction, 0)}</span> standard deduction, about{" "}
+          After the <span className="data">{fmtUsd(deduction, 0)}</span> standard deduction,{" "}
           <span className="data">{fmtUsd(income.taxableIncomeUsd, 0)}</span> of your{" "}
           <span className="data">{fmtUsd(income.payUsd, 0)}</span> is taxable income, the figure the
           tax brackets use.

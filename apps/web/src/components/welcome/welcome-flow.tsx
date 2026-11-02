@@ -250,7 +250,7 @@ function TaxStep({
       {
         label: "Taxes",
         value: rates && status
-          ? `${FILING_STATUS_LABEL[status]}: ${rates.ordinaryRatePct}% on sales held a year or less, ${rates.ltcgRatePct}% on longer ones${state && `, plus ${state}`}`
+          ? `${FILING_STATUS_LABEL[status]}, 2026 federal brackets: ${rates.ordinaryRatePct}% on sales held a year or less, ${rates.ltcgRatePct}% on longer ones${state && `, plus ${state}`}`
           : state,
       },
       // The figures behind the rates, so they can be checked here without
@@ -260,7 +260,7 @@ function TaxStep({
             {
               label: "Income",
               value: usesPay
-                ? `About ${usd(taxable!)} taxable (${usd(pay!)} pay minus the ${usd(STANDARD_DEDUCTION[filing])} standard deduction), in the ${picked.ordinaryRatePct}% bracket: ${bandEdges(picked)}`
+                ? `${usd(taxable!)} taxable (${usd(pay!)} pay minus the ${usd(STANDARD_DEDUCTION[filing])} standard deduction), in the ${picked.ordinaryRatePct}% bracket: ${bandEdges(picked)}`
                 : `The ${picked.ordinaryRatePct}% bracket you picked: ${bandEdges(picked)}`,
             },
           ]
@@ -300,7 +300,7 @@ function TaxStep({
         {!status && (
           <p className="text-xs text-muted-foreground">
             Pick one to see your 2026 brackets. Not sure? Skip it and we&apos;ll assume the 24%
-            bracket (15% on long-term gains).
+            bracket (15% on sales of things held over a year).
           </p>
         )}
       </div>
@@ -332,7 +332,7 @@ function TaxStep({
             </span>
             <span className="mt-0.5 block text-xs text-muted-foreground">
               After the <span className="data">${STANDARD_DEDUCTION[filing].toLocaleString("en-US")}</span>{" "}
-              standard deduction, about{" "}
+              standard deduction,{" "}
               <span className="data">${Math.round(taxable).toLocaleString("en-US")}</span> of your pay
               is taxable
               {usesPay
@@ -377,7 +377,7 @@ function TaxStep({
           {picked && !usesPay && pay === null && `${payRange(filing, picked)} `}
           {/* With pay typed, the line under the pay box already says this. */}
           {!rates
-            ? "Not sure? Skip it and we'll assume the 24% bracket (15% on long-term gains)."
+            ? "Not sure? Skip it and we'll assume the 24% bracket (15% on sales of things held over a year)."
             : !usesPay &&
               `Sales held a year or less are taxed at ${rates.ordinaryRatePct}%, longer ones at ${rates.ltcgRatePct}%.`}
         </p>
@@ -456,7 +456,9 @@ function AccountsStep({
     <AuthShell
       tagline="Step 2 of 3 · Accounts"
       title="Where do you invest?"
-      subtitle="Tap each kind you have. Tax moves come from taxable accounts; retirement accounts are checked so a rebuy there doesn't cancel a loss."
+      // Plain words: "checked so a rebuy there doesn't cancel a loss" made no
+      // sense to a first-time investor (luna, mission 71).
+      subtitle="Tap each kind you have. Sales in a regular brokerage account are taxed; sales inside a retirement account (IRA, 401(k)) aren't."
       footer={<StepFooter onSkip={() => onDone([])} />}
     >
       {taxError && (
@@ -573,7 +575,9 @@ function FirstHoldingStep({
   // Once it's in, the line says so: "Saving…" under a "VOO buy recorded"
   // toast, while the dashboard loaded, read as a wait of unknown length
   // (hermione, mission 72).
-  const [saved, setSaved] = useState(false);
+  // It also says what went in (units, cost, date, account, holding period),
+  // so it can be checked before the dashboard opens (hermione, mission 115).
+  const [saved, setSaved] = useState<string | null>(null);
   useEffect(() => router.prefetch("/dashboard"), [router]);
   // The accounts still saving don't block anything: the import's account
   // pick comes after a file is chosen, and the add form waits on its Save.
@@ -594,18 +598,18 @@ function FirstHoldingStep({
       }
     >
       {saving && (
-        <p role="status" className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <p role="status" className="flex items-start gap-1.5 text-sm text-muted-foreground">
           {/* A spinner beside "recorded" still read as a wait (mission 78). */}
           {saved ? (
-            <Check className="size-3.5 text-gain" aria-hidden />
+            <Check className="mt-0.5 size-3.5 shrink-0 text-gain" aria-hidden />
           ) : (
-            <Loader2 className="size-3.5 animate-spin" aria-hidden />
+            <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin" aria-hidden />
           )}
           {/* Once it's recorded, the line is also a link: a step with no
               control while the dashboard loaded read as a dead end (mission 102). */}
           {saved ? (
             <span>
-              Your {saving} is recorded.{" "}
+              Your {saving} is recorded: {saved}{" "}
               <Link href="/dashboard" className="font-medium text-primary underline-offset-4 hover:underline">
                 Opening your dashboard…
               </Link>
@@ -636,10 +640,8 @@ function FirstHoldingStep({
         {/* The form opens right here (it used to send you to /transactions,
             which read as being dropped out of setup), then lands on the dashboard. */}
         <AddTransactionDialog
-          onCreated={() => {
-            setSaved(true);
-            router.push("/dashboard");
-          }}
+          onCreated={() => router.push("/dashboard")}
+          onSaved={setSaved}
           onSaving={setSaving}
           accountsPending={accountsPending}
           defaultEntry="total"

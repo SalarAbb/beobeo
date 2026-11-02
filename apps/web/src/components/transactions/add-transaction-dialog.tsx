@@ -61,7 +61,7 @@ const dayFmt = new Intl.DateTimeFormat("en-US", {
  *  the day after its anniversary, like the Tax Center's lots. */
 function heldNote(date: string, today: string): string {
   const [y, m, d] = date.split("-").map(Number);
-  if (!y || !m || !d) return "Roughly is fine (e.g. 10/1/2024): after a year, a sale is taxed at the lower long-term rate.";
+  if (!y || !m || !d) return "Roughly is fine (e.g. 10/1/2024, or just Oct 2024): after a year, a sale is taxed at the lower long-term rate.";
   if (date >= today) return "Bought earlier? Type or pick roughly when: after a year, a sale is taxed at the lower long-term rate.";
   const ltOn = new Date(Date.UTC(y + 1, m - 1, d + 1));
   return ltOn.toISOString().slice(0, 10) <= today
@@ -69,9 +69,33 @@ function heldNote(date: string, today: string): string {
     : `Under a year: a sale is taxed at the lower long-term rate from ${dayFmt.format(ltOn)}.`;
 }
 
+/** The saved holding in one line, for setup's confirmation: "50 VOO, $25,000.00
+ *  in all, bought Oct 1, 2024, in IBKR. Owned over a year, so a sale would be
+ *  long-term." A bare "recorded" left hermione unable to check the units, cost
+ *  and holding period before the dashboard opened (mission 115). */
+function savedSummary(
+  qty: string,
+  symbol: string,
+  total: number | null,
+  date: string,
+  today: string,
+  account: string | undefined,
+): string {
+  const [y, m, d] = date.split("-").map(Number);
+  const ltOn = new Date(Date.UTC(y! + 1, m! - 1, d! + 1));
+  const term =
+    ltOn.toISOString().slice(0, 10) <= today
+      ? "Owned over a year, so a sale would be long-term."
+      : `A sale would be long-term from ${dayFmt.format(ltOn)}.`;
+  return `${qty} ${symbol}${total !== null ? `, ${fmtUsd(total)} in all` : ""}, bought ${dayFmt.format(
+    new Date(`${date}T12:00:00Z`),
+  )}${account ? `, in ${account}` : ""}. ${term}`;
+}
+
 export function AddTransactionDialog({
   onCreated,
   onSaving,
+  onSaved,
   accountsPending,
   defaultOpen = false,
   defaultType = "buy",
@@ -87,6 +111,9 @@ export function AddTransactionDialog({
   /** Called with what's being saved ("VOO buy") when Save is pressed, and
    *  with null if the save fails (the welcome step says so on the page). */
   onSaving?: (what: string | null) => void;
+  /** With `owned`, called once the holding is in with what was saved in
+   *  words (units, cost, date, account, holding period). */
+  onSaved?: (summary: string) => void;
   /** What opens the dialog (default: the "Add transaction" button). */
   trigger?: React.ReactNode;
   /** Open on mount (the welcome flow links to /transactions?add=1). */
@@ -264,10 +291,21 @@ export function AddTransactionDialog({
       // just that something saved (hermione, mission 46).
       // The amount and date too: a backdated payout lands below newer rows, and
       // olenna couldn't tell hers had gone in (missions 112, 113).
+      // Setup's holding says everything that was saved, here and on the
+      // dashboard the toast follows the user to.
+      const summary = owned
+        ? savedSummary(effectiveQuantity, asset.symbol, total, date, today, undefined)
+        : null;
       toast.success(`${what} recorded${acctName ? ` in ${acctName}` : ""}`, {
         id: toastId,
-        description: `${total !== null ? `${fmtUsd(total)} on ` : ""}${dayFmt.format(new Date(`${date}T12:00:00Z`))}`,
+        description:
+          summary ??
+          `${total !== null ? `${fmtUsd(total)} on ` : ""}${dayFmt.format(new Date(`${date}T12:00:00Z`))}`,
+        ...(summary && { duration: 10_000 }),
       });
+      // The toast's title already names the account; the page line doesn't.
+      if (summary)
+        onSaved?.(savedSummary(effectiveQuantity, asset.symbol, total, date, today, acctName));
       resetForm();
       onCreated?.(created);
     } catch (err) {
