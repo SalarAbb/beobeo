@@ -24,6 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useTRPC } from "@/lib/trpc";
+import { useStoredState } from "@/lib/use-stored-state";
 import { fmtCompactUsd, fmtUsd, useVizTheme } from "@/lib/viz";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -54,6 +55,9 @@ export function DividendIncomeSection({ holdings }: { holdings: { symbol: string
   const trpc = useTRPC();
   const theme = useVizTheme();
   const { portfolioId } = usePortfolio();
+  // Closed by default (R-002: augusta read the bars and table as more than a
+  // glance needs); someone who opens it, olenna, keeps it open on this device.
+  const [open, setOpen] = useStoredState("beobeo.dividends.open", false);
   const canPay = holdings.some((h) => h.class !== "crypto");
   const query = useQuery({
     ...trpc.portfolio.dividends.queryOptions({ portfolioId: portfolioId ?? undefined }),
@@ -100,7 +104,11 @@ export function DividendIncomeSection({ holdings }: { holdings: { symbol: string
       )}
 
       {d.holdings.length > 0 && (
-        <>
+        <details className="group text-sm" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+          <summary className="w-fit cursor-pointer text-primary marker:text-muted-foreground">
+            Show it month by month and by holding
+          </summary>
+          <div className="mt-3 grid gap-4">
           <div className="data h-48 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={bars} margin={{ top: 8, right: 8, bottom: 0, left: 8 }} barCategoryGap="25%">
@@ -183,15 +191,19 @@ export function DividendIncomeSection({ holdings }: { holdings: { symbol: string
               ))}
             </TableBody>
           </Table>
-        </>
+          <p className="max-w-prose text-xs text-muted-foreground">
+            Bars are by the month you had to own the shares to get the payout; the cash usually
+            arrives a few weeks later.
+          </p>
+          </div>
+        </details>
       )}
 
       <p className="max-w-prose text-xs text-muted-foreground">
         {d.holdings.length > 0 && (
           <>
-            An estimate from what each holding paid per share over the last 12 months (bars by
-            the month you had to own the shares to get the payout; the cash usually arrives a
-            few weeks later), not a promise: companies can raise or cut payouts.
+            An estimate from what each holding paid per share over the last 12 months, not a
+            promise: companies can raise or cut payouts.
             {d.noPayments.length > 0 && <> {list(d.noPayments)} paid nothing in that time.</>}
             {d.unavailable.length > 0 && (
               <> Couldn&apos;t get payouts for {list(d.unavailable)} right now.</>
