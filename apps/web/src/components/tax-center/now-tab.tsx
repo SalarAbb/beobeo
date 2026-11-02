@@ -495,14 +495,123 @@ const list = (names: string[]) =>
 
 const pct = (n: number) => `${Math.round(n * 10) / 10}%`;
 
+const taxNote = (t: number) =>
+  t >= 0.5 ? `about ${fmtUsd(t, 0)} in tax` : t <= -0.5 ? `cuts tax by ${fmtUsd(-t, 0)}` : "no tax";
+
+/**
+ * The sell-everything estimate one holding at a time (fred: "Show me BTC,
+ * ETH and SOL each with proceeds, basis, gain and tax"). Proceeds, cost and
+ * gain add up to the total; each tax is for selling only that holding (the
+ * position page's figure), so the note says why they needn't sum.
+ */
+function SellAllByHolding({
+  rows,
+  total,
+  ytdGain,
+  ytdLoss,
+}: {
+  rows: Now["sellAllByAsset"][string][];
+  total: NonNullable<Now["sellAll"]>;
+  ytdGain: number;
+  ytdLoss: number;
+}) {
+  if (rows.length < 2) return null;
+  const sorted = [...rows].sort((a, b) => b.proceedsUsd - a.proceedsUsd);
+  const gainOf = (r: (typeof rows)[number]) => r.shortTermGainUsd + r.longTermGainUsd;
+  const totalGain = total.shortTermGainUsd + total.longTermGainUsd;
+  const aloneSum = rows.reduce((t, r) => t + r.taxUsd, 0);
+  return (
+    <details className="max-w-2xl text-sm">
+      <summary className="w-fit cursor-pointer text-primary marker:text-muted-foreground">
+        Show it by holding
+      </summary>
+      <ul className="mt-2 grid divide-y border-y">
+        {sorted.map((r) => {
+          const g = gainOf(r);
+          const both = Math.abs(r.shortTermGainUsd) >= 0.5 && Math.abs(r.longTermGainUsd) >= 0.5;
+          return (
+            <li
+              key={r.symbol}
+              className="grid grid-cols-[1fr_auto] items-baseline gap-x-4 gap-y-0.5 py-1.5"
+            >
+              <span className="flex items-center gap-2">
+                <AssetLogo symbol={r.symbol} assetClass={r.assetClass} size={18} />
+                <span className="font-medium">{r.symbol}</span>
+                <span className="data text-xs text-muted-foreground">
+                  {fmtQty(r.units)} in {list(r.accounts)}
+                </span>
+              </span>
+              <span className={cn("data text-right", gainClass(g))}>{fmtUsd(g)}</span>
+              <span className="data text-xs text-muted-foreground">
+                sells for {fmtUsd(r.proceedsUsd)}, paid {fmtUsd(r.costBasisUsd)}
+                {" · "}
+                {both
+                  ? `${fmtUsd(r.shortTermGainUsd)} held a year or less, ${fmtUsd(r.longTermGainUsd)} longer`
+                  : Math.abs(r.longTermGainUsd) >= 0.005
+                    ? "all held over a year"
+                    : "all held a year or less"}
+                {r.disallowedLossUsd >= 1 && ` · ${fmtUsd(r.disallowedLossUsd, 0)} loss left out`}
+              </span>
+              <span className="data text-right text-xs text-muted-foreground">
+                {taxNote(r.taxUsd)} if sold alone
+              </span>
+            </li>
+          );
+        })}
+        <li className="grid grid-cols-[1fr_auto] items-baseline gap-x-4 gap-y-0.5 py-1.5 font-medium">
+          <span>Together</span>
+          <span className={cn("data text-right", gainClass(totalGain))}>{fmtUsd(totalGain)}</span>
+          <span className="data text-xs font-normal text-muted-foreground">
+            sells for {fmtUsd(total.proceedsUsd)}, paid {fmtUsd(total.costBasisUsd)}
+          </span>
+          <span className="data text-right text-xs font-normal text-muted-foreground">
+            {taxNote(total.taxUsd)}
+          </span>
+        </li>
+      </ul>
+      <p className="mt-1.5 text-xs text-muted-foreground">
+        Each holding&apos;s tax is for selling only that one
+        {ytdLoss > 0 ? (
+          <>
+            , after this year&apos;s <span className="data">{fmtUsd(ytdLoss, 0)}</span> net loss from
+            sales
+          </>
+        ) : ytdGain > 0 ? (
+          <>
+            , on top of this year&apos;s <span className="data">{fmtUsd(ytdGain, 0)}</span> net gain
+            from sales
+          </>
+        ) : null}
+        .
+        {Math.abs(aloneSum - total.taxUsd) >= 1 &&
+          ` Sold together, one holding's loss cancels another's gain${ytdLoss > 0 ? " and this year's loss counts only once" : ""}, so the total isn't their sum.`}
+      </p>
+    </details>
+  );
+}
+
 /**
  * "Roughly what would I owe if I sold?" (samwell, mission 51: the page only
  * said he owed nothing, and nothing moved when he saved his rates or a
  * carryforward). Every taxable purchase sold today, on top of the year so
  * far; retirement accounts are named as left out.
  */
-function SellAllSection({ sellAll: s, onProfile }: { sellAll: NonNullable<Now["sellAll"]>; onProfile: () => void }) {
+function SellAllSection({
+  sellAll: s,
+  byAsset,
+  ytdNet,
+  onProfile,
+}: {
+  sellAll: NonNullable<Now["sellAll"]>;
+  byAsset: Now["sellAllByAsset"];
+  ytdNet: number;
+  onProfile: () => void;
+}) {
   const gain = s.shortTermGainUsd + s.longTermGainUsd;
+  // This year's sales already in the total (fred: "how much of the zero tax
+  // comes from the $2,567 already banked this year?").
+  const ytdLoss = ytdNet <= -0.5 ? -ytdNet : 0;
+  const ytdGain = ytdNet >= 0.5 ? ytdNet : 0;
   const both = Math.abs(s.shortTermGainUsd) >= 0.5 && Math.abs(s.longTermGainUsd) >= 0.5;
   const terms = both ? (
     <>
@@ -531,8 +640,20 @@ function SellAllSection({ sellAll: s, onProfile }: { sellAll: NonNullable<Now["s
             {owes ? (
               <>
                 That&apos;s about <span className="data font-semibold">{fmtUsd(s.taxUsd, 0)}</span>{" "}
-                in tax ({rateNote}), leaving you{" "}
-                <span className="data">{fmtUsd(s.proceedsUsd - s.taxUsd, 0)}</span>.
+                in tax ({rateNote}
+                {ytdLoss > 0 && (
+                  <>
+                    , after this year&apos;s <span className="data">{fmtUsd(ytdLoss, 0)}</span> net
+                    loss from sales cancels <span className="data">{fmtUsd(Math.min(ytdLoss, gain), 0)}</span>{" "}
+                    of the gain
+                  </>
+                )}
+                ), leaving you <span className="data">{fmtUsd(s.proceedsUsd - s.taxUsd, 0)}</span>.
+              </>
+            ) : ytdLoss >= gain - 0.5 ? (
+              <>
+                It wouldn&apos;t add any tax: this year&apos;s sales so far are a{" "}
+                <span className="data">{fmtUsd(ytdLoss, 0)}</span> net loss, which cancels it.
               </>
             ) : (
               <>It wouldn&apos;t add any tax at your rates.</>
@@ -556,6 +677,7 @@ function SellAllSection({ sellAll: s, onProfile }: { sellAll: NonNullable<Now["s
           <>, about what you paid, so no tax on it.</>
         )}
       </p>
+      <SellAllByHolding rows={Object.values(byAsset)} total={s} ytdGain={ytdGain} ytdLoss={ytdLoss} />
       <p className="max-w-2xl text-xs text-muted-foreground">
         {s.untaxedAccounts.length > 0 && (
           <>
@@ -830,7 +952,14 @@ export function NowTab({
         </p>
       )}
 
-      {d.sellAll && <SellAllSection sellAll={d.sellAll} onProfile={() => onNavigate("profile")} />}
+      {d.sellAll && (
+        <SellAllSection
+          sellAll={d.sellAll}
+          byAsset={d.sellAllByAsset}
+          ytdNet={netYtd}
+          onProfile={() => onNavigate("profile")}
+        />
+      )}
 
       <Section
         title="Need cash?"

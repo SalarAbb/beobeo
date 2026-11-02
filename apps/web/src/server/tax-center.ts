@@ -271,7 +271,7 @@ export function computeAccountHoldings(userId: string, portfolioId?: string) {
 export function computeTaxNow(userId: string, portfolioId?: string, income?: IncomeInfo) {
   const scope = portfolioKey(portfolioId);
   const incomeKey = income ? `${income.status}:${Math.round(income.taxableIncomeUsd)}` : "none";
-  return cached(userCacheKey(userId, "tax-now11", scope, incomeKey), TTL.now, async () => {
+  return cached(userCacheKey(userId, "tax-now12", scope, incomeKey), TTL.now, async () => {
     const asOf = new Date();
     const [
       {
@@ -324,11 +324,15 @@ export function computeTaxNow(userId: string, portfolioId?: string, income?: Inc
     const sellAllByAsset: Record<
       string,
       {
+        symbol: string;
+        assetClass: string;
         units: number;
         accounts: string[];
         proceedsUsd: number;
+        costBasisUsd: number;
         shortTermGainUsd: number;
         longTermGainUsd: number;
+        disallowedLossUsd: number;
         taxUsd: number;
       }
     > = {};
@@ -338,11 +342,15 @@ export function computeTaxNow(userId: string, portfolioId?: string, income?: Inc
         federalLtcgRate: Number(profileRow.federalLtcgRatePct) / 100,
       });
       sellAllByAsset[assetId] = {
+        symbol: assetLots[0]!.symbol,
+        assetClass: assetLots[0]!.assetClass,
         units: assetLots.reduce((s, l) => s + l.quantity.toNumber(), 0),
         accounts: [...new Set(assetLots.map((l) => l.accountName))],
         proceedsUsd: one.proceedsUsd.toNumber(),
+        costBasisUsd: one.costBasisUsd.toNumber(),
         shortTermGainUsd: one.shortTermGainUsd.toNumber(),
         longTermGainUsd: one.longTermGainUsd.toNumber(),
+        disallowedLossUsd: one.disallowedLossUsd.toNumber(),
         taxUsd: one.taxUsd.toNumber(),
       };
     }
