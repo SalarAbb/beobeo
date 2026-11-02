@@ -559,8 +559,11 @@ export default function DashboardPage() {
   const [showDetails, setShowDetails] = useState(false);
   const scope = { portfolioId: portfolioId ?? undefined };
   const queryClient = useQueryClient();
-  const prefetchPosition = (assetId: string) =>
+  const prefetchPosition = (assetId: string) => {
     void queryClient.prefetchQuery(trpc.portfolio.position.queryOptions({ assetId, ...scope }));
+    // The page's "Held in <account>" line.
+    void queryClient.prefetchQuery(trpc.accounts.holdings.queryOptions(scope));
+  };
   // Keep showing the previous window's data while the new one loads, but
   // never another portfolio's: that put Main's numbers under "Kid Custodial"
   // for a moment after a switch (hermione, portfolios.manage mission 32).

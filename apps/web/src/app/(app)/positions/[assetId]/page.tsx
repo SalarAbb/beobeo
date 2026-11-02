@@ -143,6 +143,68 @@ function SellAllNote({
   );
 }
 
+/**
+ * Which accounts hold it, and with two or more portfolios which portfolio each
+ * is in, under the title: molly could only tell VT was her daughter's from the
+ * sell sentence ("I want a clear label at the top saying Ginny's portfolio",
+ * mission 122). Per-account figures come from `accounts.holdings`, the Accounts
+ * page's own replay. Renders nothing until it loads.
+ */
+function HeldIn({ assetId }: { assetId: string }) {
+  const trpc = useTRPC();
+  const { portfolioId, portfolios } = usePortfolio();
+  const holdings = useQuery(
+    trpc.accounts.holdings.queryOptions({ portfolioId: portfolioId ?? undefined }),
+  );
+  const several = portfolios.length > 1;
+  const accounts = useQuery({ ...trpc.accounts.list.queryOptions({}), enabled: several });
+  if (!holdings.data || (several && !accounts.data)) return null;
+
+  const portfolioName = new Map(portfolios.map((p) => [p.id, p.name]));
+  const portfolioOf = new Map((accounts.data ?? []).map((a) => [a.id, a.portfolioId]));
+  const rows = holdings.data.flatMap((a) => {
+    const h = a.holdings.find((x) => x.assetId === assetId && x.quantity > 0);
+    if (!h) return [];
+    const pid = portfolioOf.get(a.accountId);
+    return [
+      {
+        id: a.accountId,
+        name: a.accountName,
+        taxed: a.taxed,
+        portfolio: several && pid ? portfolioName.get(pid) : undefined,
+        quantity: h.quantity,
+        value: h.marketValue,
+      },
+    ];
+  });
+  if (rows.length === 0) return null;
+
+  return (
+    <p className="basis-full text-sm text-muted-foreground">
+      Held in{" "}
+      {rows.map((r, i) => (
+        <span key={r.id}>
+          {i > 0 && (i === rows.length - 1 ? " and " : ", ")}
+          <span className="font-medium text-foreground">{r.name}</span>
+          {!r.taxed && " (retirement account)"}
+          {r.portfolio && (
+            <span className="ml-1.5 rounded-full border px-1.5 text-[11px]">{r.portfolio} portfolio</span>
+          )}
+          {rows.length > 1 && (
+            <>
+              {": "}
+              <span className="data">
+                {fmtQty(r.quantity)} {r.quantity === 1 ? "unit" : "units"}
+                {r.value !== null && `, ${fmtUsd(r.value)}`}
+              </span>
+            </>
+          )}
+        </span>
+      ))}
+    </p>
+  );
+}
+
 export default function PositionPage() {
   const { assetId } = useParams<{ assetId: string }>();
   const trpc = useTRPC();
@@ -230,6 +292,7 @@ export default function PositionPage() {
         ) : (
           <span className="eyebrow ml-auto">{asset.class}</span>
         )}
+        <HeldIn assetId={assetId} />
       </div>
 
       <StatStrip className="-mt-6">
