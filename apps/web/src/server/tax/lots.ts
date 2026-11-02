@@ -281,6 +281,8 @@ export async function loadTaxLots(
       isTaxAdvantaged: isTaxAdvantaged(row.account.accountType),
       tradedAt: row.txn.tradedAt,
       likelyDividendReinvestment,
+      quantity: D(row.txn.quantity),
+      amountUsd: D(row.txn.quantity).mul(row.txn.pricePerUnit ?? 0).add(row.txn.fees),
     });
   }
 

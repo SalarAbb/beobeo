@@ -24,12 +24,22 @@ interface Sale {
   ripening: { daysUntilLongTerm: number; estSavingsIfWaited: number } | null;
 }
 interface Block {
+  lotId: string;
   symbol: string;
   disallowedLossUsd: number;
   permanentlyDisallowed: boolean;
   triggerAccountName: string;
   triggerDate: string;
+  triggerQuantity: number | null;
+  triggerAmountUsd: number | null;
   likelyDividendReinvestment: boolean;
+  lot: {
+    accountName: string;
+    openedAt: string;
+    quantity: number;
+    costBasis: number;
+    marketValue: number;
+  } | null;
 }
 
 /** First day a loss sale no longer falls inside the 30-day window after the
@@ -40,20 +50,56 @@ const clearsOn = (triggerIso: string) =>
 /** One row per symbol + triggering buy: the engine blocks each lot, but a
  *  user thinks "my VXUS is on hold because of the Oct 5 buy", not nine rows. */
 function groupBlocks(blocked: Block[]) {
-  const groups = new Map<string, Block & { key: string; lots: number }>();
+  const groups = new Map<string, Block & { key: string; held: Block[] }>();
   for (const b of blocked) {
     const key = `${b.symbol}|${b.triggerAccountName}|${b.triggerDate}|${b.permanentlyDisallowed}`;
     const g = groups.get(key);
     if (g) {
-      g.lots += 1;
+      g.held.push(b);
       g.disallowedLossUsd += b.disallowedLossUsd;
     } else {
-      groups.set(key, { ...b, key, lots: 1 });
+      groups.set(key, { ...b, key, held: [b] });
     }
   }
   return [...groups.values()];
 }
 const fmtUnits = (q: number) => q.toLocaleString("en-US", { maximumFractionDigits: 6 });
+
+/** The purchases a block holds back, closed by default like the plan's own list. */
+function HeldPurchases({ held }: { held: Block[] }) {
+  const rows = held
+    .flatMap((b) => (b.lot ? [{ id: b.lotId, loss: b.disallowedLossUsd, ...b.lot }] : []))
+    .sort((a, b) => a.openedAt.localeCompare(b.openedAt));
+  if (rows.length === 0) return null;
+  return (
+    <details className="mt-1 text-xs">
+      <summary className="w-fit cursor-pointer text-primary marker:text-muted-foreground">
+        Show the{" "}
+        {rows.length === 1 ? (
+          "purchase"
+        ) : (
+          <>
+            <span className="data">{rows.length}</span> purchases
+          </>
+        )}{" "}
+        on hold
+      </summary>
+      <ul className="mt-1.5 grid divide-y border-y">
+        {rows.map((r) => (
+          <li key={r.id} className="grid grid-cols-[1fr_auto] items-baseline gap-x-4 py-1.5">
+            <span className="text-muted-foreground">
+              Bought <span className="data">{r.openedAt.slice(0, 10)}</span> in {r.accountName}{" "}
+              · <span className="data">{fmtUnits(r.quantity)}</span> units · paid{" "}
+              <span className="data">{fmtUsd(r.costBasis)}</span>, worth{" "}
+              <span className="data">{fmtUsd(r.marketValue)}</span>
+            </span>
+            <span className="data text-right text-loss">{fmtUsd(-r.loss)}</span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
 
 /** A sale's marginal tax: what it adds, or what a loss saves. */
 function TaxNote({ usd }: { usd: number }) {
@@ -233,13 +279,33 @@ export function PlanView({
                     three-line column on a phone */}
                 <div className="flex items-baseline gap-3">
                   <span className="font-medium">{b.symbol}</span>
-                  {b.lots > 1 && (
+                  {b.held.length > 1 && (
                     <span className="text-xs whitespace-nowrap text-muted-foreground">
-                      <span className="data">{b.lots}</span> purchases
+                      <span className="data">{b.held.length}</span> purchases
                     </span>
                   )}
                   <span className="data ml-auto text-loss">{fmtUsd(-b.disallowedLossUsd)}</span>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Because you bought{" "}
+                  {b.triggerQuantity !== null && (
+                    <>
+                      <span className="data">{fmtUnits(b.triggerQuantity)}</span>{" "}
+                    </>
+                  )}
+                  {b.symbol}
+                  {b.triggerAmountUsd !== null && (
+                    <>
+                      {" "}
+                      (<span className="data">{fmtUsd(b.triggerAmountUsd)}</span>)
+                    </>
+                  )}{" "}
+                  in {b.triggerAccountName} on{" "}
+                  <span className="data">{b.triggerDate.slice(0, 10)}</span>
+                  {b.likelyDividendReinvestment && " (looks like a dividend reinvestment)"}
+                  {" "}
+                  · safe to sell from <span className="data">{clearsOn(b.triggerDate)}</span>
+                </p>
                 <p
                   className={cn(
                     "text-xs",
@@ -247,16 +313,10 @@ export function PlanView({
                   )}
                 >
                   {b.permanentlyDisallowed
-                    ? "Sell now and the loss is gone for good (retirement-account buy)."
-                    : "Sell now and the loss is only postponed."}
+                    ? `Sell now and the loss is gone for good: the rule adds it to the cost of the new shares, and inside ${b.triggerAccountName} that cost never counts for tax.`
+                    : "Sell now and the loss is only postponed: it's added to the cost of the new shares, so it counts when you sell those."}
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  Bought again in {b.triggerAccountName} on{" "}
-                  <span className="data">{b.triggerDate.slice(0, 10)}</span>
-                  {b.likelyDividendReinvestment && " (looks like a dividend reinvestment)"}
-                  {" "}
-                  · safe to sell from <span className="data">{clearsOn(b.triggerDate)}</span>
-                </p>
+                <HeldPurchases held={b.held} />
               </li>
             ))}
           </ul>

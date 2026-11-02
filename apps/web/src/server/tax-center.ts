@@ -144,19 +144,35 @@ const serializeSale = (s: PlannedSale, asOf: Date) => ({
     : null,
 });
 
-const serializeBlock = (b: WashSaleBlock) => ({
-  lotId: b.lotId,
-  assetId: b.assetId,
-  symbol: b.symbol,
-  disallowedLossUsd: b.disallowedLossUsd.toNumber(),
-  permanentlyDisallowed: b.permanentlyDisallowed,
-  triggerAccountName: b.triggerAccountName,
-  triggerDate: b.triggerDate.toISOString(),
-  likelyDividendReinvestment: b.likelyDividendReinvestment,
-  reason: b.reason,
-});
+/** A block with the purchase it holds back (petyr, mission 97: "it says QQQ is lost
+ *  for good because of a Roth buy, but doesn't show me which purchase or date"). */
+const serializeBlock = (b: WashSaleBlock, lots: TaxLot[]) => {
+  const lot = lots.find((l) => l.lotId === b.lotId);
+  return {
+    lotId: b.lotId,
+    assetId: b.assetId,
+    symbol: b.symbol,
+    disallowedLossUsd: b.disallowedLossUsd.toNumber(),
+    permanentlyDisallowed: b.permanentlyDisallowed,
+    triggerAccountName: b.triggerAccountName,
+    triggerDate: b.triggerDate.toISOString(),
+    triggerQuantity: b.triggerQuantity?.toNumber() ?? null,
+    triggerAmountUsd: b.triggerAmountUsd?.toNumber() ?? null,
+    likelyDividendReinvestment: b.likelyDividendReinvestment,
+    reason: b.reason,
+    lot: lot
+      ? {
+          accountName: lot.accountName,
+          openedAt: lot.openedAt.toISOString(),
+          quantity: lot.quantity.toNumber(),
+          costBasis: lot.costBasis.toNumber(),
+          marketValue: lot.quantity.mul(lot.price).toNumber(),
+        }
+      : null,
+  };
+};
 
-const serializePlan = (p: TaxPlan, asOf: Date) => ({
+const serializePlan = (p: TaxPlan, asOf: Date, lots: TaxLot[]) => ({
   objective: p.objective,
   targetProceeds: p.targetProceeds.toNumber(),
   totalProceeds: p.totalProceeds.toNumber(),
@@ -164,7 +180,7 @@ const serializePlan = (p: TaxPlan, asOf: Date) => ({
   totalAfterTax: p.totalAfterTax.toNumber(),
   shortfall: p.shortfall.toNumber(),
   sales: p.sales.map((s) => serializeSale(s, asOf)),
-  blocked: p.blocked.map(serializeBlock),
+  blocked: p.blocked.map((b) => serializeBlock(b, lots)),
   excluded: p.excluded.map((e) => ({ lot: serializeLot(e.lot, asOf), reason: e.reason })),
 });
 
@@ -554,7 +570,7 @@ export function computeTaxPlan(
   return cached(
     userCacheKey(
       userId,
-      "tax-plan5",
+      "tax-plan6",
       scope,
       Math.round(targetProceeds),
       doNotSellKey,
@@ -585,9 +601,9 @@ export function computeTaxPlan(
       const highestCostFirst = planHighestCostFirst(opts);
       const breakdown = summarizeHarvest(profile, optimized.sales);
       return {
-        optimized: serializePlan(optimized, asOf),
-        fifo: serializePlan(fifo, asOf),
-        highestCostFirst: serializePlan(highestCostFirst, asOf),
+        optimized: serializePlan(optimized, asOf, lots),
+        fifo: serializePlan(fifo, asOf, lots),
+        highestCostFirst: serializePlan(highestCostFirst, asOf, lots),
         headlineSavingsVsFifo: optimized.totalAfterTax.sub(fifo.totalAfterTax).toNumber(),
         // Same breakdown as the Harvest tab — any lots this plan sells at a
         // loss are valued through the identical gains-offset/$3k/carryforward
@@ -615,7 +631,7 @@ export function computeTaxHarvest(
 ) {
   const scope = portfolioKey(portfolioId);
   return cached(
-    userCacheKey(userId, "tax-harvest5", scope, lossCapUsd ?? "uncapped"),
+    userCacheKey(userId, "tax-harvest6", scope, lossCapUsd ?? "uncapped"),
     TTL.harvest,
     async () => {
       const asOf = new Date();
@@ -651,7 +667,7 @@ export function computeTaxHarvest(
         totalAfterTax: totalProceeds.sub(totalTaxCost).toNumber(),
         estTaxSavedUsd: -totalTaxCost.toNumber(),
         sales: sales.map((s) => serializeSale(s, asOf)),
-        blocked: plan.blocked.map(serializeBlock),
+        blocked: plan.blocked.map((b) => serializeBlock(b, lots)),
         breakdown: {
           totalHarvestedLossUsd: breakdown.totalHarvestedLossUsd.toNumber(),
           gainsOffsetUsd: breakdown.gainsOffsetUsd.toNumber(),

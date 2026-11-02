@@ -41,6 +41,10 @@ export interface RecentBuyTxn {
    *  buy for a similar dollar amount. The schema has no distinct DRIP type,
    *  so this is a best-effort flag, not a certainty. */
   likelyDividendReinvestment: boolean;
+  /** Units and dollars (fees included) of the buy, so a block can say which
+   *  purchase it was. Display only; never part of the detection. */
+  quantity?: Decimal;
+  amountUsd?: Decimal;
 }
 
 /** Minimal shape a candidate loss lot must provide — kept structural (no
@@ -70,6 +74,9 @@ export interface WashSaleBlock {
   permanentlyDisallowed: boolean;
   triggerAccountName: string;
   triggerDate: Date;
+  /** The triggering buy's units and dollars, null when the caller didn't pass them. */
+  triggerQuantity: Decimal | null;
+  triggerAmountUsd: Decimal | null;
   likelyDividendReinvestment: boolean;
   reason: string;
 }
@@ -136,6 +143,8 @@ export function detectWashSaleBlocks(
       permanentlyDisallowed: trigger.isTaxAdvantaged,
       triggerAccountName: trigger.accountName,
       triggerDate: trigger.tradedAt,
+      triggerQuantity: trigger.quantity ?? null,
+      triggerAmountUsd: trigger.amountUsd ?? null,
       likelyDividendReinvestment: trigger.likelyDividendReinvestment,
       reason,
     });

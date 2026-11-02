@@ -502,6 +502,8 @@ describe("sellEverything (what selling it all would owe)", () => {
       permanentlyDisallowed: true,
       triggerAccountName: "Roth",
       triggerDate: daysAgo(5),
+      triggerQuantity: null,
+      triggerAmountUsd: null,
       likelyDividendReinvestment: false,
       reason: "bought again in Roth",
     };
@@ -651,6 +653,8 @@ describe("taxMoves (one ranked list of moves, R-003)", () => {
     permanentlyDisallowed: false,
     triggerAccountName: "Roth",
     triggerDate: daysAgo(10), // 2026-06-05 -> clears 2026-07-06
+    triggerQuantity: null,
+    triggerAmountUsd: null,
     likelyDividendReinvestment: false,
     reason: "bought again",
   };

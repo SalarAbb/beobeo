@@ -52,6 +52,22 @@ describe("detectWashSaleBlocks", () => {
     expect(blocks[0]).not.toHaveProperty("basisAdjustment");
   });
 
+  it("cites the closest buy's units and dollars when given, null otherwise", () => {
+    const blocks = detectWashSaleBlocks(
+      [lossLot()],
+      [
+        buy({ tradedAt: new Date("2026-05-20T00:00:00Z"), quantity: D(9), amountUsd: D(900) }),
+        buy({ quantity: D("0.5"), amountUsd: D("1612.40") }), // Jun 3, the closer one
+      ],
+      asOf,
+    );
+    expect(blocks[0]!.triggerQuantity?.toString()).toBe("0.5");
+    expect(blocks[0]!.triggerAmountUsd?.toString()).toBe("1612.4");
+    const bare = detectWashSaleBlocks([lossLot()], [buy()], asOf);
+    expect(bare[0]!.triggerQuantity).toBeNull();
+    expect(bare[0]!.triggerAmountUsd).toBeNull();
+  });
+
   it("does not block a loss lot with no qualifying buy", () => {
     expect(detectWashSaleBlocks([lossLot()], [], asOf)).toHaveLength(0);
   });
