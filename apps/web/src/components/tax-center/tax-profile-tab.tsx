@@ -11,7 +11,7 @@ import {
 } from "@beobeo/core/tax-brackets";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { toast } from "sonner";
 import { usePortfolio } from "@/components/portfolio-context";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -21,7 +21,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TabError, TabLoading } from "@/components/tax-center/tab-state";
+import { MetricHover } from "@/components/metric-hover";
 import { Switch } from "@/components/ui/switch";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { Section } from "@/components/page-section";
 import { lossRoom } from "@/lib/loss-room";
 import { useTRPC } from "@/lib/trpc";
@@ -35,22 +37,41 @@ function useProfileQuery() {
   return useQuery(trpc.tax.profile.queryOptions({ portfolioId: portfolioId ?? undefined }));
 }
 
+/** The term behind a plain label (R-002): the label says "a year or less",
+ *  the card names short-term gains and reads the user's own figure. */
+type Explain = { term: string; insight: string; meaning: string };
+
 function Field({
   label,
   value,
   onChange,
   suffix = "%",
+  explain,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   suffix?: string;
+  explain?: Explain;
 }) {
+  const id = useId();
   return (
     <div className="grid gap-1.5">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <div className="flex text-xs text-muted-foreground">
+        {explain ? (
+          <MetricHover label={label} {...explain}>
+            <span className="underline decoration-dotted underline-offset-4">{label}</span>
+          </MetricHover>
+        ) : (
+          <Label htmlFor={id} className="text-xs text-muted-foreground">
+            {label}
+          </Label>
+        )}
+      </div>
       <div className="flex items-center gap-1.5">
         <Input
+          id={id}
+          aria-label={label}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           inputMode="decimal"
@@ -61,6 +82,9 @@ function Field({
     </div>
   );
 }
+
+const pct = (v: string) => `${v.trim() === "" ? "0" : v.trim()}%`;
+const usd = (v: string) => fmtUsd(Number(v.replace(/[^0-9.-]/g, "")) || 0);
 
 /** Mounted only once `initial` has loaded — useState's lazy initializer
  *  derives the form from it exactly once, no effect-based resync needed. */
@@ -77,6 +101,7 @@ function ProfileForm({ initial }: { initial: NonNullable<Profile> }) {
   const [carryST, setCarryST] = useState(String(initial.carryforwardShortTerm));
   const [carryLT, setCarryLT] = useState(String(initial.carryforwardLongTerm));
   const [discount, setDiscount] = useState(String(initial.carryforwardDiscountPct));
+  const [showDiscount, setShowDiscount] = useState(initial.carryforwardDiscountPct !== 70);
   // Dollars to the cent: the computed value carries 8 decimals of float noise.
   const cents = (v: number) => String(Math.round(v * 100) / 100);
   const [ytdST, setYtdST] = useState(
@@ -150,20 +175,62 @@ function ProfileForm({ initial }: { initial: NonNullable<Profile> }) {
   return (
     <div className="grid gap-10">
       <Section title="Tax rates">
+        <p className="-mt-2 max-w-2xl text-sm text-muted-foreground">
+          A sale&apos;s gain is taxed at one of two rates, set by how long you owned what you
+          sold: a year or less, or over a year (the lower rate). Tap a label for its tax name.
+        </p>
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <Field label="Federal ordinary" value={fedOrdinary} onChange={setFedOrdinary} />
-          <Field label="Federal long-term (LTCG)" value={fedLtcg} onChange={setFedLtcg} />
-          <Field label="State ordinary" value={stateOrdinary} onChange={onStateOrdinaryChange} />
           <Field
-            label="State long-term (LTCG)"
+            label="Federal · a year or less"
+            value={fedOrdinary}
+            onChange={setFedOrdinary}
+            explain={{
+              term: "Short-term gains",
+              insight: `Gains on things you owned a year or less are taxed at ${pct(fedOrdinary)}.`,
+              meaning:
+                "Tax forms call these short-term gains. They're taxed like your pay, at your income tax bracket.",
+            }}
+          />
+          <Field
+            label="Federal · over a year"
+            value={fedLtcg}
+            onChange={setFedLtcg}
+            explain={{
+              term: "Long-term gains (LTCG)",
+              insight: `Gains on things you owned over a year are taxed at ${pct(fedLtcg)}.`,
+              meaning:
+                "Tax forms call these long-term capital gains. The rate is 0%, 15% or 20%, set by your taxable income.",
+            }}
+          />
+          <Field
+            label="State · a year or less"
+            value={stateOrdinary}
+            onChange={onStateOrdinaryChange}
+            explain={{
+              term: "State short-term rate",
+              insight: `Your state takes ${pct(stateOrdinary)} of gains on things owned a year or less.`,
+              meaning: "Your state's income tax rate. Use 0 if your state has no income tax.",
+            }}
+          />
+          <Field
+            label="State · over a year"
             value={stateLtcg}
             onChange={setStateLtcg}
             suffix={stateFlag ? "% (linked)" : "%"}
+            explain={{
+              term: "State long-term rate",
+              insight: `Your state takes ${pct(stateLtcg)} of gains on things owned over a year.`,
+              meaning: "Most states tax both kinds at the same rate; a few tax older gains less.",
+            }}
           />
           <div className="col-span-2 flex items-center gap-2.5 md:col-span-4">
-            <Switch checked={stateFlag} onCheckedChange={onToggleStateFlag} />
+            <Switch
+              checked={stateFlag}
+              onCheckedChange={onToggleStateFlag}
+              aria-label="My state taxes both at the same rate"
+            />
             <span className="text-sm">
-              My state taxes long-term gains at the same rate as ordinary income
+              My state taxes both at the same rate, however long I owned it
             </span>
           </div>
         </div>
@@ -178,9 +245,33 @@ function ProfileForm({ initial }: { initial: NonNullable<Profile> }) {
       </Section>
 
       <Section title="This year so far">
+        <p className="-mt-2 max-w-2xl text-sm text-muted-foreground">
+          What this year&apos;s sales gained (a minus for a loss), split by how long you owned
+          what you sold.
+        </p>
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <Field label="YTD short-term gain/loss" value={ytdST} onChange={setYtdST} suffix="$" />
-          <Field label="YTD long-term gain/loss" value={ytdLT} onChange={setYtdLT} suffix="$" />
+          <Field
+            label="Owned a year or less"
+            value={ytdST}
+            onChange={setYtdST}
+            suffix="$"
+            explain={{
+              term: "Short-term gain/loss this year",
+              insight: `${usd(ytdST)} from this year's sales of things owned a year or less.`,
+              meaning: "Taxed at your rate for a year or less, after losses cancel what they can.",
+            }}
+          />
+          <Field
+            label="Owned over a year"
+            value={ytdLT}
+            onChange={setYtdLT}
+            suffix="$"
+            explain={{
+              term: "Long-term gain/loss this year",
+              insight: `${usd(ytdLT)} from this year's sales of things owned over a year.`,
+              meaning: "Taxed at your lower over-a-year rate, after losses cancel what they can.",
+            }}
+          />
           <div className="col-span-2 flex items-end pb-1.5 text-xs text-muted-foreground md:col-span-2">
             <span>
               Pre-filled from your tracked sales (
@@ -202,15 +293,72 @@ function ProfileForm({ initial }: { initial: NonNullable<Profile> }) {
       </Section>
 
       <Section title="Losses from past years">
+        <p className="-mt-2 max-w-2xl text-sm text-muted-foreground">
+          Losses your earlier tax returns couldn&apos;t use up. They cancel this year&apos;s gains
+          first, then up to <span className="data">$3,000</span> of pay a year. Leave them at 0 if
+          you have none.
+        </p>
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <Field label="Short-term carryforward" value={carryST} onChange={setCarryST} suffix="$" />
-          <Field label="Long-term carryforward" value={carryLT} onChange={setCarryLT} suffix="$" />
-          <Field label="Carryforward discount" value={discount} onChange={setDiscount} />
-          <div className="flex items-end pb-1.5 text-xs text-muted-foreground">
-            How much a loss that only carries forward (doesn&apos;t offset anything this
-            year) is worth today — real value, just deferred and uncertain.
-          </div>
+          <Field
+            label="Owned a year or less"
+            value={carryST}
+            onChange={setCarryST}
+            suffix="$"
+            explain={{
+              term: "Short-term loss carryforward",
+              insight: `${usd(carryST)} of losses left over from things owned a year or less.`,
+              meaning:
+                "Last year's return lists it on the capital loss carryover worksheet. It cancels gains on things owned a year or less first.",
+            }}
+          />
+          <Field
+            label="Owned over a year"
+            value={carryLT}
+            onChange={setCarryLT}
+            suffix="$"
+            explain={{
+              term: "Long-term loss carryforward",
+              insight: `${usd(carryLT)} of losses left over from things owned over a year.`,
+              meaning:
+                "Last year's return lists it on the capital loss carryover worksheet. It cancels gains on things owned over a year first.",
+            }}
+          />
+          {showDiscount && (
+            <>
+              <Field
+                label="A loss saved for later counts"
+                value={discount}
+                onChange={setDiscount}
+                explain={{
+                  term: "Carryforward discount",
+                  insight: `A loss that can only carry to next year counts as ${pct(discount)} of its tax value today.`,
+                  meaning:
+                    "It still saves tax, just later and less surely, so plans weigh it below a loss used this year.",
+                }}
+              />
+              <div className="flex items-end pb-1.5 text-xs text-muted-foreground">
+                of its full tax value, since a loss that only carries to next year saves tax
+                later, not now.
+              </div>
+            </>
+          )}
         </div>
+        {!showDiscount && (
+          // An expert setting (R-002): a 70 box nobody explained read as
+          // homework to luna, so it stays one deliberate tap away.
+          <p className="text-xs text-muted-foreground">
+            Plans count a loss that carries to next year at{" "}
+            <span className="data">{pct(discount)}</span> of its tax value, since it saves tax
+            later, not now.{" "}
+            <button
+              type="button"
+              onClick={() => setShowDiscount(true)}
+              className="text-primary underline-offset-2 hover:underline"
+            >
+              Change it
+            </button>
+          </p>
+        )}
       </Section>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -271,8 +419,8 @@ function RatesCheck({
         taxable income ({FILING_STATUS_LABEL[status].toLowerCase()}), which is pay of about{" "}
         <span className="data">{range(d)}</span>{" "}
         after the <span className="data">{fmtUsd(d, 0)}</span> standard deduction. 2026 brackets
-        put that band at <span className="data">{band.ordinaryRatePct}%</span> on short-term gains
-        and <span className="data">{band.ltcgRatePct}%</span> on long-term ones
+        put that band at <span className="data">{band.ordinaryRatePct}%</span> on things owned a
+        year or less and <span className="data">{band.ltcgRatePct}%</span> on things owned longer
         {matches ? ", which is what these say" : ""}.{" "}
         {!matches && (
           <>
@@ -314,8 +462,8 @@ function RatesCheck({
         </>
       )}
       ), 2026 brackets put you at{" "}
-      <span className="data">{at.ordinaryRatePct}%</span> on short-term gains and{" "}
-      <span className="data">{at.ltcgRatePct}%</span> on long-term ones
+      <span className="data">{at.ordinaryRatePct}%</span> on things owned a year or less and{" "}
+      <span className="data">{at.ltcgRatePct}%</span> on things owned longer
       {matches ? ", which is what these say." : "."}{" "}
       {next && own.incomeTo !== null && (
         <>
@@ -414,7 +562,7 @@ function IncomeSection() {
   return (
     <Section title="Your income">
       <p className="-mt-2 max-w-2xl text-sm text-muted-foreground">
-        Optional. Long-term gains are taxed at 0% while your taxable income stays under{" "}
+        Optional. Gains on things owned over a year are taxed at 0% while your taxable income stays under{" "}
         <span className="data">{fmtUsd(top, 0)}</span> ({FILING_STATUS_LABEL[status].toLowerCase()}),
         so with a rough figure the Now tab can show gains you could take tax-free. Saved on this
         device as you type.
@@ -483,9 +631,11 @@ export function TaxProfileTab() {
     return <TabError what="your tax settings" onRetry={() => void profile.refetch()} />;
   if (!profile.data) return <TabLoading label="Loading your tax settings…" className="h-96" />;
   return (
-    <div className="grid gap-10">
-      <IncomeSection />
-      <ProfileForm initial={profile.data} />
-    </div>
+    <TooltipProvider delayDuration={150}>
+      <div className="grid gap-10">
+        <IncomeSection />
+        <ProfileForm initial={profile.data} />
+      </div>
+    </TooltipProvider>
   );
 }
