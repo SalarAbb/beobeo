@@ -11,7 +11,10 @@ import { NowTab } from "@/components/tax-center/now-tab";
 import { RaiseCashTab } from "@/components/tax-center/raise-cash-tab";
 import { TaxProfileTab } from "@/components/tax-center/tax-profile-tab";
 import { useIncome } from "@/components/tax-center/use-income";
+import { HARVEST_DEFAULT, HARVEST_KEY, type HarvestState } from "@/lib/harvest-state";
+import { RAISE_CASH_DEFAULT, RAISE_CASH_KEY, type RaiseCashState } from "@/lib/raise-cash-state";
 import { useTRPC } from "@/lib/trpc";
+import { readStored } from "@/lib/use-stored-state";
 
 type Tab = "now" | "cash" | "harvest" | "lots" | "profile";
 
@@ -42,9 +45,36 @@ export default function TaxCenterPage({
   const { complete: income } = useIncome();
   useEffect(() => {
     const scope = { portfolioId: portfolioId ?? undefined };
-    void queryClient.prefetchQuery(trpc.tax.now.queryOptions({ ...scope, income }));
-    void queryClient.prefetchQuery(trpc.tax.lots.queryOptions(scope));
-    void queryClient.prefetchQuery(trpc.tax.profile.queryOptions(scope));
+    const lotsOptions = trpc.tax.lots.queryOptions(scope);
+    const first = Promise.all([
+      queryClient.prefetchQuery(trpc.tax.now.queryOptions({ ...scope, income })),
+      queryClient.prefetchQuery(lotsOptions),
+      queryClient.prefetchQuery(trpc.tax.profile.queryOptions(scope)),
+    ]);
+    // Then Raise Cash's saved plan and Harvest, with the inputs those tabs will send
+    // (the server reuses the lots it just loaded): both sat on a spinner after a tab
+    // switch (petyr, mission 110). After the first batch, so they never slow it.
+    void first.then(() => {
+      const raise = readStored<RaiseCashState>(RAISE_CASH_KEY, RAISE_CASH_DEFAULT);
+      if (raise.target !== null && raise.target > 0) {
+        const lots = queryClient.getQueryData(lotsOptions.queryKey) ?? [];
+        const accountId = lots.some((l) => l.accountId === raise.accountId)
+          ? raise.accountId
+          : undefined;
+        void queryClient.prefetchQuery(
+          trpc.tax.plan.queryOptions({
+            ...scope,
+            targetProceeds: raise.target,
+            doNotSell: raise.doNotSell,
+            accountId,
+          }),
+        );
+      }
+      const { cap } = readStored<HarvestState>(HARVEST_KEY, HARVEST_DEFAULT);
+      void queryClient.prefetchQuery(
+        trpc.tax.harvest.queryOptions({ ...scope, lossCapUsd: cap ?? undefined }),
+      );
+    });
   }, [trpc, queryClient, portfolioId, income]);
 
   return (

@@ -47,16 +47,27 @@ function lossCandidates(lots: TaxLot[]): LossLotCandidate[] {
  * and each needs the same lots and profile row; on the Neon driver three
  * copies of the same queries queue behind each other. Concurrent callers
  * share one run (read-only to them; core only sorts copies).
+ *
+ * A finished load lingers as long as tax.now's cache (writes drop it): every
+ * Raise Cash amount and the Harvest tab otherwise reloaded the rows, prices
+ * and replay, 0.7–1.1s per plan after the Now tab had just loaded them
+ * (petyr, mission 110: "I stared at spinners on Raise Cash and Harvest").
  */
+const LOAD_LINGER_MS = 60_000;
+
 function loadScopeLots(userId: string, scope: string, asOf: Date) {
-  return sharedRun(userCacheKey(userId, "tax-lots-load", scope), () =>
-    loadTaxLots(userId, scope, asOf),
+  return sharedRun(
+    userCacheKey(userId, "tax-lots-load", scope),
+    () => loadTaxLots(userId, scope, asOf),
+    { lingerMs: LOAD_LINGER_MS },
   );
 }
 
 function loadScopeProfileRow(userId: string, scope: string) {
-  return sharedRun(userCacheKey(userId, "tax-profile-row", scope), () =>
-    loadOrCreateTaxProfile(userId, scope),
+  return sharedRun(
+    userCacheKey(userId, "tax-profile-row", scope),
+    () => loadOrCreateTaxProfile(userId, scope),
+    { lingerMs: LOAD_LINGER_MS },
   );
 }
 

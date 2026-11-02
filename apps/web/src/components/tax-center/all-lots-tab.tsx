@@ -93,6 +93,11 @@ export function AllLotsTab() {
   const trpc = useTRPC();
   const { portfolioId } = usePortfolio();
   const lots = useQuery(trpc.tax.lots.queryOptions({ portfolioId: portfolioId ?? undefined }));
+  // What retirement accounts hold, to say why it isn't listed (petyr, mission 110:
+  // "BND is $24,458 of my $100,101 and it's nowhere in All Lots").
+  const holdings = useQuery(
+    trpc.accounts.holdings.queryOptions({ portfolioId: portfolioId ?? undefined }),
+  );
   const [assetFilter, setAssetFilter] = useStoredState<string>("beobeo.tax.lots.asset", ALL);
   // Gains or losses only, with a dollar floor ("losses over $500", hermione).
   const [{ show, overInput }, setShowState] = useStoredState<{ show: Show; overInput: string }>(
@@ -172,6 +177,11 @@ export function AllLotsTab() {
     { units: 0, cost: 0, value: 0, gain: 0 },
   );
   const turningSoon = shown.filter((l) => !l.isLongTerm && l.daysToLongTerm <= 45).length;
+  // Accounts with no taxable purchases here but something held: the retirement ones.
+  const taxableIds = new Set(lots.data.map((l) => l.accountId));
+  const untaxed = (holdings.data ?? [])
+    .filter((a) => !taxableIds.has(a.accountId) && a.holdings.length > 0)
+    .sort((a, b) => b.value - a.value);
 
   return (
     <div className="grid gap-3">
@@ -201,6 +211,23 @@ export function AllLotsTab() {
         </button>{" "}
         as a spreadsheet (CSV).
       </p>
+      {untaxed.length > 0 && (
+        <p className="text-sm text-muted-foreground">
+          Not listed, since selling inside a retirement account isn&apos;t taxed:{" "}
+          {untaxed.map((a, i) => (
+            <span key={a.accountId}>
+              {i > 0 && "; "}
+              {a.holdings.map((h) => h.symbol).join(", ")} in {a.accountName} (
+              <span className="data">{fmtUsd(a.value)}</span>)
+            </span>
+          ))}
+          . They&apos;re on{" "}
+          <Link href="/accounts" className="text-primary hover:underline">
+            Accounts
+          </Link>
+          .
+        </p>
+      )}
       {symbols.length > 1 && (
         <div className="min-w-0 overflow-x-auto pb-0.5">
           <SegmentedControl

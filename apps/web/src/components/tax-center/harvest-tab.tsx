@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TabError, TabLoading } from "@/components/tax-center/tab-state";
 import { useTRPC } from "@/lib/trpc";
+import { HARVEST_DEFAULT, HARVEST_KEY, type HarvestState } from "@/lib/harvest-state";
 import { useStoredState } from "@/lib/use-stored-state";
 import { cn } from "@/lib/utils";
 import { fmtUsd } from "@/lib/viz";
@@ -20,10 +21,7 @@ export function HarvestTab() {
 
   // Kept on the device for every portfolio: tabs unmount on switch, so a cap held in
   // useState vanished on the way back from All Lots (same as Raise Cash's amount).
-  const [{ capInput, cap }, setState] = useStoredState<{ capInput: string; cap: number | null }>(
-    "beobeo.tax.harvest",
-    { capInput: "", cap: null },
-  );
+  const [{ capInput, cap }, setState] = useStoredState<HarvestState>(HARVEST_KEY, HARVEST_DEFAULT);
 
   const harvest = useQuery({
     ...trpc.tax.harvest.queryOptions({ ...scope, lossCapUsd: cap ?? undefined }),
