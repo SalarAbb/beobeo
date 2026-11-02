@@ -567,56 +567,60 @@ function FirstHoldingStep({
   recap: RecapLine[];
 }) {
   const router = useRouter();
-  // After Save the step itself says what happens next: a small "Saving…"
+  // After Save the step itself says what's happening: a small "Saving…"
   // toast over unchanged options read as "the page didn't advance, did VOO
-  // land?" (hermione, mission 35). The dashboard is prefetched so it opens
-  // as soon as the save is in.
+  // land?" (hermione, mission 35).
   const [saving, setSaving] = useState<string | null>(null);
-  // Once it's in, the line says so: "Saving…" under a "VOO buy recorded"
-  // toast, while the dashboard loaded, read as a wait of unknown length
-  // (hermione, mission 72).
-  // It also says what went in (units, cost, date, account, holding period),
-  // so it can be checked before the dashboard opens (hermione, mission 115).
-  const [saved, setSaved] = useState<string | null>(null);
+  // Each holding that's in stays listed with what went in (units, cost, date,
+  // account, holding period), so it can be checked (hermione, mission 115).
+  // The step no longer jumps to the dashboard after the first one: setup
+  // "ended after one holding" and the redirect read as a spinner to sit
+  // through (luna, mission 125; missions 72, 78, 102). You add another or
+  // open the dashboard yourself; it's prefetched so it opens at once.
+  const [recorded, setRecorded] = useState<{ what: string; summary: string }[]>([]);
   useEffect(() => router.prefetch("/dashboard"), [router]);
   // The accounts still saving don't block anything: the import's account
   // pick comes after a file is chosen, and the add form waits on its Save.
   const busy = saving !== null;
+  const done = recorded.length > 0;
   const card = `${choice(false)} flex w-full items-start gap-3 py-3`;
   return (
     <AuthShell
-      tagline="Step 3 of 3 · Your first holding"
+      tagline={`Step 3 of 3 · ${done ? "Your holdings" : "Your first holding"}`}
       title="Add what you own"
-      subtitle="One holding is enough to start; the dashboard fills in as you add more."
-      // While the holding saves, the step shows only that: "Skip, show me the
+      subtitle={
+        done
+          ? "Add another the same way, or open your dashboard. You can add more any time from Transactions."
+          : "One holding is enough to start; the dashboard fills in as you add more."
+      }
+      // While a holding saves, the step shows only that: "Skip, show me the
       // app" under the saving line made her wonder if Skip would drop her lot
-      // (hermione, mission 101). A failed save brings both back.
+      // (hermione, mission 101). A failed save brings it back.
       footer={
-        busy ? null : (
+        busy ? null : done ? (
+          <>Everything here can be changed later.</>
+        ) : (
           <StepFooter label="Skip, show me the app" onSkip={() => router.push("/dashboard")} />
         )
       }
     >
+      {recorded.length > 0 && (
+        <ul role="status" className="grid gap-1.5 text-sm">
+          {recorded.map((r, i) => (
+            <li key={i} className="flex items-start gap-1.5">
+              {/* A check, not a spinner: a spinner beside "recorded" read as a wait (mission 78). */}
+              <Check className="mt-0.5 size-3.5 shrink-0 text-gain" aria-hidden />
+              <span>
+                Your {r.what} is recorded: <span className="data">{r.summary}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
       {saving && (
         <p role="status" className="flex items-start gap-1.5 text-sm text-muted-foreground">
-          {/* A spinner beside "recorded" still read as a wait (mission 78). */}
-          {saved ? (
-            <Check className="mt-0.5 size-3.5 shrink-0 text-gain" aria-hidden />
-          ) : (
-            <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin" aria-hidden />
-          )}
-          {/* Once it's recorded, the line is also a link: a step with no
-              control while the dashboard loaded read as a dead end (mission 102). */}
-          {saved ? (
-            <span>
-              Your {saving} is recorded: {saved}{" "}
-              <Link href="/dashboard" className="font-medium text-primary underline-offset-4 hover:underline">
-                Opening your dashboard…
-              </Link>
-            </span>
-          ) : (
-            `Saving your ${saving}. Your dashboard opens as soon as it's in.`
-          )}
+          <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin" aria-hidden />
+          Saving your {saving}…
         </p>
       )}
       {accountsError && (
@@ -638,10 +642,12 @@ function FirstHoldingStep({
       {/* Hidden, not unmounted, while saving: the dialog owns the save. */}
       <div className={busy ? "hidden" : "grid gap-1.5"}>
         {/* The form opens right here (it used to send you to /transactions,
-            which read as being dropped out of setup), then lands on the dashboard. */}
+            which read as being dropped out of setup). */}
         <AddTransactionDialog
-          onCreated={() => router.push("/dashboard")}
-          onSaved={setSaved}
+          onSaved={(summary, what) => {
+            setRecorded((r) => [...r, { what, summary }]);
+            setSaving(null);
+          }}
           onSaving={setSaving}
           accountsPending={accountsPending}
           defaultEntry="total"
@@ -650,7 +656,7 @@ function FirstHoldingStep({
             <button type="button" className={card}>
               <PenLine className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
               <OptionText
-                title="Type in a holding"
+                title={done ? "Type in another holding" : "Type in a holding"}
                 body="A ticker, how many, what you paid in all and roughly when, as your statement shows it."
               />
               <ArrowRight className="mt-0.5 ml-auto size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -669,6 +675,11 @@ function FirstHoldingStep({
           <LinkProgress />
         </Link>
       </div>
+      {done && !busy && (
+        <Button asChild>
+          <Link href="/dashboard">Done, open my dashboard</Link>
+        </Button>
+      )}
     </AuthShell>
   );
 }

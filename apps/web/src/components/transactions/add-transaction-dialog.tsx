@@ -112,8 +112,9 @@ export function AddTransactionDialog({
    *  with null if the save fails (the welcome step says so on the page). */
   onSaving?: (what: string | null) => void;
   /** With `owned`, called once the holding is in with what was saved in
-   *  words (units, cost, date, account, holding period). */
-  onSaved?: (summary: string) => void;
+   *  words (units, cost, date, account, holding period) and what it was
+   *  ("VOO buy"). */
+  onSaved?: (summary: string, what: string) => void;
   /** What opens the dialog (default: the "Add transaction" button). */
   trigger?: React.ReactNode;
   /** Open on mount (the welcome flow links to /transactions?add=1). */
@@ -305,8 +306,14 @@ export function AddTransactionDialog({
       });
       // The toast's title already names the account; the page line doesn't.
       if (summary)
-        onSaved?.(savedSummary(effectiveQuantity, asset.symbol, total, date, today, acctName));
+        onSaved?.(savedSummary(effectiveQuantity, asset.symbol, total, date, today, acctName), what);
       resetForm();
+      // Setup can add another holding: it starts blank, not on the last one's
+      // ticker and date.
+      if (owned) {
+        setAsset(null);
+        setDate("");
+      }
       onCreated?.(created);
     } catch (err) {
       onSaving?.(null);
