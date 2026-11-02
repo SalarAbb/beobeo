@@ -73,13 +73,28 @@ function AssetRow({
 export function AssetPicker({
   value,
   onChange,
+  autoOpen = false,
 }: {
   value: PickedAsset | null;
   onChange: (asset: PickedAsset) => void;
+  /** Open the search, ready to type, once the form around it has opened
+   *  (when nothing is picked yet). */
+  autoOpen?: boolean;
 }) {
   const trpc = useTRPC();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+
+  // A blank setup form's first job is the ticker: luna typed NVDA straight
+  // away and nothing took it, since the field was a button to click first
+  // (missions 130, 131). Waits out the dialog's opening animation, so the
+  // list lines up under the field instead of where the field was mid-zoom.
+  const [startOpen] = useState(() => autoOpen && !value);
+  useEffect(() => {
+    if (!startOpen) return;
+    const t = setTimeout(() => setOpen(true), 220);
+    return () => clearTimeout(t);
+  }, [startOpen]);
   const debouncedQuery = useDebounced(query.trim(), 200);
 
   // Famous tickers match synchronously on every keystroke — zero latency.
@@ -210,6 +225,14 @@ export function AssetPicker({
           role="combobox"
           aria-expanded={open}
           className="h-11 w-full justify-between font-normal"
+          // Typing on the closed field opens the search with that letter in it.
+          onKeyDown={(e) => {
+            if (e.key.length !== 1 || e.key === " " || e.metaKey || e.ctrlKey || e.altKey)
+              return;
+            e.preventDefault();
+            setQuery(e.key);
+            setOpen(true);
+          }}
         >
           {failed && !adding ? (
             <span className="text-destructive">Couldn&apos;t add {failed}. Try again</span>

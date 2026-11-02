@@ -330,7 +330,10 @@ ${o.holdingsBrief}${o.csvFile ? `\n\nYou have a CSV export of your recent stock 
 
     const steps: MissionResult["steps"] = [];
     let failures = 0;
-    for (let i = 1; i <= MAX_STEPS; i++) {
+    // Setup with two holdings and a Tax Profile check needs ~25 steps: at 18,
+    // every such run stopped mid-second-holding (missions 129–131).
+    const maxSteps = Math.max(MAX_STEPS, feature.maxSteps ?? 0);
+    for (let i = 1; i <= maxSteps; i++) {
       const obs = await observe(page);
       const shot = join(o.outDir, `mission-${missionId}-${String(i).padStart(2, "0")}.jpg`);
       await page.screenshot({ path: shot, type: "jpeg", quality: 55 }).catch(() => undefined);
@@ -352,7 +355,7 @@ ${o.holdingsBrief}${o.csvFile ? `\n\nYou have a CSV export of your recent stock 
 
   ${describe(obs)}
 
-  Step ${i} of at most ${MAX_STEPS}. Choose your next action.`,
+  Step ${i} of at most ${maxSteps}. Choose your next action.`,
         },
       ];
       const step = await askStructured({ ...llm, purpose: "mission_step", schema: stepSchema, system, estimateUsd: 0.03, effort: "low", maxTokens: 2000, content });

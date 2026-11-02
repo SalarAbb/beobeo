@@ -15,6 +15,8 @@ export interface Feature {
   does: string;
   /** Who'd naturally reach for it (matched against the persona; empty = anyone). */
   fits?: ("beginner" | "expert" | "tax" | "crypto" | "income" | "dca" | "seller" | "multi-account")[];
+  /** Browser steps a mission may take, when the flow needs more than `SIM_MISSION_MAX_STEPS`. */
+  maxSteps?: number;
 }
 
 export const FEATURES: Feature[] = [
@@ -50,7 +52,7 @@ export const FEATURES: Feature[] = [
   { id: "chat.target-mix", route: "/chat", does: "Ask the assistant how far you are from your target mix (the one saved under Dashboard → Allocation, or weights you type in the question) and where your next deposit should go to close the gap; check its numbers against the dashboard's Allocation section", fits: ["dca", "expert"] },
   { id: "accounts.types", route: "/accounts", does: "Make sure each of your accounts is marked correctly (taxable, IRA, Roth, 401k), check what each one holds and is worth, and see why it matters", fits: ["multi-account", "tax"] },
   { id: "portfolios.manage", route: "/dashboard", does: "Switch between portfolios, or create a separate portfolio (e.g. for a child or a side account), move an account into it on Accounts, and view it alone; with All portfolios picked, check the dashboard says how the total splits by portfolio and which portfolio each holding is in", fits: ["multi-account", "expert"] },
-  { id: "welcome.setup", route: "/welcome", does: "Go through the first-run setup as if you had just signed up: how you file and your rough pay (or taxable-income band), which kinds of accounts you have and what you call them, then add what you hold (one or several holdings, each with roughly when you bought it) and open the dashboard; afterwards check the Tax Center's Tax Profile shows your bracket and says why", fits: ["beginner", "tax"] },
+  { id: "welcome.setup", route: "/welcome", does: "Go through the first-run setup as if you had just signed up: how you file and your rough pay (or taxable-income band), which kinds of accounts you have and what you call them, then add what you hold (one or several holdings, each with roughly when you bought it) and open the dashboard; afterwards check the Tax Center's Tax Profile shows your bracket and says why", fits: ["beginner", "tax"], maxSteps: 28 },
   { id: "account.profile", route: "/account", does: "Check which account you're signed into, how you sign in, and how much is stored" },
   { id: "app.mobile", route: "/dashboard", does: "Do your usual check-in on your phone (small screen)", fits: ["beginner"] },
 ];

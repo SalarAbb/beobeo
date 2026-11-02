@@ -350,6 +350,7 @@ export function AddTransactionDialog({
             <Label>Asset</Label>
             <AssetPicker
               value={asset}
+              autoOpen={owned}
               onChange={(a) => {
                 setAsset(a);
                 setPriceTouched(false); // fresh asset → fresh suggestion
