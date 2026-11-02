@@ -187,7 +187,7 @@ export function MetricWorkings({
         <Measure
           name="Swings"
           term="annualized volatility"
-          how="Standard deviation of the daily returns that moved (unchanged weekends and holidays left out), each day weighted by the money in it that day, × √252 trading days."
+          how="Standard deviation of the daily returns that moved (unchanged weekends and holidays left out), each day weighted by the money in it that day, × √252 trading days. A column holding crypto counts more days, since crypto also moves on weekends; days after the last close carry it forward and don't count."
           columns={columns}
           line={(c) =>
             c.metrics.volatility === null ? (
