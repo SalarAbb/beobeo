@@ -152,9 +152,15 @@ export interface KnownSplit {
   ratio: string;
 }
 
-/** Provider-known splits for these assets, in one query. */
+/** Provider-known splits for these assets. On the app's own database they
+ *  come from the market-data service's in-process copy of the table (one
+ *  query per 10 minutes instead of one per cold load); another db is asked. */
 export async function loadKnownSplits(db: Db, assetIds: string[]): Promise<KnownSplit[]> {
   if (assetIds.length === 0) return [];
+  if (db === database) {
+    const byAsset = await getMarketData().getSplits(assetIds);
+    return [...byAsset].flatMap(([assetId, list]) => list.map((s) => ({ assetId, ...s })));
+  }
   return db
     .select({
       assetId: schema.assetSplits.assetId,

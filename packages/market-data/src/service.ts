@@ -74,6 +74,13 @@ export class MarketDataService {
     { run: Promise<DividendPayment[] | null>; expires: number }
   >();
 
+  /** See `allSplits`. */
+  private splitsMemo: {
+    run: Promise<Map<string, { date: IsoDate; ratio: string }[]>>;
+    expires: number;
+  } | null = null;
+  private static readonly SPLITS_TTL_MS = 10 * 60_000;
+
   constructor(
     private readonly db: Db,
     config: MarketDataConfig,
@@ -276,29 +283,57 @@ export class MarketDataService {
   }
 
   /**
-   * Known splits for many assets in one query (ratio as decimal string,
-   * ascending by date). Assets with no splits are simply absent from the map.
+   * Known splits for many assets (ratio as decimal string, ascending by date).
+   * Assets with no splits are simply absent from the map. Served from the
+   * memoized table (`allSplits`).
    */
   async getSplits(
     assetIds: string[],
   ): Promise<Map<string, { date: IsoDate; ratio: string }[]>> {
     if (assetIds.length === 0) return new Map();
-    const rows = await this.db
-      .select({
-        assetId: schema.assetSplits.assetId,
-        date: schema.assetSplits.date,
-        ratio: schema.assetSplits.ratio,
-      })
-      .from(schema.assetSplits)
-      .where(inArray(schema.assetSplits.assetId, assetIds))
-      .orderBy(schema.assetSplits.date);
+    const all = await this.allSplits();
     const out = new Map<string, { date: IsoDate; ratio: string }[]>();
-    for (const r of rows) {
-      const list = out.get(r.assetId) ?? [];
-      list.push({ date: r.date as IsoDate, ratio: r.ratio });
-      out.set(r.assetId, list);
+    for (const id of assetIds) {
+      const list = all.get(id);
+      if (list) out.set(id, list.map((s) => ({ ...s })));
     }
     return out;
+  }
+
+  /**
+   * The whole `asset_splits` table by asset, read once per SPLITS_TTL_MS and
+   * dropped whenever this process records a split. Splits are rare and the
+   * table is small, but every cold overview, Tax Center load and export asked
+   * for them in a query of its own, after the transactions: 140–310ms of a
+   * ~1s cold dashboard (2026-11-02). Another process's writes (the backfill
+   * script) show up within the TTL.
+   */
+  private allSplits(): Promise<Map<string, { date: IsoDate; ratio: string }[]>> {
+    const memo = this.splitsMemo;
+    if (memo && memo.expires > Date.now()) return memo.run;
+    const run = (async () => {
+      const rows = await this.db
+        .select({
+          assetId: schema.assetSplits.assetId,
+          date: schema.assetSplits.date,
+          ratio: schema.assetSplits.ratio,
+        })
+        .from(schema.assetSplits)
+        .orderBy(schema.assetSplits.date);
+      const byAsset = new Map<string, { date: IsoDate; ratio: string }[]>();
+      for (const r of rows) {
+        const list = byAsset.get(r.assetId) ?? [];
+        list.push({ date: r.date as IsoDate, ratio: r.ratio });
+        byAsset.set(r.assetId, list);
+      }
+      return byAsset;
+    })();
+    const entry = { run, expires: Date.now() + MarketDataService.SPLITS_TTL_MS };
+    this.splitsMemo = entry;
+    run.catch(() => {
+      if (this.splitsMemo === entry) this.splitsMemo = null;
+    });
+    return run;
   }
 
   /**
@@ -374,6 +409,7 @@ export class MarketDataService {
           splits.map((c) => ({ assetId: asset.id, date: c.date, ratio: c.splitFactor! })),
         )
         .onConflictDoNothing();
+      this.splitsMemo = null;
     }
     this.coverageMemo.delete(asset.id);
     return splits.length;
@@ -556,6 +592,7 @@ export class MarketDataService {
               })),
             )
             .onConflictDoNothing();
+          this.splitsMemo = null;
         }
         this.coverageMemo.delete(asset.id);
       } catch {
