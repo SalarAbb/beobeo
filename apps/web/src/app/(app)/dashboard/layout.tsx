@@ -1,4 +1,6 @@
+import { count, eq } from "drizzle-orm";
 import { cookies, headers } from "next/headers";
+import { db, schema } from "@beobeo/db";
 import { auth } from "@/lib/auth";
 import { defaultNextBuyIds } from "@/lib/next-buy-defaults";
 import { PORTFOLIO_COOKIE } from "@/lib/portfolio-cookie";
@@ -6,6 +8,7 @@ import { warm } from "@/server/cache";
 import { computeDividendEstimate } from "@/server/dividends";
 import { computeNextBuy } from "@/server/next-buy";
 import { computeMetrics, computeOverview } from "@/server/portfolio";
+import { computeAccountHoldings } from "@/server/tax-center";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -37,6 +40,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
       const assetIds = defaultNextBuyIds(overview.holdings);
       if (assetIds.length > 0) await computeNextBuy(userId, { portfolioId, amountUsd: 1, assetIds });
     });
+    // With All picked and several portfolios, the header splits the total by
+    // portfolio from each account's holdings (usePortfolioSplit).
+    if (!portfolioId) {
+      warm(async () => {
+        await computeOverview(userId, undefined, "all");
+        const [row] = await db
+          .select({ n: count() })
+          .from(schema.portfolios)
+          .where(eq(schema.portfolios.userId, userId));
+        if ((row?.n ?? 0) > 1) await computeAccountHoldings(userId);
+      });
+    }
   }
   return children;
 }

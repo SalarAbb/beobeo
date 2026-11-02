@@ -6,6 +6,7 @@ import { ChevronDown, Gauge } from "lucide-react";
 import Link from "next/link";
 import { AssetLogo } from "@/components/asset-logo";
 import { usePortfolio } from "@/components/portfolio-context";
+import { PortfolioSplitNote, usePortfolioSplit } from "@/components/portfolio-split";
 import { Section, StatStrip, StatTile } from "@/components/page-section";
 import { AllocationSection, useTargetMix } from "@/components/allocation-section";
 import { NextBuySection } from "@/components/next-buy-section";
@@ -598,6 +599,7 @@ export default function DashboardPage() {
     enabled: overview.data?.holdings.some((h) => h.class !== "crypto") ?? false,
   });
   const hasTargets = useTargetMix() !== null;
+  const split = usePortfolioSplit();
 
   const toggleSort = (key: SortKey) =>
     setSort((s) =>
@@ -704,6 +706,7 @@ export default function DashboardPage() {
         <div className="ml-auto">
           <SegmentedControl value={pnlWindow} onChange={setPnlWindow} options={WINDOWS} />
         </div>
+        {split && <PortfolioSplitNote split={split} />}
         {loadingLabel && (
           <p role="status" className="basis-full text-right text-xs text-muted-foreground">
             Working out {loadingLabel}… showing {windowLabel} until it&apos;s in.
@@ -944,6 +947,12 @@ export default function DashboardPage() {
                         <span className="font-medium group-hover:underline">
                           {h.symbol}
                         </span>
+                        {/* Which portfolio it's in when All adds several up (molly: nothing said VT is Ginny's) */}
+                        {split?.byAsset.has(h.assetId) && (
+                          <span className="rounded-full border px-1.5 text-[11px] text-muted-foreground">
+                            {split.byAsset.get(h.assetId)!.join(" + ")}
+                          </span>
+                        )}
                         {h.name !== h.symbol && (
                           <span className="hidden truncate text-xs text-muted-foreground xl:inline">
                             {h.name}
