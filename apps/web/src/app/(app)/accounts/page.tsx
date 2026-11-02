@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader, Section } from "@/components/page-section";
+import { usePortfolio } from "@/components/portfolio-context";
 import {
   Select,
   SelectContent,
@@ -19,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import Link from "next/link";
+import { toast } from "sonner";
 import { TabError, TabLoading } from "@/components/tax-center/tab-state";
 import { useTRPC } from "@/lib/trpc";
 import { fmtQty, fmtUsd, gainClass } from "@/lib/viz";
@@ -37,6 +39,7 @@ type AccountType = keyof typeof TYPE_LABEL;
 export default function AccountsPage() {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
+  const { portfolioId, activeName } = usePortfolio();
   const accounts = useQuery(trpc.accounts.list.queryOptions({}));
   const portfolios = useQuery(trpc.portfolios.list.queryOptions());
   // Each account's holdings and value (petyr, mission 97: "where are the
@@ -57,6 +60,80 @@ export default function AccountsPage() {
   const heldIn = new Map((holdings.data ?? []).map((h) => [h.accountId, h]));
   const total = (holdings.data ?? []).reduce((s, h) => s + h.value, 0);
   const typeOf = new Map((accounts.data ?? []).map((a) => [a.id, a.accountType as AccountType]));
+  const move = useMutation(trpc.accounts.update.mutationOptions());
+  // Moving an account between portfolios is only a choice once there are two.
+  const canMove = (portfolios.data?.length ?? 0) > 1;
+  const byPortfolio = (portfolios.data ?? []).map((p) => {
+    const inIt = (accounts.data ?? []).filter((a) => a.portfolioId === p.id);
+    return {
+      ...p,
+      accounts: inIt.length,
+      value: inIt.reduce((s, a) => s + (heldIn.get(a.id)?.value ?? 0), 0),
+    };
+  });
+  const filledPortfolios = byPortfolio.filter((p) => p.accounts > 0);
+  const emptyPortfolios = byPortfolio.filter((p) => p.accounts === 0);
+
+  /** Moves an account (and with it every trade in it) into another portfolio.
+   *  A new portfolio used to stay empty with no way to fill it (barristan,
+   *  mission 120). The list updates at once; "Undo" moves it back. */
+  async function moveAccount(id: string, to: string, undoing = false) {
+    const account = accounts.data?.find((a) => a.id === id);
+    if (!account || account.portfolioId === to) return;
+    const from = account.portfolioId;
+    const listKey = trpc.accounts.list.queryKey({});
+    const setPortfolio = (portfolioId: string | null) =>
+      queryClient.setQueryData(listKey, (old) =>
+        old?.map((a) => (a.id === id ? { ...a, portfolioId } : a)),
+      );
+    setPortfolio(to);
+    const toName = portfolioName.get(to) ?? "that portfolio";
+    const toastId = toast.loading(`Moving ${account.name} to ${toName}…`);
+    try {
+      await move.mutateAsync({ id, portfolioId: to });
+    } catch (err) {
+      setPortfolio(from);
+      toast.error(`Couldn't move ${account.name}: ${(err as Error).message}`, { id: toastId });
+      return;
+    }
+    const held = heldIn.get(id);
+    toast.success(
+      undoing ? `${account.name} is back in ${toName}` : `${account.name} is now in ${toName}`,
+      {
+        id: toastId,
+        description:
+          held && held.value > 0
+            ? `Its ${fmtUsd(held.value)} and every trade in it count there now. Pick ${toName} in the portfolio switcher to see it on its own.`
+            : "Every trade in it counts there now.",
+        action:
+          !undoing && from
+            ? { label: "Undo", onClick: () => void moveAccount(id, from, true) }
+            : undefined,
+      },
+    );
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: trpc.accounts.pathKey() }),
+      queryClient.invalidateQueries({ queryKey: trpc.transactions.pathKey() }),
+      queryClient.invalidateQueries({ queryKey: trpc.portfolio.pathKey() }),
+      queryClient.invalidateQueries({ queryKey: trpc.tax.pathKey() }),
+      queryClient.invalidateQueries({ queryKey: trpc.compare.pathKey() }),
+    ]);
+  }
+
+  const portfolioSelect = (a: { id: string; name: string; portfolioId: string | null }) => (
+    <Select value={a.portfolioId ?? undefined} onValueChange={(to) => void moveAccount(a.id, to)}>
+      <SelectTrigger size="sm" className="w-40" aria-label={`Portfolio for ${a.name}`}>
+        <SelectValue placeholder="Pick one" />
+      </SelectTrigger>
+      <SelectContent>
+        {(portfolios.data ?? []).map((p) => (
+          <SelectItem key={p.id} value={p.id}>
+            {p.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 
   return (
     <div className="mx-auto grid w-full max-w-3xl grid-cols-1 gap-12">
@@ -65,11 +142,26 @@ export default function AccountsPage() {
         subtitle={
           "Flag which accounts are taxable brokerages vs. tax-advantaged (IRA, 401k) — " +
           "the Tax Center only sells from taxable accounts, and checks every account " +
-          "here for a recent buy that would stop a loss from counting."
+          "here for a recent buy that would stop a loss from counting." +
+          (canMove ? " Pick each account's portfolio to see it on its own in the switcher." : "")
         }
       />
 
       <Section title="Your accounts">
+          {/* This page lists every account whatever the switcher says; picking
+              a portfolio there and seeing nothing change read as "the switch
+              didn't take" (barristan, mission 124). */}
+          {portfolioId && canMove && accounts.data && (
+            <p className="text-sm text-muted-foreground">
+              Every account is listed here, whichever portfolio is picked. {activeName}{" "}
+              {(() => {
+                const inIt = accounts.data.filter((a) => a.portfolioId === portfolioId);
+                return inIt.length > 0
+                  ? `holds ${inIt.map((a) => a.name).join(", ")}.`
+                  : "has none yet.";
+              })()}
+            </p>
+          )}
           {accounts.isLoading ? (
             <Skeleton className="h-40 w-full" />
           ) : accounts.data && accounts.data.length > 0 ? (
@@ -87,12 +179,20 @@ export default function AccountsPage() {
               <TableBody>
                 {accounts.data.map((a) => (
                   <TableRow key={a.id}>
-                    <TableCell className="pl-1 font-medium">{a.name}</TableCell>
+                    <TableCell className="pl-1 font-medium">
+                      {a.name}
+                      {/* Phones have no Portfolio column; the picker sits under the name */}
+                      {canMove && <div className="mt-1.5 sm:hidden">{portfolioSelect(a)}</div>}
+                    </TableCell>
                     <TableCell className="hidden text-muted-foreground sm:table-cell">
                       {a.institution ?? "—"}
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground sm:table-cell">
-                      {a.portfolioId ? (portfolioName.get(a.portfolioId) ?? "—") : "—"}
+                      {canMove
+                        ? portfolioSelect(a)
+                        : a.portfolioId
+                          ? (portfolioName.get(a.portfolioId) ?? "—")
+                          : "—"}
                     </TableCell>
                     <TableCell className="data hidden text-right sm:table-cell">
                       {holdings.data ? fmtUsd(heldIn.get(a.id)?.value ?? 0) : "…"}
@@ -129,7 +229,29 @@ export default function AccountsPage() {
             <p className="text-sm text-muted-foreground">
               Together <span className="data text-foreground">{fmtUsd(total)}</span>{" "}
               at today&apos;s prices, the portfolio value on your dashboard with All portfolios
-              selected.
+              selected
+              {filledPortfolios.length > 1 ? (
+                <>
+                  :{" "}
+                  {filledPortfolios.map((p, i) => (
+                    <span key={p.id}>
+                      {i > 0 && " · "}
+                      {p.name} <span className="data text-foreground">{fmtUsd(p.value)}</span>
+                    </span>
+                  ))}
+                  .
+                </>
+              ) : (
+                "."
+              )}
+            </p>
+          )}
+          {canMove && accounts.data && accounts.data.length > 0 && emptyPortfolios.length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              {emptyPortfolios.map((p) => p.name).join(", ")}{" "}
+              {emptyPortfolios.length === 1 ? "has" : "have"} no accounts yet. Pick{" "}
+              {emptyPortfolios.length === 1 ? "it" : "one"} in an account&apos;s Portfolio box
+              above to move that account, with every trade in it, there.
             </p>
           )}
       </Section>

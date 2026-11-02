@@ -2,6 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Briefcase, Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { usePortfolio } from "@/components/portfolio-context";
@@ -20,6 +21,7 @@ export function PortfolioSwitcher() {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const create = useMutation(trpc.portfolios.create.mutationOptions());
+  const router = useRouter();
 
   async function createPortfolio() {
     const name = newName.trim();
@@ -38,7 +40,11 @@ export function PortfolioSwitcher() {
       setNewName("");
       setCreating(false);
       setOpen(false);
-      toast.success(`Portfolio “${name}” created`);
+      // A new portfolio is empty; say how to fill it (barristan, mission 120).
+      toast.success(`Portfolio “${name}” created`, {
+        description: "It's empty for now. Move an account into it on Accounts.",
+        action: { label: "Accounts", onClick: () => router.push("/accounts") },
+      });
     } catch (err) {
       toast.error((err as Error).message);
     }

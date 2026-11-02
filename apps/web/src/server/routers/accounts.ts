@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { schema } from "@beobeo/db";
 import { invalidateUserComputations } from "../cache";
 import { computeAccountHoldings } from "../tax-center";
@@ -133,18 +134,41 @@ export const accountsRouter = router({
     }),
 
   /** Set an account's taxable/tax-advantaged type — drives the Tax Center's
-   *  sellable-lot universe and wash-sale IRA detection. */
+   *  sellable-lot universe and wash-sale IRA detection — and/or move it into
+   *  another portfolio (its transactions follow it, since a portfolio's scope
+   *  is its accounts). A new portfolio was empty with no way to fill it
+   *  (barristan, mission 120). */
   update: protectedProcedure
     .input(
       z.object({
         id: z.uuid(),
-        accountType: accountTypeSchema,
+        accountType: accountTypeSchema.optional(),
+        portfolioId: z.uuid().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      if (input.portfolioId) {
+        const owned = await ctx.db
+          .select({ id: schema.portfolios.id })
+          .from(schema.portfolios)
+          .where(
+            and(
+              eq(schema.portfolios.id, input.portfolioId),
+              eq(schema.portfolios.userId, ctx.userId),
+            ),
+          );
+        if (owned.length === 0) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Portfolio not found." });
+        }
+      }
+      const set = {
+        ...(input.accountType ? { accountType: input.accountType } : {}),
+        ...(input.portfolioId ? { portfolioId: input.portfolioId } : {}),
+      };
+      if (Object.keys(set).length === 0) return;
       await ctx.db
         .update(schema.accounts)
-        .set({ accountType: input.accountType })
+        .set(set)
         .where(
           and(eq(schema.accounts.id, input.id), eq(schema.accounts.userId, ctx.userId)),
         );

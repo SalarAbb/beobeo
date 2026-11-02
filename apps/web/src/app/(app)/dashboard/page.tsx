@@ -576,6 +576,16 @@ export default function DashboardPage() {
     placeholderData: samePortfolio,
   });
   const timeseries = useQuery(trpc.portfolio.timeseries.queryOptions(scope));
+  // Only asked when a picked portfolio comes back empty: does it have no
+  // accounts while others do (a just-made portfolio)?
+  const allAccounts = useQuery({
+    ...trpc.accounts.list.queryOptions({}),
+    enabled: portfolioId !== null && overview.data?.holdings.length === 0,
+  });
+  const otherAccounts = (allAccounts.data ?? []).filter(
+    (a) => a.portfolioId !== portfolioId,
+  ).length;
+  const inThisPortfolio = (allAccounts.data ?? []).length - otherAccounts;
   const metrics = useQuery({
     ...trpc.portfolio.metrics.queryOptions({ ...scope, window: pnlWindow }),
     placeholderData: samePortfolio,
@@ -624,11 +634,26 @@ export default function DashboardPage() {
         <h1 className="text-3xl">Dashboard</h1>
         <Card className="mt-6">
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
-            No holdings yet.{" "}
-            <Link href="/transactions" className="underline">
-              Add your first transaction
-            </Link>{" "}
-            to see your portfolio here.
+            {portfolioId && otherAccounts > 0 && inThisPortfolio === 0 ? (
+              // A just-made portfolio has no accounts; "add your first
+              // transaction" left barristan guessing (mission 120).
+              <>
+                {activeName} has no accounts yet. On{" "}
+                <Link href="/accounts" className="underline">
+                  Accounts
+                </Link>
+                , pick {activeName} as an account&apos;s portfolio to move it here with all its
+                trades.
+              </>
+            ) : (
+              <>
+                No holdings yet.{" "}
+                <Link href="/transactions" className="underline">
+                  Add your first transaction
+                </Link>{" "}
+                to see your portfolio here.
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
