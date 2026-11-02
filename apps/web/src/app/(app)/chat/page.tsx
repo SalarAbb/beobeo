@@ -36,18 +36,59 @@ function savedTargetMix(userId: string, portfolioId: string | null) {
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
-const SUGGESTIONS = [
-  "How is my portfolio doing?",
-  "What's my cost basis on AAPL?",
-  "Would I have done better just buying SPY?",
-  "What were my realized gains last year?",
-];
+interface HoldingLite {
+  symbol: string;
+  class: string;
+  marketValue: number | null;
+}
+
+/** Starter questions about what this user actually holds: a fixed "cost basis
+ *  on AAPL" read as a stock app to a crypto-only holder (fred, 2026-11-02).
+ *  Each is one the snapshot or a warmed tool answers. */
+function starterQuestions(holdings: HoldingLite[] | undefined): string[] {
+  // Holdings didn't load: questions that name nothing.
+  if (!holdings) {
+    return [
+      "How is my portfolio doing?",
+      "What would I owe in tax if I sold everything today?",
+      "Would I have done better just buying SPY?",
+    ];
+  }
+  const held = holdings
+    .filter((h) => (h.marketValue ?? 0) >= 1)
+    .sort((a, b) => (b.marketValue ?? 0) - (a.marketValue ?? 0));
+  const top = held[0];
+  if (!top) {
+    return [
+      "Where do I type in what I own?",
+      "Can I import a file from my broker?",
+      "What does the Tax Center do?",
+    ];
+  }
+  const next = held[1] ?? top;
+  const out = [
+    "How is my portfolio doing?",
+    `What did I pay for my ${top.symbol}, and what's it worth now?`,
+    `What would I owe in tax if I sold my ${next.symbol} today?`,
+    "Would I have done better just buying SPY?",
+  ];
+  // Funds and companies may pay dividends; coins don't.
+  if (held.some((h) => h.class !== "crypto")) out.push("What do my holdings pay in dividends a year?");
+  return out;
+}
 
 export default function ChatPage() {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const { portfolioId, userId } = usePortfolio();
   const threads = useQuery(trpc.chat.threads.queryOptions());
+  // Same input as the nav's prefetch, so it's usually cached already.
+  const overview = useQuery(
+    trpc.portfolio.overview.queryOptions({ portfolioId: portfolioId ?? undefined }),
+  );
+  // Nothing until the holdings are known (or failed), so the pills never swap under a click.
+  const suggestions =
+    overview.isPending ? [] : starterQuestions(overview.data?.holdings);
 
   // The open conversation is remembered on this device (per user), so leaving
   // Chat and coming back reopens it instead of a blank page.
@@ -314,7 +355,7 @@ export default function ChatPage() {
               <div className="flex h-full flex-col justify-center gap-5">
                 <p className="font-display text-xl font-bold">What would you like to know?</p>
                 <div className="flex flex-wrap gap-2">
-                  {SUGGESTIONS.map((s) => (
+                  {suggestions.map((s) => (
                     <button
                       key={s}
                       type="button"
