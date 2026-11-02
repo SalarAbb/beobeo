@@ -165,13 +165,40 @@ export function sharpe(
   returns: DailyReturn[],
   riskFreeAnnual: number,
 ): number | null {
+  return sharpeInputs(returns, riskFreeAnnual)?.sharpe ?? null;
+}
+
+/** Every input of `sharpe`, so a reader can redo it by hand: the weighted mean
+ *  daily return, it compounded over 252 days, the cash rate, the volatility,
+ *  how many days with a move it used, and the result. Null exactly when
+ *  `sharpe` is. */
+export interface SharpeInputs {
+  meanDaily: number;
+  annualReturn: number;
+  riskFree: number;
+  volatility: number;
+  days: number;
+  sharpe: number;
+}
+
+export function sharpeInputs(
+  returns: DailyReturn[],
+  riskFreeAnnual: number,
+): SharpeInputs | null {
   const active = activeDays(returns);
   if (active.length < 5) return null;
   const { mean, variance } = weightedMoments(active);
   const vol = Math.sqrt(variance) * Math.sqrt(TRADING_DAYS);
   if (vol === 0) return null;
   const annual = Math.pow(1 + mean, TRADING_DAYS) - 1;
-  return (annual - riskFreeAnnual) / vol;
+  return {
+    meanDaily: mean,
+    annualReturn: annual,
+    riskFree: riskFreeAnnual,
+    volatility: vol,
+    days: active.length,
+    sharpe: (annual - riskFreeAnnual) / vol,
+  };
 }
 
 /**

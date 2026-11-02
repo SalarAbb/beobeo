@@ -14,7 +14,7 @@ import {
   portfolioTimeSeries,
   positionFromLots,
   realizedByYear,
-  sharpe,
+  sharpeInputs,
   splitFactorAfter,
   toIsoDate,
   volatility,
@@ -627,14 +627,30 @@ function seriesMetrics(points: MetricSeriesPoint[]) {
   // LINK boom), and the dollar series said "−90%" (that same $1k of LINK crashing in 2022,
   // plus every sale counted as a loss).
   const dd = materialDrawdown(points);
+  // Every input of the Sharpe ratio, so Compare can show it worked out
+  // (hermione: "what's the risk-free rate, daily or monthly returns,
+  // annualization? I can't tie this to my notebook").
+  const sharpeIn = sharpeInputs(returns, RISK_FREE_RATE);
   return {
     spanDays,
+    from: first?.date ?? null,
+    to: last?.date ?? null,
+    returnDays: returns.length,
     twr: pct(returns.length > 0 ? twr : null),
     twrAnnualized: pct(returns.length > 0 ? annualize(twr, spanDays) : null),
     volatility: pct(volatility(returns)),
     maxDrawdown: dd ? pct(dd.max) : null,
     maxDrawdownFrom: dd?.from ?? null,
-    sharpe: sharpe(returns, RISK_FREE_RATE),
+    sharpe: sharpeIn?.sharpe ?? null,
+    sharpeInputs: sharpeIn
+      ? {
+          meanDaily: sharpeIn.meanDaily * 100,
+          annualReturn: sharpeIn.annualReturn * 100,
+          riskFree: sharpeIn.riskFree * 100,
+          volatility: sharpeIn.volatility * 100,
+          days: sharpeIn.days,
+        }
+      : null,
   };
 }
 
@@ -707,9 +723,9 @@ async function computeMetricsUncached(
 
   return {
     window,
-    // Where the period these figures cover starts, stated under "Performance
-    // details" (petyr, mission 38: "I can't tell what period any of these cover").
-    from: points[0]?.date ?? null,
+    // Carries `from`, where the period these figures cover starts, stated under
+    // "Performance details" (petyr, mission 38: "I can't tell what period any
+    // of these cover").
     ...metrics,
     xirr: pct(moneyWeighted),
     behaviorGap,
@@ -882,7 +898,7 @@ export function computeDcaComparison(
   return cached(
     userCacheKey(
       userId,
-      "dca5", // v5: providerRef for the live overlay (v4: trades + fills) — don't serve stale JSON
+      "dca6", // v6: metrics carry from/to/returnDays/sharpeInputs (v5: providerRef for the live overlay) — don't serve stale JSON
       opts.portfolioId ?? "all",
       scopeKey(opts.benchmarkIds),
       scopeKey(opts.scopeAssetIds),

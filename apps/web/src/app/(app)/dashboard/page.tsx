@@ -193,7 +193,7 @@ const METRIC_DETAILS = {
     yardstick: "most investors lose 1–3%/yr to timing",
   },
   sharpe: {
-    meaning: "Reward earned for every unit of ups-and-downs you sat through.",
+    meaning: "Yearly return above a 4.5% cash rate, for every unit of ups-and-downs you sat through.",
     yardstick: "0.5 low · 1 solid · 2+ excellent",
   },
   volatility: {

@@ -15,6 +15,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { METRIC_LABEL_CLASS, MetricHover } from "@/components/metric-hover";
 import { TabError, TabLoading } from "@/components/tax-center/tab-state";
 import { ReplayTrades } from "@/components/compare/replay-trades";
+import { MetricWorkings, type WorkingsColumn } from "@/components/compare/metric-workings";
 import { useServerPresets } from "@/components/compare-presets";
 import {
   COMPARE_KEYS,
@@ -150,25 +151,10 @@ const fmtSignedPct = (v: number | null) =>
 const fmtAbsPct = (v: number | null) => (v === null ? "—" : `${v.toFixed(2)}%`);
 const fmtRatio = (v: number | null) => (v === null ? "—" : v.toFixed(2));
 
-/** Metric bundle each series carries (see seriesMetrics on the server). */
-interface SeriesMetrics {
-  spanDays: number;
-  twr: number | null;
-  twrAnnualized: number | null;
-  volatility: number | null;
-  maxDrawdown: number | null;
-  sharpe: number | null;
-}
-
-interface MetricColumn {
-  key: string;
-  label: string;
-  color: string;
-  xirr: number | null; // fraction, as elsewhere on this page
-  metrics: SeriesMetrics;
-  /** Last point of the series: what the dollars are worth vs. what went in. */
-  last: { value: number; invested: number } | undefined;
-}
+/** One column: its metric bundle (see seriesMetrics on the server), xirr as a
+ *  fraction, and the series' last point (what the dollars are worth vs. what
+ *  went in). */
+type MetricColumn = WorkingsColumn;
 
 /** A yearly pace needs a year of history: annualizing two months turned a $5
  *  dip into "−7.62% a year" next to "+1.28%" growth (luna, 2026-10-26). */
@@ -271,7 +257,7 @@ const METRIC_ROWS: MetricRow[] = [
   {
     name: "Reward for risk",
     term: "Sharpe",
-    meaning: "Reward earned for every unit of ups-and-downs you sat through.",
+    meaning: "Yearly return above a 4.5% cash rate, for every unit of ups-and-downs you sat through.",
     yardstick: "0.5 low · 1 solid · 2+ excellent",
     value: (c) => c.metrics.sharpe,
     format: fmtRatio,
@@ -308,7 +294,7 @@ function readRow(row: MetricRow, columns: MetricColumn[], values: (number | null
   return `${row.subject} ${clauses.join(", ")}.`;
 }
 
-function MetricsTable({ columns }: { columns: MetricColumn[] }) {
+function MetricsTable({ columns, tradeCount }: { columns: MetricColumn[]; tradeCount: number }) {
   const shortHistory = (columns[0]?.metrics.spanDays ?? 0) < YEAR_DAYS;
   const rows = shortHistory ? METRIC_ROWS.filter((r) => r.term !== "XIRR") : METRIC_ROWS;
   return (
@@ -317,7 +303,7 @@ function MetricsTable({ columns }: { columns: MetricColumn[] }) {
         <p className="max-w-2xl text-sm text-muted-foreground">
           Gain on your money counts when each dollar went in; growth of your picks
           ignores that timing, so the two can disagree. Hover or tap a measure for
-          what it means.
+          what it means; the formulas and inputs are under the table.
         </p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -390,6 +376,7 @@ function MetricsTable({ columns }: { columns: MetricColumn[] }) {
             stretched to a yearly pace blows small moves up.
           </p>
         )}
+        <MetricWorkings columns={columns} tradeCount={tradeCount} showYearlyRate={!shortHistory} />
       </div>
     </TooltipProvider>
   );
@@ -719,6 +706,7 @@ export default function ComparePage() {
             }
           >
             <MetricsTable
+              tradeCount={data.trades.length}
               columns={[
                 {
                   key: "you",

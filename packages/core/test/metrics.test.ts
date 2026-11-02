@@ -9,6 +9,7 @@ import {
   materialDrawdown,
   maxDrawdown,
   sharpe,
+  sharpeInputs,
   valueDrawdown,
   volatility,
   type DailyReturn,
@@ -201,6 +202,22 @@ describe("sharpe", () => {
     const annual = Math.pow(1.006, 252) - 1;
     const vol = Math.sqrt(3.44e-4) * Math.sqrt(252);
     expect(sharpe(returns, 0.045)).toBeCloseTo((annual - 0.045) / vol, 10);
+  });
+
+  it("sharpeInputs shows every input, and they redo the ratio by hand", () => {
+    // Same five returns: mean 0.006, vol √3.44e-4 × √252 ≈ 0.29443, annual =
+    // 1.006^252 − 1 ≈ 3.5225. Zero-return days are left out of the count.
+    const inputs = sharpeInputs(rs([0.02, 0, -0.01, 0.01, 0.03, -0.02]), 0.045)!;
+    expect(inputs.days).toBe(5);
+    expect(inputs.meanDaily).toBeCloseTo(0.006, 12);
+    expect(inputs.annualReturn).toBeCloseTo(Math.pow(1.006, 252) - 1, 10);
+    expect(inputs.volatility).toBeCloseTo(Math.sqrt(3.44e-4) * Math.sqrt(252), 10);
+    expect(inputs.riskFree).toBe(0.045);
+    expect(inputs.sharpe).toBeCloseTo(
+      (inputs.annualReturn - inputs.riskFree) / inputs.volatility,
+      12,
+    );
+    expect(sharpeInputs(rs([0.01, 0.01, 0.01, 0.01, 0.01]), 0.045)).toBeNull();
   });
 
   it("is null when volatility is zero (constant returns)", () => {

@@ -31,7 +31,9 @@ export {
   materialDrawdown,
   volatility,
   sharpe,
+  sharpeInputs,
   bestWorstDay,
+  type SharpeInputs,
   type MetricSeriesPoint,
   type DailyReturn,
 } from "./metrics";
