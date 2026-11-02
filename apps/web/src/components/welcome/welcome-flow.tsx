@@ -86,6 +86,12 @@ function payLabel(status: FilingStatus, b: BracketOption) {
 
 const usd = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 
+/** What the two rates mean when you sell, in plain words: "sales held a year
+ *  or less, 0% on longer ones" read as nerdy to luna (missions 125, 129). */
+function saleRates(ordinaryPct: number, ltcgPct: number) {
+  return `Selling at a gain, you'd pay ${ordinaryPct}% tax on things owned a year or less, ${ltcgPct}% on things owned longer`;
+}
+
 /** A band's taxable-income edges, exact (the rows show them rounded). */
 function bandEdges(b: BracketOption) {
   if (b.incomeFrom === 0) return `taxable income under ${usd(b.incomeTo!)}`;
@@ -250,7 +256,7 @@ function TaxStep({
       {
         label: "Taxes",
         value: rates && status
-          ? `${FILING_STATUS_LABEL[status]}, 2026 federal brackets: ${rates.ordinaryRatePct}% on sales held a year or less, ${rates.ltcgRatePct}% on longer ones${state && `, plus ${state}`}`
+          ? `${FILING_STATUS_LABEL[status]}, 2026 federal brackets. ${saleRates(rates.ordinaryRatePct, rates.ltcgRatePct)}${state && `, plus ${state}`}`
           : state,
       },
       // The figures behind the rates, so they can be checked here without
@@ -260,7 +266,7 @@ function TaxStep({
             {
               label: "Income",
               value: usesPay
-                ? `${usd(taxable!)} taxable (${usd(pay!)} pay minus the ${usd(STANDARD_DEDUCTION[filing])} standard deduction), in the ${picked.ordinaryRatePct}% bracket: ${bandEdges(picked)}`
+                ? `${usd(pay!)} pay, minus the ${usd(STANDARD_DEDUCTION[filing])} everyone takes off (the standard deduction), leaves ${usd(taxable!)} taxed. That's the ${picked.ordinaryRatePct}% bracket: ${bandEdges(picked)}`
                 : `The ${picked.ordinaryRatePct}% bracket you picked: ${bandEdges(picked)}`,
             },
           ]
@@ -300,7 +306,7 @@ function TaxStep({
         {!status && (
           <p className="text-xs text-muted-foreground">
             Pick one to see your 2026 brackets. Not sure? Skip it and we&apos;ll assume the 24%
-            bracket (15% on sales of things held over a year).
+            bracket (15% when you sell something owned over a year).
           </p>
         )}
       </div>
@@ -327,7 +333,7 @@ function TaxStep({
             <span className="font-semibold">
               That&apos;s the {fromPay.ordinaryRatePct}% bracket
               {usesPay
-                ? `: ${fromPay.ordinaryRatePct}% on sales held a year or less, ${fromPay.ltcgRatePct}% on longer ones.`
+                ? `. ${saleRates(fromPay.ordinaryRatePct, fromPay.ltcgRatePct)}.`
                 : "."}
             </span>
             <span className="mt-0.5 block text-xs text-muted-foreground">
@@ -377,9 +383,9 @@ function TaxStep({
           {picked && !usesPay && pay === null && `${payRange(filing, picked)} `}
           {/* With pay typed, the line under the pay box already says this. */}
           {!rates
-            ? "Not sure? Skip it and we'll assume the 24% bracket (15% on sales of things held over a year)."
+            ? "Not sure? Skip it and we'll assume the 24% bracket (15% when you sell something owned over a year)."
             : !usesPay &&
-              `Sales held a year or less are taxed at ${rates.ordinaryRatePct}%, longer ones at ${rates.ltcgRatePct}%.`}
+              `${saleRates(rates.ordinaryRatePct, rates.ltcgRatePct)}.`}
         </p>
       </div>
       <div className="grid gap-2">

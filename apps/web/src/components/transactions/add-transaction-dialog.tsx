@@ -57,21 +57,22 @@ const dayFmt = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
-/** How a sale of a holding bought on `date` would be taxed: long-term from
- *  the day after its anniversary, like the Tax Center's lots. */
+/** How a sale of a holding bought on `date` would be taxed: at the lower
+ *  (long-term) rate from the day after its anniversary, like the Tax Center's
+ *  lots. Plain words, no "long-term": luna found it nerdy (missions 125, 129). */
 function heldNote(date: string, today: string): string {
   const [y, m, d] = date.split("-").map(Number);
-  if (!y || !m || !d) return "Roughly is fine (e.g. 10/1/2024, or just Oct 2024): after a year, a sale is taxed at the lower long-term rate.";
-  if (date >= today) return "Bought earlier? Type or pick roughly when: after a year, a sale is taxed at the lower long-term rate.";
+  if (!y || !m || !d) return "Roughly is fine (10/1/2024, or just Oct 2024). Things you've owned over a year are taxed less when you sell.";
+  if (date >= today) return "Bought earlier? Type or pick roughly when. Things you've owned over a year are taxed less when you sell.";
   const ltOn = new Date(Date.UTC(y + 1, m - 1, d + 1));
   return ltOn.toISOString().slice(0, 10) <= today
-    ? "Owned over a year: a sale is taxed at the lower long-term rate."
-    : `Under a year: a sale is taxed at the lower long-term rate from ${dayFmt.format(ltOn)}.`;
+    ? "Owned over a year, so a sale gets the lower tax rate."
+    : `Owned under a year. From ${dayFmt.format(ltOn)}, a sale gets the lower tax rate.`;
 }
 
 /** The saved holding in one line, for setup's confirmation: "50 VOO, $25,000.00
- *  in all, bought Oct 1, 2024, in IBKR. Owned over a year, so a sale would be
- *  long-term." A bare "recorded" left hermione unable to check the units, cost
+ *  in all, bought Oct 1, 2024, in IBKR. Owned over a year, so a sale gets the
+ *  lower tax rate." A bare "recorded" left hermione unable to check the units, cost
  *  and holding period before the dashboard opened (mission 115). */
 function savedSummary(
   qty: string,
@@ -85,8 +86,8 @@ function savedSummary(
   const ltOn = new Date(Date.UTC(y! + 1, m! - 1, d! + 1));
   const term =
     ltOn.toISOString().slice(0, 10) <= today
-      ? "Owned over a year, so a sale would be long-term."
-      : `A sale would be long-term from ${dayFmt.format(ltOn)}.`;
+      ? "Owned over a year, so a sale gets the lower tax rate."
+      : `From ${dayFmt.format(ltOn)}, a sale gets the lower tax rate.`;
   return `${qty} ${symbol}${total !== null ? `, ${fmtUsd(total)} in all` : ""}, bought ${dayFmt.format(
     new Date(`${date}T12:00:00Z`),
   )}${account ? `, in ${account}` : ""}. ${term}`;
@@ -447,7 +448,7 @@ export function AddTransactionDialog({
                   className="justify-self-start text-xs text-primary hover:underline"
                   onClick={() => setEntry(byTotal ? "price" : "total")}
                 >
-                  {byTotal ? "Use unit price" : "Enter total"}
+                  {byTotal ? "Enter the price each instead" : "Enter total"}
                 </button>
               )}
             </div>
@@ -470,7 +471,15 @@ export function AddTransactionDialog({
             <span className="text-xs text-muted-foreground">
               {byTotal
                 ? derivedPrice
-                  ? `Works out to $${Number(derivedPrice).toLocaleString("en-US", { maximumFractionDigits: Number(derivedPrice) >= 1 ? 4 : 8 })} per unit${feesNum ? " (fees counted in the total)" : ""}`
+                  ? // Cents, like any price (the stored price keeps 10 decimals, so
+                    // the cost still lands on the typed total); "per unit" read as
+                    // nerdy to luna (missions 125, 129).
+                    `That's $${Number(derivedPrice).toLocaleString(
+                      "en-US",
+                      Number(derivedPrice) >= 1
+                        ? { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+                        : { maximumFractionDigits: 8 },
+                    )} each${feesNum ? ", with fees in the total" : ""}`
                   : "Enter quantity and what it came to in all"
                 : suggestPrice && priceSuggestion.data && !priceTouched
                 ? priceSuggestion.data.source === "quote"

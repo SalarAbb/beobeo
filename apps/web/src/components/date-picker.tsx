@@ -112,7 +112,7 @@ export function DatePicker({
   }
   const monthNote = (d: Date) =>
     `Day assumed: the 1st, since none was given.${
-      nearAYear(d) ? " Within a few weeks of a year ago, the exact day decides when a sale turns long-term." : ""
+      nearAYear(d) ? " Within a few weeks of a year ago, the exact day decides when a sale gets the lower tax rate." : ""
     }`;
 
   return (
