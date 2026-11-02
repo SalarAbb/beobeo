@@ -41,12 +41,15 @@ export function loadTransactionList(
       .innerJoin(schema.assets, eq(schema.transactions.assetId, schema.assets.id))
       .innerJoin(schema.accounts, eq(schema.transactions.accountId, schema.accounts.id))
       .where(and(...conditions))
-      .orderBy(desc(schema.transactions.tradedAt))
+      // Same day: the one entered last first, so a payout typed in for a date
+      // that already has one shows on top (olenna, mission 113).
+      .orderBy(desc(schema.transactions.tradedAt), desc(schema.transactions.createdAt))
       .limit(input.limit);
   }, LINGER);
 }
 
-/** Distinct assets the user has transactions in, with counts (the list's "Show" filter). */
+/** Distinct assets the user has transactions in, with counts (the list's "Show"
+ *  filter; the ticker picker matches them as you type, from the first letter). */
 export function loadTransactionAssets(userId: string, portfolioId?: string) {
   return sharedRun(userCacheKey(userId, "txn-assets", portfolioId ?? "all"), async () => {
     const conditions = [eq(schema.transactions.userId, userId)];
@@ -55,6 +58,7 @@ export function loadTransactionAssets(userId: string, portfolioId?: string) {
       .select({
         id: schema.assets.id,
         symbol: schema.assets.symbol,
+        name: schema.assets.name,
         class: schema.assets.class,
         count: count(),
       })

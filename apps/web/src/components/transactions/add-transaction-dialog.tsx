@@ -79,7 +79,8 @@ export function AddTransactionDialog({
   owned = false,
   trigger,
 }: {
-  onCreated?: () => void;
+  /** Gets the saved row, so a list can point at it. */
+  onCreated?: (txn: { id: string; assetId: string; accountId: string }) => void;
   /** Accounts still being created (welcome step 2): the form opens at once,
    *  and a Save that beats them waits for them instead of making "Default". */
   accountsPending?: Promise<unknown> | null;
@@ -245,7 +246,7 @@ export function AddTransactionDialog({
         acctName = acct.name;
         void queryClient.invalidateQueries({ queryKey: trpc.accounts.list.queryKey() });
       }
-      await createTxn.mutateAsync({
+      const created = await createTxn.mutateAsync({
         accountId: acctId,
         assetId: asset.id,
         type,
@@ -261,9 +262,14 @@ export function AddTransactionDialog({
       });
       // Names the account: a setup user wanted to see VOO landed in IBKR, not
       // just that something saved (hermione, mission 46).
-      toast.success(`${what} recorded${acctName ? ` in ${acctName}` : ""}`, { id: toastId });
+      // The amount and date too: a backdated payout lands below newer rows, and
+      // olenna couldn't tell hers had gone in (missions 112, 113).
+      toast.success(`${what} recorded${acctName ? ` in ${acctName}` : ""}`, {
+        id: toastId,
+        description: `${total !== null ? `${fmtUsd(total)} on ` : ""}${dayFmt.format(new Date(`${date}T12:00:00Z`))}`,
+      });
       resetForm();
-      onCreated?.();
+      onCreated?.(created);
     } catch (err) {
       onSaving?.(null);
       toast.error(`Couldn't save the ${what}: ${(err as Error).message}`, {

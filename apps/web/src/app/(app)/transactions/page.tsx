@@ -64,6 +64,10 @@ const fmtQty = (v: string) => {
   return n.toLocaleString("en-US", { maximumFractionDigits: 8 });
 };
 
+// Stable, so React calls it once, when the just-added row first mounts.
+const scrollToRow = (el: HTMLTableRowElement | null) =>
+  el?.scrollIntoView({ block: "center", behavior: "smooth" });
+
 export default function TransactionsPage({
   searchParams,
 }: {
@@ -240,6 +244,17 @@ export default function TransactionsPage({
     await refreshAll();
   }
 
+  // The row just typed in is marked and scrolled to: a backdated payout lands
+  // below newer rows, and olenna went back and forth to find hers (missions 112, 113).
+  const [justAdded, setJustAdded] = useState<string | null>(null);
+  function onCreated(txn: { id: string; assetId: string; accountId: string }) {
+    setJustAdded(txn.id);
+    // A filter that would hide it steps aside.
+    if (assetFilter && assetFilter.id !== txn.assetId) setAssetPick(null);
+    if (accountFilter && accountFilter.id !== txn.accountId) setAccountPick(null);
+    void refresh();
+  }
+
   const refresh = () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: trpc.transactions.list.queryKey() }),
@@ -268,7 +283,7 @@ export default function TransactionsPage({
             <ExportMenu portfolioId={portfolioId ?? undefined} />
             <CsvImportDialog onImported={refresh} defaultOpen={params.import === "1"} />
             <AddTransactionDialog
-              onCreated={refresh}
+              onCreated={onCreated}
               defaultOpen={params.add === "1" || params.add === "dividend"}
               defaultType={params.add === "dividend" ? "dividend" : "buy"}
             />
@@ -375,7 +390,8 @@ export default function TransactionsPage({
               {rows!.filter(({ txn }) => !pendingDelete.has(txn.id)).map(({ txn, asset, account }) => (
                 <TableRow
                   key={txn.id}
-                  className="cursor-pointer"
+                  ref={txn.id === justAdded ? scrollToRow : undefined}
+                  className={cn("cursor-pointer", txn.id === justAdded && "bg-accent/60")}
                   onClick={() => setOpened({ txn, asset, account })}
                   // A sale's details replay the asset's sales; start it on the way to the click.
                   onPointerEnter={
@@ -410,6 +426,11 @@ export default function TransactionsPage({
                     >
                       {txn.type.replace("_", " ")}
                     </span>
+                    {txn.id === justAdded && (
+                      <span className="ml-1.5 rounded-full border border-primary/40 px-1.5 py-0.5 text-[11px] whitespace-nowrap text-primary">
+                        just added
+                      </span>
+                    )}
                     {swapIds.has(txn.id) && (
                       <span
                         className="ml-1.5 rounded-full border px-1.5 py-0.5 text-[11px] whitespace-nowrap text-muted-foreground"

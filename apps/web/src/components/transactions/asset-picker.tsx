@@ -85,7 +85,32 @@ export function AssetPicker({
   // Famous tickers match synchronously on every keystroke — zero latency.
   // The server round-trip (user's own assets + provider search) fills in
   // behind them.
-  const popular = searchPopular(query.trim(), 6);
+  // The user's own assets match synchronously too, from the first letter, and
+  // come first: the server search waits for two letters, so olenna's "O"
+  // listed Oracle and Microsoft and never her Realty Income (mission 113).
+  // Loaded when the picker mounts, before anything is typed.
+  const held = useQuery({
+    ...trpc.transactions.assets.queryOptions({}),
+    staleTime: 5 * 60_000,
+  });
+  const typedQuery = query.trim().toUpperCase();
+  const heldRows = typedQuery
+    ? (held.data ?? [])
+        .filter(
+          (a) =>
+            a.symbol.toUpperCase().startsWith(typedQuery) ||
+            (typedQuery.length >= 2 && a.name.toUpperCase().includes(typedQuery)),
+        )
+        .sort(
+          (a, b) =>
+            Number(b.symbol.toUpperCase() === typedQuery) -
+              Number(a.symbol.toUpperCase() === typedQuery) ||
+            a.symbol.localeCompare(b.symbol),
+        )
+        .slice(0, 6)
+    : [];
+  const heldSymbols = new Set(heldRows.map((a) => a.symbol));
+  const popular = searchPopular(query.trim(), 6).filter((p) => !heldSymbols.has(p.symbol));
 
   const search = useQuery({
     ...trpc.assets.search.queryOptions({ query: debouncedQuery }),
@@ -137,15 +162,19 @@ export function AssetPicker({
   const allLocal = search.data?.local ?? [];
   const localByKey = new Map(allLocal.map((a) => [`${a.symbol}:${a.class}`, a]));
   const popularRows = popular;
-  const seen = new Set(popularRows.map((p) => `${p.symbol}:${p.class}`));
+  const seen = new Set(
+    [...heldRows, ...popularRows].map((p) => `${p.symbol}:${p.class}`),
+  );
   // Only assets you've traded are "Your assets". Others come from the shared
   // table and list with the market results, minus a same-ticker twin of a
   // Popular or owned row (a brand-new user saw "VOO · Stock" under Your
   // assets next to the VOO ETF, missions 37 and 39; then crypto tokens
   // called VOO under Markets, mission 40).
-  const local = allLocal.filter((a) => a.mine && !seen.has(`${a.symbol}:${a.class}`));
+  const local = allLocal.filter(
+    (a) => a.mine && !heldSymbols.has(a.symbol) && !seen.has(`${a.symbol}:${a.class}`),
+  );
   for (const a of local) seen.add(`${a.symbol}:${a.class}`);
-  const taken = new Set([...popularRows, ...local].map((a) => a.symbol));
+  const taken = new Set([...heldRows, ...popularRows, ...local].map((a) => a.symbol));
   const known = allLocal.filter(
     (a) => !a.mine && !taken.has(a.symbol) && !seen.has(`${a.symbol}:${a.class}`),
   );
@@ -154,12 +183,18 @@ export function AssetPicker({
     (r) => !taken.has(r.symbol) && !seen.has(`${r.symbol}:${r.class}`),
   );
   const hasResults =
-    local.length > 0 || popularRows.length > 0 || known.length > 0 || remoteRows.length > 0;
+    heldRows.length > 0 ||
+    local.length > 0 ||
+    popularRows.length > 0 ||
+    known.length > 0 ||
+    remoteRows.length > 0;
   // Once the typed ticker itself is listed, the wider search can only add
   // lesser matches below it, so it runs quietly: an "updating…" row under the
   // VOO someone was about to tap read as "not ready yet" (hermione, missions 55–57).
   const typed = query.trim().toUpperCase();
-  const exactShown = [...popularRows, ...local].some((a) => a.symbol.toUpperCase() === typed);
+  const exactShown = [...heldRows, ...popularRows, ...local].some(
+    (a) => a.symbol.toUpperCase() === typed,
+  );
 
   function pickLocal(a: PickedAsset) {
     setFailed(null);
@@ -222,6 +257,25 @@ export function AssetPicker({
                       "No matches"
                     )}
                   </CommandEmpty>
+                )}
+                {heldRows.length > 0 && (
+                  <CommandGroup heading="Your assets">
+                    {heldRows.map((a) => (
+                      <CommandItem
+                        key={`held-${a.id}`}
+                        value={`held-${a.id}`}
+                        className="gap-2.5 py-2"
+                        onSelect={() => pickLocal(a)}
+                      >
+                        <AssetRow
+                          symbol={a.symbol}
+                          name={a.name}
+                          assetClass={a.class}
+                          selected={value?.id === a.id}
+                        />
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
                 )}
                 {popularRows.length > 0 && (
                   <CommandGroup heading="Popular">
