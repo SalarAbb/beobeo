@@ -767,7 +767,13 @@ export default function DashboardPage() {
           // (olenna): say none are recorded, what the holdings pay, and
           // where to add one.
           sub={
-            totals.dividends !== 0 ? undefined : windowed ? (
+            totals.dividends !== 0 ? (
+              // Someone who records payouts looks here for the way in too
+              // (olenna, mission 112, clicked the tile and nothing happened).
+              <Link href="/transactions?add=dividend" className="underline underline-offset-2">
+                Add a payout
+              </Link>
+            ) : windowed ? (
               "None recorded in this period"
             ) : (
               <>

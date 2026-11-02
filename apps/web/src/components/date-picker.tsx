@@ -146,10 +146,11 @@ export function DatePicker({
           endMonth={new Date()}
           disabled={{ after: new Date() }}
           onSelect={(d) => {
-            if (d) {
-              onChange(localIsoDate(d));
-              setOpen(false);
-            }
+            // Clicking the day already picked deselects it (d undefined):
+            // keep the date and close, as picking it again means "this one"
+            // (olenna, mission 112, had to press Escape).
+            if (d) onChange(localIsoDate(d));
+            setOpen(false);
           }}
         />
       </PopoverContent>

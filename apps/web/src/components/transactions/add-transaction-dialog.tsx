@@ -116,8 +116,7 @@ export function AddTransactionDialog({
   const [accountId, setAccountId] = useState<string>("");
   const [asset, setAsset] = useState<PickedAsset | null>(null);
   const [type, setType] = useState<TxnType>(defaultType);
-  // A payout opened from the dashboard is one total: 1 × the amount received.
-  const [quantity, setQuantity] = useState(defaultType === "dividend" ? "1" : "");
+  const [quantity, setQuantity] = useState("");
   const [price, setPrice] = useState("");
   const [priceTouched, setPriceTouched] = useState(false);
   const [entry, setEntry] = useState<"price" | "total">(defaultEntry);
@@ -148,8 +147,13 @@ export function AddTransactionDialog({
       ? Number(priceSuggestion.data.price).toFixed(2)
       : String(Number(Number(priceSuggestion.data.price).toPrecision(4)))
     : null;
-  const qtyNum = Number(quantity);
-  const feesNum = Number(fees) || 0;
+  // A payout is one total, as the statement shows it: saved as 1 × the
+  // amount received. Asking for shares × a per-share figure made olenna
+  // work out 31 ÷ 103.5468 and still miss her $31.00 (mission 112).
+  const isDividend = type === "dividend";
+  const effectiveQuantity = isDividend ? "1" : quantity;
+  const qtyNum = Number(effectiveQuantity);
+  const feesNum = isDividend ? 0 : Number(fees) || 0;
   const outflow = type === "sell" || type === "transfer_out";
 
   // Buys and sells can be entered by what the broker statement shows in all
@@ -177,7 +181,7 @@ export function AddTransactionDialog({
   const totalLabel = TOTAL_LABEL[type];
   const hasTotal =
     totalLabel !== undefined &&
-    quantity !== "" &&
+    effectiveQuantity !== "" &&
     Number.isFinite(qtyNum) &&
     qtyNum > 0 &&
     effectivePrice !== "" &&
@@ -245,12 +249,12 @@ export function AddTransactionDialog({
         accountId: acctId,
         assetId: asset.id,
         type,
-        quantity,
+        quantity: effectiveQuantity,
         pricePerUnit:
           needsPrice(type) || type === "dividend" || type.startsWith("transfer")
             ? effectivePrice || null
             : null,
-        fees: fees || "0",
+        fees: isDividend ? "0" : fees || "0",
         tradedAt: new Date(`${date}T12:00:00Z`),
         note: note || undefined,
         source: "manual",
@@ -330,6 +334,22 @@ export function AddTransactionDialog({
             </div>
           </div>
 
+          {isDividend ? (
+            <div className="grid content-start gap-1.5 sm:max-w-[66%]">
+              <Label htmlFor="dividend-amount">Amount received</Label>
+              <Input
+                id="dividend-amount"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                The whole payout in dollars, as on your statement. No share count needed.
+              </p>
+            </div>
+          ) : (
           <div className="grid grid-cols-3 gap-3">
             <div className="grid content-start gap-1.5">
               <Label>{type === "split" ? "Ratio" : "Quantity"}</Label>
@@ -347,9 +367,7 @@ export function AddTransactionDialog({
                   read as the current state (hermione, mission 40). Beside
                   the label, the link wrapped it on a phone and dropped this
                   field below its neighbours. */}
-              <Label className="whitespace-nowrap">
-                {type === "dividend" ? "Amount" : byTotal ? totalLabel : "Price"}
-              </Label>
+              <Label className="whitespace-nowrap">{byTotal ? totalLabel : "Price"}</Label>
               {byTotal ? (
                 <Input
                   inputMode="decimal"
@@ -393,6 +411,7 @@ export function AddTransactionDialog({
               />
             </div>
           </div>
+          )}
 
           {/* Summary strip: price provenance + live total, fixed height so the
               grid above never shifts. */}
