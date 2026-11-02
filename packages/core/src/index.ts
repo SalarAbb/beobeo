@@ -55,6 +55,7 @@ export {
   type CashFlow,
   type BenchmarkComponent,
   type DcaReplayResult,
+  type DcaFill,
 } from "./dca";
 export {
   allocationDrift,

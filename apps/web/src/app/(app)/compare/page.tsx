@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Check, ChevronDown, Plus, X } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { AssetLogo } from "@/components/asset-logo";
@@ -13,7 +13,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Skeleton } from "@/components/ui/skeleton";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { METRIC_LABEL_CLASS, MetricHover } from "@/components/metric-hover";
-import { TabError } from "@/components/tax-center/tab-state";
+import { TabError, TabLoading } from "@/components/tax-center/tab-state";
+import { ReplayTrades } from "@/components/compare/replay-trades";
 import { useServerPresets } from "@/components/compare-presets";
 import {
   COMPARE_KEYS,
@@ -366,6 +367,7 @@ export default function ComparePage() {
   const [customBenchmarks, setCustomBenchmarks] = useStoredState<BenchAsset[]>(COMPARE_KEYS.custom, []);
   const [scopeIds, setScopeIds] = useStoredState<string[]>(COMPARE_KEYS.scope(portfolioId), []);
   const [addingCustom, setAddingCustom] = useState(false);
+  const [scopeOpen, setScopeOpen] = useState(false);
 
   const chips: BenchAsset[] = useMemo(
     () => benchmarkChips(presets.data ?? [], customBenchmarks),
@@ -394,9 +396,23 @@ export default function ComparePage() {
     ...trpc.compare.dca.queryOptions(dcaInput(activeIds, scopeIds, portfolioId)),
     enabled: activeIds.length > 0,
     staleTime: 5 * 60_000,
+    // Picking another benchmark keeps the last comparison up (dimmed, with a
+    // line saying what's coming) instead of a blank grey box (arya, mission
+    // 111: "I clicked QQQ and got a blank grey box. Nothing told me it was
+    // loading"). Never across portfolios: that would put one portfolio's
+    // numbers under another's name.
+    placeholderData: (prev, prevQuery) => {
+      const input = (prevQuery?.queryKey[1] as { input?: { portfolioId?: string } } | undefined)
+        ?.input;
+      return input?.portfolioId === (portfolioId ?? undefined) ? keepPreviousData(prev) : undefined;
+    },
   });
 
   const data = compare.data;
+  const updating = compare.isPlaceholderData;
+  const pendingSymbols = chips
+    .filter((c) => activeIds.includes(c.id) && !data?.benchmarks.some((b) => b.assetId === c.id))
+    .map((c) => c.symbol);
   const lastP = data?.portfolio[data.portfolio.length - 1];
   const holdings = overview.data?.holdings ?? [];
   const scopeLabel =
@@ -503,7 +519,7 @@ export default function ComparePage() {
 
         <div className="ml-auto flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Comparing:</span>
-          <Popover>
+          <Popover open={scopeOpen} onOpenChange={setScopeOpen}>
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
@@ -524,7 +540,13 @@ export default function ComparePage() {
                   "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-secondary",
                   scopeIds.length === 0 && "font-semibold",
                 )}
-                onClick={() => setScopeIds([])}
+                onClick={() => {
+                  // One choice, so it closes; holdings below are a multi-pick
+                  // and keep it open (arya, mission 111: the menu "just stayed
+                  // there over the numbers").
+                  setScopeIds([]);
+                  setScopeOpen(false);
+                }}
               >
                 Whole portfolio
               </button>
@@ -558,7 +580,7 @@ export default function ComparePage() {
       {compare.isError && !data ? (
         <TabError what="the comparison" onRetry={() => void compare.refetch()} />
       ) : compare.isLoading || !data ? (
-        <Skeleton className="h-96 w-full" />
+        <TabLoading label="Replaying your trades into the benchmarks…" className="h-96" />
       ) : data.portfolio.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           {scopeIds.length > 0
@@ -566,7 +588,20 @@ export default function ComparePage() {
             : "Add some transactions first: the comparison replays your actual purchase history."}
         </p>
       ) : (
-        <>
+        <div
+          className={cn(
+            "grid grid-cols-1 gap-12 transition-opacity",
+            updating && "pointer-events-none opacity-50",
+          )}
+          aria-busy={updating}
+        >
+          {updating && (
+            <p role="status" className="-mb-8 text-sm text-muted-foreground">
+              {pendingSymbols.length > 0
+                ? `Adding ${joinNames(pendingSymbols)}… showing the last comparison until it's in.`
+                : "Updating the comparison…"}
+            </p>
+          )}
           <StatStrip cols={STRIP_COLS[1 + data.benchmarks.length] ?? STRIP_COLS[5]!}>
             <StatTile
               className={data.benchmarks.length % 2 === 0 ? "col-span-2 lg:col-span-1" : undefined}
@@ -654,7 +689,25 @@ export default function ComparePage() {
               ]}
             />
           </Section>
-        </>
+
+          <Section title="How it's worked out">
+            <ReplayTrades
+              trades={data.trades}
+              benchmarks={data.benchmarks.map((b, i) => ({
+                assetId: b.assetId,
+                symbol: b.symbol,
+                color: benchColor(theme, i),
+                fills: b.fills,
+                units: b.units,
+                lastClose: b.lastClose,
+                value: b.series[b.series.length - 1]?.value ?? null,
+              }))}
+              netInvested={lastP?.invested ?? 0}
+              heldCost={scopeIds.length === 0 ? (overview.data?.totals.cost ?? null) : null}
+              realized={scopeIds.length === 0 ? (overview.data?.totals.realized ?? null) : null}
+            />
+          </Section>
+        </div>
       )}
     </div>
   );

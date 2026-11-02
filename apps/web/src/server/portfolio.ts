@@ -882,7 +882,7 @@ export function computeDcaComparison(
   return cached(
     userCacheKey(
       userId,
-      "dca3", // v3: drawdown became materialDrawdown (+ maxDrawdownFrom) — don't serve stale JSON
+      "dca4", // v4: trades + each benchmark's fills (v3: materialDrawdown) — don't serve stale JSON
       opts.portfolioId ?? "all",
       scopeKey(opts.benchmarkIds),
       scopeKey(opts.scopeAssetIds),
@@ -912,7 +912,7 @@ async function computeDcaComparisonUncached(
   portfolioRun.catch(() => {});
   assetsRun.catch(() => {});
 
-  const { txns } = await loadEngineTransactions(
+  const { txns, assets: userAssets } = await loadEngineTransactions(
     database,
     userId,
     undefined,
@@ -923,6 +923,7 @@ async function computeDcaComparisonUncached(
     return {
       portfolio: [],
       benchmarks: [],
+      trades: [],
       portfolioXirr: null,
       portfolioMetrics: seriesMetrics([]),
     };
@@ -930,6 +931,14 @@ async function computeDcaComparisonUncached(
 
   const { extractCashFlows: extract, replayDca, xirr } = await import("@beobeo/core");
   const flows = extract(txns);
+  // The user's own trades behind the flows, so the page can show what each
+  // benchmark trade mirrors ("you bought $500 of NVDA").
+  const trades = flows.map((f) => ({
+    date: toIsoDate(f.date),
+    type: f.type ?? null,
+    symbol: f.assetId ? (userAssets.get(f.assetId)?.symbol ?? null) : null,
+    amount: f.amount.toNumber(),
+  }));
   const from = toIsoDate(flows[0]!.date);
   const to = toIsoDate(new Date());
 
@@ -958,11 +967,26 @@ async function computeDcaComparisonUncached(
       value: p.value.toNumber(),
       invested: p.invested.toNumber(),
     }));
+    const lastDate = [...prices.keys()].sort().at(-1);
     return {
       assetId: asset.id,
       symbol: asset.symbol,
       class: asset.class,
       series,
+      // Each trade the replay made, by index into `trades`, at present-day
+      // (split-adjusted) units and prices.
+      fills: replay.fills.map((f) => ({
+        trade: f.flow,
+        fillDate: f.fillDate,
+        price: f.price.toNumber(),
+        units: f.units.toNumber(),
+        unitsAfter: f.unitsAfter.toNumber(),
+      })),
+      units: replay.finalUnits[0]?.toNumber() ?? 0,
+      lastClose:
+        lastDate !== undefined
+          ? { date: lastDate, price: D(prices.get(lastDate)!).toNumber() }
+          : null,
       xirr: replay.moneyWeightedReturn,
       // Same flow-adjusted metric pipeline as the portfolio — identical
       // flows in every column makes this a true apples-to-apples table.
@@ -986,6 +1010,7 @@ async function computeDcaComparisonUncached(
   return {
     portfolio,
     benchmarks,
+    trades,
     portfolioXirr,
     portfolioMetrics: seriesMetrics(portfolio),
   };

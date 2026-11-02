@@ -18,6 +18,74 @@ describe("extractCashFlows", () => {
     expect(flows).toHaveLength(2);
     expect(flows[0]!.amount.eq(1005)).toBe(true);
     expect(flows[1]!.amount.eq(-548)).toBe(true);
+    expect(flows.map((f) => f.type)).toEqual(["buy", "sell"]);
+    expect(flows[0]!.assetId).toBeDefined();
+  });
+});
+
+describe("replayDca fills", () => {
+  const prices = series([
+    ["2024-01-01", 100],
+    ["2024-01-02", 100],
+    ["2024-01-03", 110],
+    ["2024-01-05", 120], // 01-04 closed
+  ]);
+
+  it("logs each trade with the close it filled at", () => {
+    const { fills } = replayDca({
+      flows: [
+        { date: new Date("2024-01-01T00:00:00Z"), amount: D(1000) },
+        { date: new Date("2024-01-04T00:00:00Z"), amount: D(600) },
+        { date: new Date("2024-01-05T00:00:00Z"), amount: D(-240) },
+      ],
+      benchmark: [{ prices, weight: D(1) }],
+      to: "2024-01-05",
+    });
+    // 1000 @ 100 → +10 (10 held); 600 on closed 01-04 fills 01-05 @ 120 → +5
+    // (15 held); −240 @ 120 → −2 (13 held).
+    expect(fills.map((f) => [f.flow, f.date, f.fillDate, f.price.toNumber()])).toEqual([
+      [0, "2024-01-01", "2024-01-01", 100],
+      [1, "2024-01-04", "2024-01-05", 120],
+      [2, "2024-01-05", "2024-01-05", 120],
+    ]);
+    expect(fills.map((f) => f.units.toNumber())).toEqual([10, 5, -2]);
+    expect(fills.map((f) => f.unitsAfter.toNumber())).toEqual([10, 15, 13]);
+    expect(fills[2]!.amount.eq(-240)).toBe(true);
+  });
+
+  it("caps a sale at what is held and fills a late flow at the last close", () => {
+    const { fills, finalUnits } = replayDca({
+      flows: [
+        { date: new Date("2024-01-01T00:00:00Z"), amount: D(500) },
+        { date: new Date("2024-01-03T00:00:00Z"), amount: D(-1100) },
+        { date: new Date("2024-01-08T00:00:00Z"), amount: D(240) },
+      ],
+      benchmark: [{ prices, weight: D(1) }],
+      to: "2024-01-08",
+    });
+    // 500 @ 100 → 5 held; −1100 @ 110 would be −10, capped at the 5 held → 0;
+    // 240 after the newest close fills at 01-05's 120 → 2.
+    expect(fills.map((f) => f.units.toNumber())).toEqual([5, -5, 2]);
+    expect(fills[2]!.fillDate).toBe("2024-01-05");
+    expect(finalUnits[0]!.eq(2)).toBe(true);
+  });
+
+  it("logs one trade per basket component, split by weight", () => {
+    const x = series([["2024-01-01", 100]]);
+    const y = series([["2024-01-01", 200]]);
+    const { fills } = replayDca({
+      flows: [{ date: new Date("2024-01-01T00:00:00Z"), amount: D(1000) }],
+      benchmark: [
+        { prices: x, weight: D("0.6") },
+        { prices: y, weight: D("0.4") },
+      ],
+      to: "2024-01-01",
+    });
+    // 600 @ 100 → 6; 400 @ 200 → 2.
+    expect(fills.map((f) => [f.component, f.amount.toNumber(), f.units.toNumber()])).toEqual([
+      [0, 600, 6],
+      [1, 400, 2],
+    ]);
   });
 });
 

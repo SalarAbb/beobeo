@@ -14,6 +14,10 @@ import {
 export interface CashFlow {
   date: Date;
   amount: Decimal;
+  /** The asset whose trade made this flow (absent for a standalone fee). */
+  assetId?: string;
+  /** What made it: a buy, a sale, a transfer or a fee. */
+  type?: EngineTransaction["type"];
 }
 
 /**
@@ -44,7 +48,12 @@ export function extractCashFlows(txns: EngineTransaction[]): CashFlow[] {
         break;
     }
     if (amount !== null && !amount.isZero()) {
-      flows.push({ date: txn.tradedAt, amount });
+      flows.push({
+        date: txn.tradedAt,
+        amount,
+        type: txn.type,
+        ...(txn.type === "fee" ? {} : { assetId: txn.assetId }),
+      });
     }
   }
   return flows;
@@ -56,9 +65,32 @@ export interface BenchmarkComponent {
   weight: Decimal;
 }
 
+/** One trade the replay made in a basket component: a flow filled at a close. */
+export interface DcaFill {
+  /** Index of the flow in the input. */
+  flow: number;
+  /** Index of the basket component. */
+  component: number;
+  /** The flow's own date. */
+  date: IsoDate;
+  /** The flow's dollars for this component: + bought, − sold. */
+  amount: Decimal;
+  /** The close it filled at: the flow's date, else the next one with a price,
+   *  else the last close (a flow after the newest close). */
+  fillDate: IsoDate;
+  price: Decimal;
+  /** Units bought (+) or sold (−). A sale never takes more than is held. */
+  units: Decimal;
+  /** Units held right after it. */
+  unitsAfter: Decimal;
+}
+
 export interface DcaReplayResult {
   /** Daily value/invested series for the simulated benchmark portfolio. */
   series: DailyPoint[];
+  /** Every trade the replay made, in flow order (a component with no price
+   *  for a flow makes none). */
+  fills: DcaFill[];
   /** Units held per basket component at the end. */
   finalUnits: Decimal[];
   /** Annualized money-weighted return (XIRR), null if not computable. */
@@ -79,13 +111,14 @@ export function replayDca(opts: {
 }): DcaReplayResult {
   const { flows, benchmark, to } = opts;
   if (flows.length === 0 || benchmark.length === 0) {
-    return { series: [], finalUnits: [], moneyWeightedReturn: null };
+    return { series: [], fills: [], finalUnits: [], moneyWeightedReturn: null };
   }
 
   const lookups = benchmark.map((c) => makePriceLookup(c.prices));
   const units: Decimal[] = benchmark.map(() => ZERO);
 
   const series: DailyPoint[] = [];
+  const fills: DcaFill[] = [];
   let invested = ZERO;
   let flowIdx = 0;
 
@@ -99,12 +132,22 @@ export function replayDca(opts: {
       const flow = flows[flowIdx]!;
       for (let i = 0; i < benchmark.length; i++) {
         const slice = flow.amount.mul(benchmark[i]!.weight);
-        const price = lookups[i]!.onOrAfter(toIsoDate(flow.date));
-        if (price !== null && price.gt(0)) {
-          const bought = slice.div(price);
-          const next = units[i]!.add(bought);
+        const fill = lookups[i]!.onOrAfter(toIsoDate(flow.date));
+        if (fill !== null && fill.price.gt(0)) {
+          const before = units[i]!;
+          const next = before.add(slice.div(fill.price));
           // Withdrawals can't sell more than is held.
           units[i] = next.lt(0) ? ZERO : next;
+          fills.push({
+            flow: flowIdx,
+            component: i,
+            date: toIsoDate(flow.date),
+            amount: slice,
+            fillDate: fill.date,
+            price: fill.price,
+            units: units[i]!.sub(before),
+            unitsAfter: units[i]!,
+          });
         }
       }
       invested = invested.add(flow.amount);
@@ -129,6 +172,7 @@ export function replayDca(opts: {
 
   return {
     series,
+    fills,
     finalUnits: units,
     moneyWeightedReturn: xirr(xirrFlows),
   };
@@ -136,7 +180,7 @@ export function replayDca(opts: {
 
 interface PriceLookup {
   /** First close on or after `date` (execution price for a queued order); falls back to the last close before it. */
-  onOrAfter(date: IsoDate): Decimal | null;
+  onOrAfter(date: IsoDate): { date: IsoDate; price: Decimal } | null;
   /** Last close on or before `date` (mark-to-market). Must be called with ascending dates. */
   forwardFill(date: IsoDate): Decimal | null;
 }
@@ -157,7 +201,7 @@ function makePriceLookup(prices: PriceSeries): PriceLookup {
         else hi = mid;
       }
       const key = dates[lo] ?? dates[dates.length - 1];
-      return key !== undefined ? D(prices.get(key)!) : null;
+      return key !== undefined ? { date: key, price: D(prices.get(key)!) } : null;
     },
     forwardFill(date) {
       while (ffIdx + 1 < dates.length && dates[ffIdx + 1]! <= date) {
