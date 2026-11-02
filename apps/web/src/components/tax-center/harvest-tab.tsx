@@ -4,6 +4,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Section, StatStrip, StatTile } from "@/components/page-section";
 import { usePortfolio } from "@/components/portfolio-context";
 import { LossBreakdownBar } from "@/components/tax-center/loss-breakdown-bar";
+import { LossRoomNote } from "@/components/tax-center/loss-room-note";
 import { PlanView } from "@/components/tax-center/plan-view";
 import { RetirementNote } from "@/components/tax-center/retirement-note";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { TabError, TabLoading } from "@/components/tax-center/tab-state";
 import { useTRPC } from "@/lib/trpc";
 import { HARVEST_DEFAULT, HARVEST_KEY, type HarvestState } from "@/lib/harvest-state";
+import { lossRoom } from "@/lib/loss-room";
 import { useStoredState } from "@/lib/use-stored-state";
 import { cn } from "@/lib/utils";
 import { fmtUsd } from "@/lib/viz";
@@ -127,6 +129,8 @@ export function HarvestTab() {
                 : ": nothing in your taxable accounts is below what you paid."}
             </p>
           )}
+
+          <LossRoomNote room={lossRoom(d.yearSoFar)} taxYear={d.yearSoFar.taxYear} />
 
           {(hasPlan || d.blocked.length > 0) && (
             <PlanView

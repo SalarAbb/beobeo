@@ -188,7 +188,7 @@ const serializePlan = (p: TaxPlan, asOf: Date, lots: TaxLot[]) => ({
 
 export function computeTaxProfile(userId: string, portfolioId?: string) {
   const scope = portfolioKey(portfolioId);
-  return cached(userCacheKey(userId, "tax-profile", scope), TTL.now, async () => {
+  return cached(userCacheKey(userId, "tax-profile2", scope), TTL.now, async () => {
     const asOf = new Date();
     const { profileRow, profile, ytdShortTermGain, ytdLongTermGain } = await assembleScope(
       userId,
@@ -212,6 +212,7 @@ export function computeTaxProfile(userId: string, portfolioId?: string) {
         profileRow.ytdLongTermOverride === null ? null : Number(profileRow.ytdLongTermOverride),
       effectiveOrdinaryRate: profile.ordinaryRate,
       effectiveLtcgRate: profile.ltcgRate,
+      taxYear: asOf.getUTCFullYear(),
     };
   });
 }
@@ -631,7 +632,7 @@ export function computeTaxHarvest(
 ) {
   const scope = portfolioKey(portfolioId);
   return cached(
-    userCacheKey(userId, "tax-harvest6", scope, lossCapUsd ?? "uncapped"),
+    userCacheKey(userId, "tax-harvest7", scope, lossCapUsd ?? "uncapped"),
     TTL.harvest,
     async () => {
       const asOf = new Date();
@@ -675,6 +676,14 @@ export function computeTaxHarvest(
           carryforwardUsd: breakdown.carryforwardUsd.toNumber(),
         },
         startingRealizedGain: profile.ytdShortTermGain.add(profile.ytdLongTermGain).toNumber(),
+        // Where the year stands against the $3,000 loss deduction (LossRoomNote).
+        yearSoFar: {
+          taxYear: asOf.getUTCFullYear(),
+          ytdShortTerm: profile.ytdShortTermGain.toNumber(),
+          ytdLongTerm: profile.ytdLongTermGain.toNumber(),
+          carryShortTerm: profile.carryforwardShortTerm.toNumber(),
+          carryLongTerm: profile.carryforwardLongTerm.toNumber(),
+        },
       };
     },
   );

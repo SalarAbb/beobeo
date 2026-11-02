@@ -15,6 +15,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { usePortfolio } from "@/components/portfolio-context";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { LossRoomNote } from "@/components/tax-center/loss-room-note";
 import { useIncome } from "@/components/tax-center/use-income";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,7 @@ import { Label } from "@/components/ui/label";
 import { TabError, TabLoading } from "@/components/tax-center/tab-state";
 import { Switch } from "@/components/ui/switch";
 import { Section } from "@/components/page-section";
+import { lossRoom } from "@/lib/loss-room";
 import { useTRPC } from "@/lib/trpc";
 import { fmtUsd } from "@/lib/viz";
 
@@ -188,6 +190,15 @@ function ProfileForm({ initial }: { initial: NonNullable<Profile> }) {
             </span>
           </div>
         </div>
+        <LossRoomNote
+          room={lossRoom({
+            ytdShortTerm: n(ytdST) ?? 0,
+            ytdLongTerm: n(ytdLT) ?? 0,
+            carryShortTerm: n(carryST) ?? 0,
+            carryLongTerm: n(carryLT) ?? 0,
+          })}
+          taxYear={initial.taxYear}
+        />
       </Section>
 
       <Section title="Losses from past years">
