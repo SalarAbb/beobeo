@@ -95,6 +95,56 @@ function Verdict({
   );
 }
 
+/**
+ * Ties the strip to the dashboard, right under it. Compare used to stop at the
+ * last close, and "$33,431 here, $33,502 there" with only a footnote read as two
+ * answers (arya, missions 111/116); now both sides are at today's prices. The
+ * percentages still differ for a reason worth one sentence: Compare's gain is on
+ * the money put in, minus sales, the dashboard's on what you paid for what you hold.
+ */
+function PricingNote({
+  pricedLive,
+  wholePortfolio,
+  netInvested,
+  heldCost,
+}: {
+  pricedLive: boolean;
+  wholePortfolio: boolean;
+  netInvested: number | null;
+  heldCost: number | null;
+}) {
+  const bases =
+    wholePortfolio &&
+    netInvested !== null &&
+    heldCost !== null &&
+    Math.abs(heldCost - netInvested) >= 1;
+  return (
+    <p className="-mt-10 max-w-3xl text-sm text-muted-foreground">
+      {pricedLive ? (
+        <>
+          You and each benchmark are valued at today&apos;s prices
+          {wholePortfolio ? ", so your value is the dashboard's Portfolio value." : ", as on the dashboard."}
+        </>
+      ) : (
+        <>
+          Priced at the last closing prices, so you and the benchmarks are valued on the same day.
+          The dashboard uses live prices, so its value can differ by a day&apos;s move.
+        </>
+      )}
+      {bases && (
+        <>
+          {" "}
+          {"The percentages still differ: Gain on your money below is on the "}
+          <span className="data">{fmtUsd(netInvested)}</span>
+          {" put in, minus sales, and the dashboard's gain on holdings is on the "}
+          <span className="data">{fmtUsd(heldCost)}</span>
+          {" you paid for what you hold now."}
+        </>
+      )}
+    </p>
+  );
+}
+
 const fmtSignedPct = (v: number | null) =>
   v === null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
 const fmtAbsPct = (v: number | null) => (v === null ? "—" : `${v.toFixed(2)}%`);
@@ -635,12 +685,12 @@ export default function ComparePage() {
               );
             })}
           </StatStrip>
-          {/* The dashboard's value is at live prices; this one isn't, so say why
-              they differ (gilderoy, dashboard.window mission 60: $12,545 vs $12,608). */}
-          <p className="-mt-10 text-xs text-muted-foreground">
-            Priced at the last closing prices, so you and the benchmarks are valued on the same
-            day. The dashboard uses live prices, so its value can differ by a day&apos;s move.
-          </p>
+          <PricingNote
+            pricedLive={data.pricedLive}
+            wholePortfolio={scopeIds.length === 0}
+            netInvested={lastP?.invested ?? null}
+            heldCost={overview.data?.totals.cost ?? null}
+          />
 
           <Section
             title="Over time"
@@ -699,7 +749,7 @@ export default function ComparePage() {
                 color: benchColor(theme, i),
                 fills: b.fills,
                 units: b.units,
-                lastClose: b.lastClose,
+                lastPrice: b.lastPrice,
                 value: b.series[b.series.length - 1]?.value ?? null,
               }))}
               netInvested={lastP?.invested ?? 0}

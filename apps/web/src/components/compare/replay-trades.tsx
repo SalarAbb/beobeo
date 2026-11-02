@@ -19,9 +19,13 @@ export interface ReplayBenchmark {
   color: string;
   fills: { trade: number; fillDate: string; price: number; units: number; unitsAfter: number }[];
   units: number;
-  lastClose: { date: string; price: number } | null;
+  /** Today's price when there's a live quote, else the last close. */
+  lastPrice: { date: string; price: number; live: boolean } | null;
   value: number | null;
 }
+
+const priceWhen = (p: { date: string; live: boolean }) =>
+  p.live ? "today's price" : `the ${fmtShort(p.date)} close`;
 
 const fmtDate = (iso: string) =>
   new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", {
@@ -84,7 +88,9 @@ export function ReplayTrades({
   realized: number | null;
 }) {
   const [picked, setPicked] = useState<string | null>(null);
-  const bench = benchmarks.find((b) => b.assetId === picked) ?? benchmarks[0];
+  // Opens on the newest benchmark, the one just added (arya, mission 118,
+  // picked QQQ and the list opened on SPY).
+  const bench = benchmarks.find((b) => b.assetId === picked) ?? benchmarks.at(-1);
   if (!bench || trades.length === 0) return null;
 
   const bought = trades.reduce((s, t) => s + Math.max(t.amount, 0), 0);
@@ -137,10 +143,10 @@ export function ReplayTrades({
                 style={{ background: b.color }}
               />
               <span className="font-medium">{b.symbol}</span>{" "}
-              {b.lastClose ? (
+              {b.lastPrice ? (
                 <span className="data">
-                  holds {fmtUnits(b.units)} now × {fmtUsd(b.lastClose.price)} (the{" "}
-                  {fmtShort(b.lastClose.date)} close) = {fmtUsd(b.value)}
+                  holds {fmtUnits(b.units)} now × {fmtUsd(b.lastPrice.price)} (
+                  {priceWhen(b.lastPrice)}) = {fmtUsd(b.value)}
                 </span>
               ) : (
                 <span className="text-muted-foreground">has no prices yet</span>
@@ -232,11 +238,11 @@ export function ReplayTrades({
                     </span>
                   </td>
                   <td className="data whitespace-nowrap px-3 py-2 text-right">
-                    {bench.lastClose && (
+                    {bench.lastPrice && (
                       <>
-                        {fmtUsd(bench.lastClose.price)}
+                        {fmtUsd(bench.lastPrice.price)}
                         <span className="block text-xs font-normal text-muted-foreground">
-                          {fmtShort(bench.lastClose.date)} close
+                          {bench.lastPrice.live ? "today" : `${fmtShort(bench.lastPrice.date)} close`}
                         </span>
                       </>
                     )}

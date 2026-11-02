@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { loadBenchmarkPresets } from "@/server/benchmark-presets";
-import { computeDcaComparison } from "@/server/portfolio";
+import { computeDcaComparisonLive } from "@/server/portfolio";
 import { protectedProcedure, router } from "../trpc";
 
 export const compareRouter = router({
@@ -19,7 +19,7 @@ export const compareRouter = router({
       }),
     )
     .query(({ ctx, input }) =>
-      computeDcaComparison(ctx.userId, {
+      computeDcaComparisonLive(ctx.userId, {
         benchmarkIds: input.benchmarkIds,
         scopeAssetIds:
           input.scopeAssetIds && input.scopeAssetIds.length > 0

@@ -882,7 +882,7 @@ export function computeDcaComparison(
   return cached(
     userCacheKey(
       userId,
-      "dca4", // v4: trades + each benchmark's fills (v3: materialDrawdown) — don't serve stale JSON
+      "dca5", // v5: providerRef for the live overlay (v4: trades + fills) — don't serve stale JSON
       opts.portfolioId ?? "all",
       scopeKey(opts.benchmarkIds),
       scopeKey(opts.scopeAssetIds),
@@ -972,6 +972,7 @@ async function computeDcaComparisonUncached(
       assetId: asset.id,
       symbol: asset.symbol,
       class: asset.class,
+      providerRef: asset.providerRef,
       series,
       // Each trade the replay made, by index into `trades`, at present-day
       // (split-adjusted) units and prices.
@@ -1014,6 +1015,73 @@ async function computeDcaComparisonUncached(
     portfolioXirr,
     portfolioMetrics: seriesMetrics(portfolio),
   };
+}
+
+/**
+ * The comparison valued at today's prices, like the dashboard: your last point
+ * becomes the overview's live value (the scoped holdings' when scoped) and each
+ * benchmark's becomes its units × its live price, so both sides of the edge are
+ * priced at the same moment. The rest of the series stays on daily closes.
+ * Compare used to stop at the last close: $33,431 there next to $33,502 on the
+ * dashboard read as two answers (arya, missions 111/116; gilderoy, mission 60).
+ * Runs per request on top of the cached replay (quotes are memoized 60s).
+ */
+export async function computeDcaComparisonLive(
+  userId: string,
+  opts: { benchmarkIds: string[]; scopeAssetIds?: string[]; portfolioId?: string },
+) {
+  const result = await computeDcaComparison(userId, opts);
+  const atClose = {
+    ...result,
+    benchmarks: result.benchmarks.map((b) => ({
+      ...b,
+      lastPrice: b.lastClose ? { ...b.lastClose, live: false } : null,
+    })),
+    pricedLive: false,
+  };
+  if (result.portfolio.length === 0) return atClose;
+  const today = toIsoDate(new Date());
+  const [overview, latest] = await Promise.all([
+    computeOverview(userId, opts.portfolioId).catch(() => null),
+    getMarketData()
+      .getLatestPrices(
+        result.benchmarks.map((b) => ({
+          id: b.assetId,
+          symbol: b.symbol,
+          class: b.class,
+          providerRef: b.providerRef,
+        })),
+        today,
+      )
+      .catch(() => new Map<string, { date: IsoDate; close: string }>()),
+  ]);
+
+  const withLast = <P extends { value: number }>(series: P[], value: number): P[] =>
+    series.length === 0 ? series : [...series.slice(0, -1), { ...series.at(-1)!, value }];
+
+  // Your side: the dashboard's own figure. Both sides stay on closes when the
+  // overview left an asset out (an oversold history) or one in scope has no
+  // price, since the series would then count something the overview doesn't.
+  if (!overview || overview.dataIssues.length > 0) return atClose;
+  const held = opts.scopeAssetIds
+    ? overview.holdings.filter((h) => opts.scopeAssetIds!.includes(h.assetId))
+    : overview.holdings;
+  if (held.some((h) => h.marketValue === null)) return atClose;
+  const portfolio = withLast(result.portfolio, held.reduce((s, h) => s + h.marketValue!, 0));
+
+  const benchmarks = result.benchmarks.map((b, i) => {
+    const quote = latest.get(b.assetId);
+    if (!quote) return atClose.benchmarks[i]!;
+    // The quote is in today's units, the same units the replay holds.
+    const price = D(quote.close);
+    return {
+      ...b,
+      series: withLast(b.series, D(b.units).mul(price).toNumber()),
+      lastPrice: { date: quote.date, price: price.toNumber(), live: quote.date >= today },
+    };
+  });
+
+  return { ...result, portfolio, benchmarks, pricedLive: true };
 }
 
 export { extractCashFlows };

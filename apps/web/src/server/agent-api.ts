@@ -15,7 +15,7 @@ import { primePortfolioAgentCache, type PortfolioApi } from "@beobeo/agent";
 import { cached, userCacheKey, warm } from "./cache";
 import { getMarketData } from "./market-data";
 import {
-  computeDcaComparison,
+  computeDcaComparisonLive,
   computeMetrics,
   computeOverview,
   computePosition,
@@ -697,7 +697,7 @@ export function makePortfolioApi(
           error: `Unknown benchmark ${benchmarkSymbol}. Available: SPY, VOO, QQQ, BTC, or any asset in the user's portfolio.`,
         };
       }
-      const result = await computeDcaComparison(userId, {
+      const result = await computeDcaComparisonLive(userId, {
         benchmarkIds: [asset.id],
         portfolioId,
       });
