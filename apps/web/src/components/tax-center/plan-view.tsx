@@ -55,11 +55,27 @@ function groupBlocks(blocked: Block[]) {
 }
 const fmtUnits = (q: number) => q.toLocaleString("en-US", { maximumFractionDigits: 6 });
 
+/** A sale's marginal tax: what it adds, or what a loss saves. */
+function TaxNote({ usd }: { usd: number }) {
+  if (Math.abs(usd) < 0.005) return <>no tax</>;
+  return usd > 0 ? (
+    <>
+      tax <span className="data">{fmtUsd(usd)}</span>
+    </>
+  ) : (
+    <span className="text-gain">
+      saves <span className="data">{fmtUsd(-usd)}</span>
+    </span>
+  );
+}
+
 /**
  * The plan's purchases one by one, closed by default: what you tell your broker
  * when you sell specific shares instead of its oldest-first default (petyr, mission
  * 4: "the plan only gave per-ticker totals, so I never saw which lots to sell").
- * Same order as the chart's columns.
+ * Same order as the chart's columns. Each row says what it sells for, what it
+ * cost and its tax, and a Together row ties to the plan's totals (petyr, mission
+ * 110: "lot rows lack cost basis and per-lot tax").
  */
 function PurchaseList({ sales }: { sales: Sale[] }) {
   const order = [...new Set(sales.map((s) => s.lot.symbol))];
@@ -69,6 +85,14 @@ function PurchaseList({ sales }: { sales: Sale[] }) {
     .filter(({ s }) => s.sellQuantity > 0)
     .sort((a, b) => order.indexOf(a.s.lot.symbol) - order.indexOf(b.s.lot.symbol) || a.i - b.i)
     .map(({ s }) => s);
+  const together = rows.reduce(
+    (t, s) => ({
+      proceeds: t.proceeds + s.proceeds,
+      gain: t.gain + s.realizedGain,
+      tax: t.tax + s.taxCost,
+    }),
+    { proceeds: 0, gain: 0, tax: 0 },
+  );
   return (
     <details className="group text-sm">
       <summary className="w-fit cursor-pointer text-primary marker:text-muted-foreground">
@@ -102,14 +126,37 @@ function PurchaseList({ sales }: { sales: Sale[] }) {
               {fmtUsd(s.realizedGain)}
             </span>
             <span className="data text-xs text-muted-foreground">
-              Sell {fmtUnits(s.sellQuantity)} in {s.lot.accountName} · {fmtUsd(s.proceeds)}
+              Sell {fmtUnits(s.sellQuantity)} in {s.lot.accountName} · sells for{" "}
+              {fmtUsd(s.proceeds)} · paid {fmtUsd(s.proceeds - s.realizedGain)}
             </span>
             <span className="text-right text-xs text-muted-foreground">
-              {s.isLongTerm ? "long-term" : "short-term"}
+              {s.isLongTerm ? "long-term" : "short-term"} · <TaxNote usd={s.taxCost} />
             </span>
           </li>
         ))}
+        {rows.length > 1 && (
+          <li className="grid grid-cols-[1fr_auto] items-baseline gap-x-4 gap-y-0.5 py-2">
+            <span className="font-medium">Together</span>
+            <span className={cn("data text-right font-medium", gainClass(together.gain))}>
+              {fmtUsd(together.gain)}
+            </span>
+            <span className="data text-xs text-muted-foreground">
+              Sells for {fmtUsd(together.proceeds)} · paid{" "}
+              {fmtUsd(together.proceeds - together.gain)}
+            </span>
+            <span className="text-right text-xs text-muted-foreground">
+              <TaxNote usd={together.tax} />
+            </span>
+          </li>
+        )}
       </ul>
+      {rows.length > 1 && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Each purchase&apos;s tax is what it adds after the ones above it are sold (a loss
+          first cancels gains, then comes off your pay), so the taxes add up to the plan&apos;s
+          total.
+        </p>
+      )}
     </details>
   );
 }
