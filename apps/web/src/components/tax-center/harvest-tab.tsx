@@ -5,6 +5,7 @@ import { Section, StatStrip, StatTile } from "@/components/page-section";
 import { usePortfolio } from "@/components/portfolio-context";
 import { LossBreakdownBar } from "@/components/tax-center/loss-breakdown-bar";
 import { PlanView } from "@/components/tax-center/plan-view";
+import { RetirementNote } from "@/components/tax-center/retirement-note";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TabError, TabLoading } from "@/components/tax-center/tab-state";
@@ -38,6 +39,7 @@ export function HarvestTab() {
 
   return (
     <div className="grid gap-10">
+      <div className="grid gap-3">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <p className="max-w-md text-sm text-muted-foreground">
           Sell the positions that are below what you paid, so the loss cancels out gains or
@@ -74,6 +76,8 @@ export function HarvestTab() {
             )}
           </div>
         </div>
+      </div>
+      <RetirementNote tab="harvest" />
       </div>
 
       {harvest.isError && !d ? (
@@ -120,7 +124,7 @@ export function HarvestTab() {
               Nothing to harvest right now
               {d.blocked.length > 0
                 ? ": the positions that are down were bought again recently."
-                : ": none of your positions are below what you paid."}
+                : ": nothing in your taxable accounts is below what you paid."}
             </p>
           )}
 

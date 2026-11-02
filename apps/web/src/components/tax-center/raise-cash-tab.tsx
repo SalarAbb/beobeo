@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { RetirementNote } from "@/components/tax-center/retirement-note";
 import { TabError, TabLoading } from "@/components/tax-center/tab-state";
 import { RAISE_CASH_DEFAULT, RAISE_CASH_KEY, type RaiseCashState } from "@/lib/raise-cash-state";
 import { useTRPC } from "@/lib/trpc";
@@ -86,6 +87,7 @@ export function RaiseCashTab() {
 
   return (
     <div className="grid gap-10">
+      <div className="grid gap-3">
       <div className="flex flex-wrap items-end gap-3">
         <div className="grid gap-1.5">
           <label htmlFor="raise-amount" className="eyebrow">
@@ -169,6 +171,8 @@ export function RaiseCashTab() {
             </Select>
           </div>
         )}
+      </div>
+      <RetirementNote tab="cash" />
       </div>
 
       {target === null ? null : plan.isError && !d ? (

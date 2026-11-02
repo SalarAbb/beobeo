@@ -219,12 +219,14 @@ export function computeTaxLotsList(userId: string, portfolioId?: string) {
  */
 export function computeAccountHoldings(userId: string, portfolioId?: string) {
   const scope = portfolioKey(portfolioId);
-  return cached(userCacheKey(userId, "account-holdings3", scope), TTL.lots, async () => {
+  return cached(userCacheKey(userId, "account-holdings4", scope), TTL.lots, async () => {
     const { accountPositions } = await loadScopeLots(userId, scope, new Date());
     const byAccount = new Map<
       string,
       {
         accountName: string;
+        /** A taxable account; sales inside retirement accounts aren't taxed. */
+        taxed: boolean;
         value: number;
         costBasis: number;
         holdings: {
@@ -239,7 +241,13 @@ export function computeAccountHoldings(userId: string, portfolioId?: string) {
       }
     >();
     for (const p of accountPositions) {
-      const a = byAccount.get(p.accountId) ?? { accountName: p.accountName, value: 0, costBasis: 0, holdings: [] };
+      const a = byAccount.get(p.accountId) ?? {
+        accountName: p.accountName,
+        taxed: p.accountType === "taxable",
+        value: 0,
+        costBasis: 0,
+        holdings: [],
+      };
       const marketValue = p.price ? p.quantity.mul(p.price).toDecimalPlaces(2).toNumber() : null;
       a.value += marketValue ?? 0;
       a.costBasis += p.costBasis.toNumber();
@@ -256,6 +264,7 @@ export function computeAccountHoldings(userId: string, portfolioId?: string) {
     return [...byAccount].map(([accountId, a]) => ({
       accountId,
       accountName: a.accountName,
+      taxed: a.taxed,
       value: Math.round(a.value * 100) / 100,
       costBasis: Math.round(a.costBasis * 100) / 100,
       holdings: a.holdings.sort((x, y) => (y.marketValue ?? 0) - (x.marketValue ?? 0)),
