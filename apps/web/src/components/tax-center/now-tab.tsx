@@ -3,7 +3,7 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { AssetLogo } from "@/components/asset-logo";
 import { METRIC_LABEL_CLASS, MetricHover } from "@/components/metric-hover";
 import { Section, StatStrip, StatTile } from "@/components/page-section";
@@ -320,6 +320,12 @@ function SalesBehindTotals({ data: d }: { data: Now }) {
   const showsAllTime = allTime !== null && Math.abs(allTime - salesSum) >= 1;
   const showsIra = Math.abs(iraGain) >= 1;
   if (sales.length === 0 && !showsAllTime) return null;
+  const earlier = allTime === null ? 0 : allTime - salesSum - iraGain;
+  const bridge = [
+    ...(sales.length > 0 ? [{ label: `this year (the two gains above)`, usd: salesSum }] : []),
+    ...(showsIra ? [{ label: "this year in retirement accounts (not taxed)", usd: iraGain }] : []),
+    ...(Math.abs(earlier) >= 1 ? [{ label: "in earlier years", usd: earlier }] : []),
+  ];
 
   return (
     <div className="grid gap-2 text-sm">
@@ -336,17 +342,18 @@ function SalesBehindTotals({ data: d }: { data: Now }) {
         {showsAllTime && (
           <>
             {" "}
-            The Dashboard&apos;s Gain from sales,{" "}
-            <span className="data">{fmtUsd(allTime, 0)}</span>, counts every year
-            {showsIra ? (
-              <>
-                , and <span className="data">{fmtUsd(iraGain, 0)}</span> of this year&apos;s
-                gains came from sales inside retirement accounts, which aren&apos;t taxed
-              </>
-            ) : (
-              ", not just this one"
-            )}
-            .
+            {/* Spelled out as a sum of parts this page shows, because the
+                Dashboard's figure isn't on this page: "counts every year"
+                named a $12,510 the user couldn't find anywhere here. */}
+            The Dashboard&apos;s Gain from sales is all-time:{" "}
+            {bridge.map((part, i) => (
+              <Fragment key={part.label}>
+                {i > 0 && " + "}
+                <span className="data">{fmtUsd(part.usd, 0)}</span> {part.label}
+              </Fragment>
+            ))}{" "}
+            = <span className="data">{fmtUsd(allTime, 0)}</span>. Only this year&apos;s sales in
+            taxable accounts are taxed this year.
           </>
         )}
       </p>
@@ -845,7 +852,7 @@ export function NowTab({
 
         <p className="text-xs text-muted-foreground">
           {hasSales
-            ? "Every number here is measured against these gains."
+            ? "Every number here builds on these gains. Sold something outside this app?"
             : "Sold something outside this app?"}{" "}
           <button
             type="button"
