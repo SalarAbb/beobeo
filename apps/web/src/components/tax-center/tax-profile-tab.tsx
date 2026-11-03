@@ -179,6 +179,12 @@ function ProfileForm({ initial }: { initial: NonNullable<Profile> }) {
           A sale&apos;s gain is taxed at one of two rates, set by how long you owned what you
           sold: a year or less, or over a year (the lower rate). Tap a label for its tax name.
         </p>
+        <HoldingsAge
+          shortRate={pct(fedOrdinary)}
+          longRate={pct(fedLtcg)}
+          stateShort={n(stateOrdinary) ? pct(stateOrdinary) : null}
+          stateLong={n(stateLtcg) ? pct(stateLtcg) : null}
+        />
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <Field
             label="Federal · a year or less"
@@ -377,6 +383,110 @@ function ProfileForm({ initial }: { initial: NonNullable<Profile> }) {
         advisor for your actual filing.
       </p>
     </div>
+  );
+}
+
+/** "2027-08-02" → "Aug 2, 2027" */
+const fullDay = (iso: string) =>
+  new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+
+/** "VOO", "VOO and NVDA", "VOO, NVDA and 2 more" */
+function nameList(symbols: string[]): string {
+  if (symbols.length <= 2) return symbols.join(" and ");
+  if (symbols.length === 3) return `${symbols[0]}, ${symbols[1]} and ${symbols[2]}`;
+  return `${symbols[0]}, ${symbols[1]} and ${symbols.length - 2} more`;
+}
+
+/**
+ * Which of the two rates the user's own holdings get today, and when the
+ * newer ones move to the lower rate. Luna saw 12% and 0% here but nothing
+ * said her August buys would be taxed at 12% until Aug 2027 (mission 140).
+ * Taxable accounts only (`tax.lots`, already in the page's first batch).
+ */
+function HoldingsAge({
+  shortRate,
+  longRate,
+  stateShort,
+  stateLong,
+}: {
+  shortRate: string;
+  longRate: string;
+  stateShort: string | null;
+  stateLong: string | null;
+}) {
+  const trpc = useTRPC();
+  const { portfolioId } = usePortfolio();
+  const lots = useQuery(trpc.tax.lots.queryOptions({ portfolioId: portfolioId ?? undefined }));
+  if (!lots.data || lots.data.length === 0) return null;
+
+  const short = lots.data.filter((l) => !l.isLongTerm);
+  const long = lots.data.filter((l) => l.isLongTerm);
+  const sum = (ls: typeof short) => ls.reduce((s, l) => s + l.marketValue, 0);
+  const symbols = (ls: typeof short) => [...new Set(ls.map((l) => l.symbol))];
+  const rate = (fed: string, state: string | null) => (
+    <>
+      <span className="data">{fed}</span>
+      {state && (
+        <>
+          {" "}
+          plus <span className="data">{state}</span> state
+        </>
+      )}
+    </>
+  );
+  // The earliest date each holding's newer purchases pass a year, soonest first.
+  const firstLong = new Map<string, string>();
+  for (const l of short) {
+    const at = firstLong.get(l.symbol);
+    if (!at || l.longTermOn < at) firstLong.set(l.symbol, l.longTermOn);
+  }
+  // Holdings bought the same day share one date ("Aug 4, 2027 for VOO and NVDA").
+  const byDate = new Map<string, string[]>();
+  for (const [symbol, on] of firstLong) byDate.set(on, [...(byDate.get(on) ?? []), symbol]);
+  const all = [...byDate].sort((a, b) => a[0].localeCompare(b[0]));
+  const upcoming = all.slice(0, 3);
+  const dates = upcoming.length > 0 && (
+    <>
+      {" "}
+      The next purchases to pass a year:{" "}
+      {upcoming.map(([on, syms], i) => (
+        <span key={on}>
+          {i > 0 && (i === upcoming.length - 1 ? " and " : ", ")}
+          {nameList(syms)} on <span className="data">{fullDay(on)}</span>
+        </span>
+      ))}
+      {all.length > upcoming.length && ", the rest later"}. From then, selling those gets the
+      over-a-year rate, {rate(longRate, stateLong)}.
+    </>
+  );
+
+  return (
+    <p className="max-w-2xl text-sm">
+      {long.length === 0 ? (
+        <>
+          Everything you own in taxable accounts ({nameList(symbols(short))}) is a year old or
+          less, so selling it today would be taxed at {rate(shortRate, stateShort)}.
+        </>
+      ) : short.length === 0 ? (
+        <>
+          Everything you own in taxable accounts ({nameList(symbols(long))}) is owned over a year,
+          so selling it today would be taxed at {rate(longRate, stateLong)}.
+        </>
+      ) : (
+        <>
+          Of what you own in taxable accounts, <span className="data">{fmtUsd(sum(long))}</span>{" "}
+          is owned over a year (taxed at {rate(longRate, stateLong)} if sold today) and{" "}
+          <span className="data">{fmtUsd(sum(short))}</span> a year or less (
+          {rate(shortRate, stateShort)}).
+        </>
+      )}
+      {dates}
+    </p>
   );
 }
 
