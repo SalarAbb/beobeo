@@ -743,6 +743,7 @@ export default function ComparePage() {
               netInvested={lastP?.invested ?? 0}
               heldCost={scopeIds.length === 0 ? (overview.data?.totals.cost ?? null) : null}
               realized={scopeIds.length === 0 ? (overview.data?.totals.realized ?? null) : null}
+              newestId={activeIds.at(-1)}
             />
           </Section>
         </div>

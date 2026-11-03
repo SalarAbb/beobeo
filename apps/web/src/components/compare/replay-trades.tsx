@@ -78,9 +78,12 @@ export function ReplayTrades({
   netInvested,
   heldCost,
   realized,
+  newestId,
 }: {
   trades: ReplayTrade[];
   benchmarks: ReplayBenchmark[];
+  /** The benchmark added last; the list opens on it. */
+  newestId?: string;
   netInvested: number;
   /** What you paid for what you hold (whole portfolio only). */
   heldCost: number | null;
@@ -89,8 +92,13 @@ export function ReplayTrades({
 }) {
   const [picked, setPicked] = useState<string | null>(null);
   // Opens on the newest benchmark, the one just added (arya, mission 118,
-  // picked QQQ and the list opened on SPY).
-  const bench = benchmarks.find((b) => b.assetId === picked) ?? benchmarks.at(-1);
+  // picked QQQ and the list opened on SPY). Named by the page, not taken as
+  // the payload's last: the comparison is cached by sorted ids, so a cached
+  // payload can list SPY after QQQ.
+  const bench =
+    benchmarks.find((b) => b.assetId === picked) ??
+    benchmarks.find((b) => b.assetId === newestId) ??
+    benchmarks.at(-1);
   if (!bench || trades.length === 0) return null;
 
   const bought = trades.reduce((s, t) => s + Math.max(t.amount, 0), 0);
