@@ -43,6 +43,9 @@ export interface EngineTransaction {
    *  against the same account's lots; absent = applies to every account (a
    *  provider-known split). `buildLots` ignores it. */
   accountId?: string;
+  /** How that account matches sales to purchases (absent = FIFO). Read by
+   *  `buildLotsByAccount`; `buildLots` takes its method as an argument. */
+  lotMethod?: "fifo" | "hifo";
 }
 
 /** An open tax lot. */

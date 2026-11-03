@@ -36,6 +36,14 @@ const TYPE_LABEL = {
 const TYPE_OPTIONS = Object.entries(TYPE_LABEL);
 type AccountType = keyof typeof TYPE_LABEL;
 
+// How the broker picks which purchases a sale uses. Every gain in the app
+// follows it; crypto exchanges often use highest cost first.
+const LOT_METHOD_LABEL = {
+  fifo: "oldest first",
+  hifo: "highest cost first",
+} as const;
+type LotMethod = keyof typeof LOT_METHOD_LABEL;
+
 export default function AccountsPage() {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
@@ -61,6 +69,12 @@ export default function AccountsPage() {
   const total = (holdings.data ?? []).reduce((s, h) => s + h.value, 0);
   const typeOf = new Map((accounts.data ?? []).map((a) => [a.id, a.accountType as AccountType]));
   const move = useMutation(trpc.accounts.update.mutationOptions());
+  // A new matching method changes every gain, cost and tax figure.
+  const setLotMethod = useMutation(
+    trpc.accounts.update.mutationOptions({
+      onSuccess: () => void queryClient.invalidateQueries(),
+    }),
+  );
   // Moving an account between portfolios is only a choice once there are two.
   const canMove = (portfolios.data?.length ?? 0) > 1;
   const byPortfolio = (portfolios.data ?? []).map((p) => {
@@ -120,6 +134,39 @@ export default function AccountsPage() {
     ]);
   }
 
+  // One account can hold stocks and crypto, and brokers often match them
+  // differently (stocks oldest first, crypto highest cost first).
+  const lotMethodSelect = (
+    a: { id: string; name: string; lotMethod: LotMethod; cryptoLotMethod: LotMethod },
+    field: "lotMethod" | "cryptoLotMethod",
+    kind: string,
+    shortKind: string,
+  ) => (
+    <Select
+      value={a[field]}
+      onValueChange={(m) => setLotMethod.mutate({ id: a.id, [field]: m as LotMethod })}
+    >
+      <SelectTrigger
+        size="sm"
+        className="mt-1.5 ml-auto w-48 sm:w-60"
+        aria-label={`How ${a.name} matches ${kind.toLowerCase()} sales to purchases`}
+      >
+        <span className="text-muted-foreground">
+          <span className="hidden sm:inline">{kind}:</span>
+          <span className="sm:hidden">{shortKind}:</span>
+        </span>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent align="end">
+        {Object.entries(LOT_METHOD_LABEL).map(([value, label]) => (
+          <SelectItem key={value} value={value}>
+            {label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
   const portfolioSelect = (a: { id: string; name: string; portfolioId: string | null }) => (
     <Select value={a.portfolioId ?? undefined} onValueChange={(to) => void moveAccount(a.id, to)}>
       <SelectTrigger size="sm" className="w-40" aria-label={`Portfolio for ${a.name}`}>
@@ -142,7 +189,9 @@ export default function AccountsPage() {
         subtitle={
           "Flag which accounts are taxable brokerages vs. tax-advantaged (IRA, 401k) — " +
           "the Tax Center only sells from taxable accounts, and checks every account " +
-          "here for a recent buy that would stop a loss from counting." +
+          "here for a recent buy that would stop a loss from counting. Set how each account " +
+          "matches a sale to your purchases the way your broker does (most use oldest first; " +
+          "many crypto exchanges use highest cost first), so your gains match its tax forms." +
           (canMove ? " Pick each account's portfolio to see it on its own in the switcher." : "")
         }
       />
@@ -173,7 +222,7 @@ export default function AccountsPage() {
                   <TableHead className="hidden sm:table-cell">Portfolio</TableHead>
                   {/* On phones the value moves to each account's heading below (room for Type) */}
                   <TableHead className="hidden text-right sm:table-cell">Value</TableHead>
-                  <TableHead className="pr-1 text-right">Type</TableHead>
+                  <TableHead className="pr-1 text-right">Type · how sales are matched</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -204,7 +253,7 @@ export default function AccountsPage() {
                           update.mutate({ id: a.id, accountType: accountType as AccountType })
                         }
                       >
-                        <SelectTrigger size="sm" className="ml-auto w-40 sm:w-48">
+                        <SelectTrigger size="sm" className="ml-auto w-48 sm:w-60">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent align="end">
@@ -215,6 +264,8 @@ export default function AccountsPage() {
                           ))}
                         </SelectContent>
                       </Select>
+                      {lotMethodSelect(a, "lotMethod", "Stocks & funds", "Stocks")}
+                      {lotMethodSelect(a, "cryptoLotMethod", "Crypto", "Crypto")}
                     </TableCell>
                   </TableRow>
                 ))}

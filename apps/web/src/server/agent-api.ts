@@ -101,7 +101,12 @@ async function loadContextSnapshotUncached(userId: string, portfolioId?: string)
     computeTaxNow(userId, portfolioId).catch(() => null),
     computeAccountHoldings(userId, portfolioId).catch(() => []),
     db
-      .select({ name: schema.accounts.name, type: schema.accounts.accountType })
+      .select({
+        name: schema.accounts.name,
+        type: schema.accounts.accountType,
+        lotMethod: schema.accounts.lotMethod,
+        cryptoLotMethod: schema.accounts.cryptoLotMethod,
+      })
       .from(schema.accounts)
       .where(and(...accountFilter)),
   ]);
@@ -156,11 +161,17 @@ async function loadContextSnapshotUncached(userId: string, portfolioId?: string)
   // "What's in my IRA?" / "answer from the brokerage alone": without each
   // account's holdings the agent said it couldn't tell taxable from IRA.
   const heldIn = new Map(accountHoldings.map((a) => [a.accountName, a]));
+  const matchedLabel = (m: "fifo" | "hifo") =>
+    m === "hifo" ? "highest cost first (HIFO)" : "oldest first (FIFO)";
   const accounts = accountRows.map((a) => {
     const held = heldIn.get(a.name);
     return {
       name: a.name,
       type: a.type,
+      salesMatched: {
+        stocksAndFunds: matchedLabel(a.lotMethod),
+        crypto: matchedLabel(a.cryptoLotMethod),
+      },
       value: held?.value ?? 0,
       costBasis: held?.costBasis ?? 0,
       holdings: (held?.holdings ?? []).map((h) => ({

@@ -12,7 +12,7 @@ export {
   type RealizedGain,
   type IsoDate,
 } from "./types";
-export { buildLots, buildLotsByAccount, isLongTerm, type LotEngineResult } from "./lots";
+export { buildLots, buildLotsByAccount, isLongTerm, type LotEngineResult, type LotMethod } from "./lots";
 export { positionFromLots, type PositionSnapshot } from "./position";
 export { realizedByYear, type YearlyRealized } from "./realized";
 export {

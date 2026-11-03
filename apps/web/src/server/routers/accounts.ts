@@ -144,6 +144,8 @@ export const accountsRouter = router({
         id: z.uuid(),
         accountType: accountTypeSchema.optional(),
         portfolioId: z.uuid().optional(),
+        lotMethod: z.enum(["fifo", "hifo"]).optional(),
+        cryptoLotMethod: z.enum(["fifo", "hifo"]).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -164,6 +166,8 @@ export const accountsRouter = router({
       const set = {
         ...(input.accountType ? { accountType: input.accountType } : {}),
         ...(input.portfolioId ? { portfolioId: input.portfolioId } : {}),
+        ...(input.lotMethod ? { lotMethod: input.lotMethod } : {}),
+        ...(input.cryptoLotMethod ? { cryptoLotMethod: input.cryptoLotMethod } : {}),
       };
       if (Object.keys(set).length === 0) return;
       await ctx.db

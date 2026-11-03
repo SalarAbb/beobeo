@@ -8,6 +8,9 @@ import {
   type RealizedGain,
 } from "./types";
 
+/** How a sale picks the purchases it uses: oldest first, or highest cost per unit first. */
+export type LotMethod = NonNullable<EngineTransaction["lotMethod"]>;
+
 export interface LotEngineResult {
   /** Lots still open after replaying all transactions, FIFO order. */
   openLots: Lot[];
@@ -30,7 +33,10 @@ export function isLongTerm(acquiredAt: Date, soldAt: Date): boolean {
  * Replay one asset's transactions (must be pre-sorted by tradedAt ascending)
  * into open lots + realized gains. FIFO matching on sells and transfers out.
  */
-export function buildLots(txns: EngineTransaction[]): LotEngineResult {
+export function buildLots(
+  txns: EngineTransaction[],
+  method: LotMethod = "fifo",
+): LotEngineResult {
   const openLots: Lot[] = [];
   const realized: RealizedGain[] = [];
   let dividendIncome = ZERO;
@@ -65,7 +71,7 @@ export function buildLots(txns: EngineTransaction[]): LotEngineResult {
         const price = requirePrice(txn);
         const grossProceeds = txn.quantity.mul(price);
         const netProceeds = grossProceeds.sub(txn.fees);
-        const matched = consumeFifo(openLots, txn.quantity, txn);
+        const matched = consumeLots(openLots, txn.quantity, txn, method);
         for (const slice of matched) {
           const share = slice.quantity.div(txn.quantity);
           const proceeds = netProceeds.mul(share);
@@ -117,7 +123,7 @@ export function buildLots(txns: EngineTransaction[]): LotEngineResult {
       case "transfer_out": {
         requirePositive(txn);
         // Units leave with their basis; nothing is realized.
-        consumeFifo(openLots, txn.quantity, txn);
+        consumeLots(openLots, txn.quantity, txn, method);
         break;
       }
 
@@ -146,17 +152,24 @@ export function buildLots(txns: EngineTransaction[]): LotEngineResult {
  * A transaction with no `accountId` (a provider split) applies to every
  * account. Open lots come back oldest first, realized slices by sale date
  * (stable, so one sale's slices stay together and in FIFO order).
+ * Each account matches with its own `lotMethod` (FIFO when absent).
  * Throws like `buildLots` when one account's history oversells.
  */
 export function buildLotsByAccount(txns: EngineTransaction[]): LotEngineResult {
   const accounts: string[] = [];
+  const methods: Record<string, LotMethod> = {};
   for (const t of txns) {
-    if (t.accountId !== undefined && !accounts.includes(t.accountId)) accounts.push(t.accountId);
+    if (t.accountId === undefined) continue;
+    if (!accounts.includes(t.accountId)) accounts.push(t.accountId);
+    if (t.lotMethod) methods[t.accountId] = t.lotMethod;
   }
-  if (accounts.length <= 1) return buildLots(txns);
+  if (accounts.length <= 1) return buildLots(txns, methods[accounts[0] ?? ""] ?? "fifo");
 
   const results = accounts.map((a) =>
-    buildLots(txns.filter((t) => t.accountId === undefined || t.accountId === a)),
+    buildLots(
+      txns.filter((t) => t.accountId === undefined || t.accountId === a),
+      methods[a] ?? "fifo",
+    ),
   );
   return {
     openLots: results
@@ -177,14 +190,16 @@ interface MatchedSlice {
 }
 
 /**
- * Remove `quantity` units from the front of the lot queue (FIFO), mutating
- * `openLots`. Returns the matched slices with their proportional basis.
+ * Remove `quantity` units from the open lots, mutating `openLots` (which stays
+ * oldest first). FIFO takes the oldest lot first; HIFO the highest cost per
+ * unit first (ties: oldest). Returns the matched slices with their proportional basis.
  * Throws OVERSELL if the lots can't cover the quantity.
  */
-function consumeFifo(
+function consumeLots(
   openLots: Lot[],
   quantity: Decimal,
   txn: EngineTransaction,
+  method: LotMethod,
 ): MatchedSlice[] {
   const available = openLots.reduce((sum, l) => sum.add(l.quantity), ZERO);
   if (quantity.gt(available)) {
@@ -197,7 +212,8 @@ function consumeFifo(
   const slices: MatchedSlice[] = [];
   let remaining = quantity;
   while (remaining.gt(0)) {
-    const lot = openLots[0];
+    const index = method === "hifo" ? highestCostIndex(openLots) : 0;
+    const lot = openLots[index];
     if (!lot) break; // unreachable given the oversell check
     if (lot.quantity.lte(remaining)) {
       slices.push({
@@ -206,7 +222,7 @@ function consumeFifo(
         costBasis: lot.costBasis,
       });
       remaining = remaining.sub(lot.quantity);
-      openLots.shift();
+      openLots.splice(index, 1);
     } else {
       const basisShare = lot.costBasis.mul(remaining).div(lot.quantity);
       slices.push({
@@ -220,6 +236,17 @@ function consumeFifo(
     }
   }
   return slices;
+}
+
+function highestCostIndex(openLots: Lot[]): number {
+  let best = 0;
+  for (let i = 1; i < openLots.length; i++) {
+    const a = openLots[i]!;
+    const b = openLots[best]!;
+    // Compare cost per unit without dividing: a.cost/a.qty > b.cost/b.qty.
+    if (a.costBasis.mul(b.quantity).gt(b.costBasis.mul(a.quantity))) best = i;
+  }
+  return best;
 }
 
 function requirePositive(txn: EngineTransaction): void {

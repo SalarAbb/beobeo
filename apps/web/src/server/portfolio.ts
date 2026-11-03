@@ -59,6 +59,14 @@ export interface AssetRow {
   providerRef: string | null;
 }
 
+/** The account's matching method for this kind of asset. */
+export function lotMethodFor(
+  account: { lotMethod: "fifo" | "hifo"; cryptoLotMethod: "fifo" | "hifo" },
+  assetClass: string,
+): "fifo" | "hifo" {
+  return assetClass === "crypto" ? account.cryptoLotMethod : account.lotMethod;
+}
+
 /** Load a user's transactions as engine inputs, sorted, with their assets.
  *  Concurrent identical loads share one pair of queries (the dashboard's
  *  overview and timeseries ask at the same moment), so the result is
@@ -86,7 +94,11 @@ async function loadEngineTransactionsUncached(
   portfolioId?: string,
 ): Promise<{ txns: EngineTransaction[]; assets: Map<string, AssetRow> }> {
   const narrowed = Boolean(assetId) || (assetIds !== undefined && assetIds.length > 0);
-  let rows: { txn: typeof schema.transactions.$inferSelect; asset: AssetRow }[];
+  let rows: {
+    txn: typeof schema.transactions.$inferSelect;
+    asset: AssetRow;
+    account: { lotMethod: "fifo" | "hifo"; cryptoLotMethod: "fifo" | "hifo" };
+  }[];
   if (!narrowed && db === database) {
     // A whole scope reads the same rows as the Tax Center's lots, so both share
     // one query (a cold tax.now needs the overview and the lots at once).
@@ -99,7 +111,14 @@ async function loadEngineTransactionsUncached(
     if (portfolioId) conditions.push(eq(schema.accounts.portfolioId, portfolioId));
 
     rows = await db
-      .select({ txn: schema.transactions, asset: schema.assets })
+      .select({
+        txn: schema.transactions,
+        asset: schema.assets,
+        account: {
+          lotMethod: schema.accounts.lotMethod,
+          cryptoLotMethod: schema.accounts.cryptoLotMethod,
+        },
+      })
       .from(schema.transactions)
       .innerJoin(schema.assets, eq(schema.transactions.assetId, schema.assets.id))
       .innerJoin(schema.accounts, eq(schema.transactions.accountId, schema.accounts.id))
@@ -108,7 +127,7 @@ async function loadEngineTransactionsUncached(
   }
 
   const assets = new Map<string, AssetRow>();
-  const txns: EngineTransaction[] = rows.map(({ txn, asset }) => {
+  const txns: EngineTransaction[] = rows.map(({ txn, asset, account }) => {
     if (!assets.has(asset.id)) assets.set(asset.id, asset);
     return {
       id: txn.id,
@@ -119,6 +138,7 @@ async function loadEngineTransactionsUncached(
       fees: D(txn.fees),
       tradedAt: txn.tradedAt,
       accountId: txn.accountId,
+      lotMethod: lotMethodFor(account, asset.class),
     };
   });
 

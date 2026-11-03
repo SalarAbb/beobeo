@@ -50,6 +50,15 @@ export const accountType = pgEnum("account_type", [
   "other_tax_advantaged",
 ]);
 
+/**
+ * How the broker matches a sale to purchases: oldest first (FIFO, the usual
+ * broker default) or highest cost per unit first (HIFO, common at crypto
+ * exchanges). Each account has one for stocks/funds and one for crypto (one
+ * account can hold both, and brokers often treat them differently). Every
+ * gain, cost and tax figure in the app follows it.
+ */
+export const lotMethod = pgEnum("lot_method", ["fifo", "hifo"]);
+
 /** Named container grouping brokerage accounts ("Main", "Retirement", …). */
 export const portfolios = pgTable(
   "portfolios",
@@ -82,6 +91,8 @@ export const accounts = pgTable(
     // Defaults taxable — the safe assumption for every existing account;
     // users flag IRAs/401ks explicitly on the /accounts page.
     accountType: accountType("account_type").notNull().default("taxable"),
+    lotMethod: lotMethod("lot_method").notNull().default("fifo"),
+    cryptoLotMethod: lotMethod("crypto_lot_method").notNull().default("fifo"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [

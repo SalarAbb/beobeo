@@ -12,7 +12,7 @@ import {
   type TaxProfile,
 } from "@beobeo/core";
 import { getMarketData } from "../market-data";
-import { loadKnownSplits, mergeKnownSplits } from "../portfolio";
+import { loadKnownSplits, lotMethodFor, mergeKnownSplits } from "../portfolio";
 import { loadScopedRows, type ScopedTxnRow } from "../scoped-rows";
 
 const DAY_MS = 86_400_000;
@@ -77,7 +77,7 @@ export { loadScopedRows, type ScopedTxnRow };
 /**
  * Replay each (account, asset) pair through the lot engine. Rows must be
  * sorted by tradedAt. Lots must carry their account identity so a plan can
- * say "sell from Fidelity" (and brokers match FIFO per account), which the
+ * say "sell from Fidelity" (and brokers match per account, FIFO or HIFO by the account's method for that kind of asset), which the
  * dashboard's per-asset engine transactions don't track. A pair whose history
  * doesn't replay (an oversell from a partial export) is skipped, never thrown.
  */
@@ -112,7 +112,7 @@ export function replayByAccount(
       knownSplits.filter((s) => s.assetId === asset.id),
     );
     try {
-      out.push({ account, asset, result: buildLots(txns) });
+      out.push({ account, asset, result: buildLots(txns, lotMethodFor(account, asset.class)) });
     } catch {
       // inconsistent history for this account+asset — skip, don't crash the page
     }

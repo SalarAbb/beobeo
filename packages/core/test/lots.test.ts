@@ -255,3 +255,47 @@ describe("buildLotsByAccount — a sale only uses its own account's purchases", 
     expect(buildLotsByAccount(txns).openLots[0]!.costBasis.eq(600)).toBe(true);
   });
 });
+
+describe("buildLots HIFO", () => {
+  it("sells the highest cost per unit first and keeps open lots oldest first", () => {
+    const r = buildLots(
+      [
+        txn({ type: "buy", qty: 10, price: 100, at: "2024-01-01" }),
+        txn({ type: "buy", qty: 10, price: 150, at: "2024-02-01" }),
+        txn({ type: "buy", qty: 10, price: 120, at: "2024-03-01" }),
+        txn({ type: "sell", qty: 15, price: 200, at: "2025-03-01" }),
+      ],
+      "hifo",
+    );
+    // 10 @ 150: proceeds 2,000, basis 1,500, held > 1 year → long-term +500.
+    // 5 @ 120: proceeds 1,000, basis 600, held exactly 1 year → short-term +400.
+    expect(r.realized.map((g) => [g.quantity.toString(), g.costBasis.toString(), g.gain.toDecimalPlaces(2).toString(), g.longTerm])).toEqual([
+      ["10", "1500", "500", true],
+      ["5", "600", "400", false],
+    ]);
+    expect(r.openLots.map((l) => [l.quantity.toString(), l.costBasis.toString()])).toEqual([
+      ["10", "1000"],
+      ["5", "600"],
+    ]);
+  });
+
+  it("applies each account's own method", () => {
+    const a = (o: Parameters<typeof txn>[0], accountId: string) => ({
+      ...txn(o),
+      accountId,
+      ...(accountId === "x" ? { lotMethod: "hifo" as const } : {}),
+    });
+    const r = buildLotsByAccount(
+      [
+        a({ type: "buy", qty: 1, price: 100, at: "2024-01-01" }, "x"),
+        a({ type: "buy", qty: 1, price: 300, at: "2024-02-01" }, "x"),
+        a({ type: "buy", qty: 1, price: 100, at: "2024-01-01" }, "y"),
+        a({ type: "buy", qty: 1, price: 300, at: "2024-02-01" }, "y"),
+        a({ type: "sell", qty: 1, price: 200, at: "2024-06-01" }, "x"),
+        a({ type: "sell", qty: 1, price: 200, at: "2024-06-02" }, "y"),
+      ],
+    );
+    // x (HIFO) sells the $300 one: −100. y (default FIFO) sells the $100 one: +100.
+    expect(r.realized.map((g) => g.gain.toString())).toEqual(["-100", "100"]);
+  });
+});
