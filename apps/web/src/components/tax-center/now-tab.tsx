@@ -11,6 +11,7 @@ import { usePortfolio } from "@/components/portfolio-context";
 import { Button } from "@/components/ui/button";
 import { TabError, TabLoading } from "@/components/tax-center/tab-state";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { LOT_METHOD_LABEL } from "@/lib/lot-method";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { fmtQty, fmtUsd, gainClass } from "@/lib/viz";
@@ -321,7 +322,20 @@ function SalesBehindTotals({
   /** Opens Tax Profile, where sales made outside the app are added. */
   onAddOutside: () => void;
 }) {
+  const trpc = useTRPC();
+  const accounts = useQuery(trpc.accounts.list.queryOptions({}));
   const sales = d.ytdSales;
+  // How each account with a sale matches it to purchases, so the totals can
+  // be held against the broker's forms (barristan, mission 137: "it never
+  // tells me which method it used for each account").
+  const soldIn = new Set(sales.map((s) => s.accountName));
+  const methods = (accounts.data ?? [])
+    .filter((a) => soldIn.has(a.name))
+    .map((a) =>
+      a.lotMethod === a.cryptoLotMethod
+        ? `${a.name} ${LOT_METHOD_LABEL[a.lotMethod]}`
+        : `${a.name} ${LOT_METHOD_LABEL[a.lotMethod]} for stocks and funds, ${LOT_METHOD_LABEL[a.cryptoLotMethod]} for crypto`,
+    );
   const allTime = d.dashboardRealized?.allTime ?? null;
   const salesSum = sales.reduce((s, x) => s + x.shortTermGain + x.longTermGain, 0);
   const iraGain = d.ytdTaxAdvantagedGain;
@@ -348,6 +362,16 @@ function SalesBehindTotals({
             Your {d.taxYear} totals add up{" "}
             <span className="data">{plural(sales.length, "sale")}</span> from taxable accounts
             {d.ytdOverridden && ", unless you typed your own totals in Tax Profile"}.
+            {methods.length > 0 && (
+              <>
+                {" "}
+                Each sale uses up purchases the way its account is set on{" "}
+                <Link href="/accounts" className="underline underline-offset-2 hover:text-foreground">
+                  Accounts
+                </Link>
+                : {methods.join("; ")}.
+              </>
+            )}
           </>
         ) : (
           <>You haven&apos;t sold anything in a taxable account in {d.taxYear}.</>

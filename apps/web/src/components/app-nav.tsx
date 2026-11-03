@@ -51,6 +51,13 @@ export function AppNav() {
       void queryClient.prefetchQuery(trpc.tax.lots.queryOptions(scope));
       void queryClient.prefetchQuery(trpc.tax.profile.queryOptions(scope));
     },
+    // Coming back from the Tax Center, the list sat on its loading state
+    // (barristan, mission 137).
+    "/accounts": () => {
+      void queryClient.prefetchQuery(trpc.accounts.list.queryOptions({}));
+      void queryClient.prefetchQuery(trpc.portfolios.list.queryOptions());
+      void queryClient.prefetchQuery(trpc.accounts.holdings.queryOptions({}));
+    },
     // The comparison the page will ask for, with the benchmarks and scope saved on the device.
     "/compare": () => {
       void queryClient.prefetchQuery(trpc.portfolio.overview.queryOptions({ portfolioId: portfolioId ?? undefined }));

@@ -388,7 +388,20 @@ ${o.holdingsBrief}${o.csvFile ? `\n\nYou have a CSV export of your recent stock 
         try {
           error = await act(page, step.action, obs, o.csvFile);
           await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
+          // A click that navigates client-side is "networkidle" at once, so the
+          // next screenshot caught pages mid-load: an Accounts list still on its
+          // loading state read as "the list never loads" (mission 137). Wait,
+          // as a person would, for the app's loading states to clear (after the
+          // new page has had a moment to render them).
           await page.waitForTimeout(250);
+          await page
+            .waitForFunction(
+              () => !document.querySelector("[data-slot=skeleton], [role=status] > .animate-spin"),
+              undefined,
+              { timeout: 5_000, polling: 100 },
+            )
+            .catch(() => undefined);
+          await page.waitForTimeout(100);
         } catch (e) {
           error = (e as Error).message.split("\n")[0]!.slice(0, 200);
         }

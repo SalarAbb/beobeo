@@ -10,7 +10,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -22,6 +21,7 @@ import {
 import Link from "next/link";
 import { toast } from "sonner";
 import { TabError, TabLoading } from "@/components/tax-center/tab-state";
+import { LOT_METHOD_LABEL, type LotMethod } from "@/lib/lot-method";
 import { useTRPC } from "@/lib/trpc";
 import { fmtQty, fmtUsd, gainClass } from "@/lib/viz";
 
@@ -35,14 +35,6 @@ const TYPE_LABEL = {
 
 const TYPE_OPTIONS = Object.entries(TYPE_LABEL);
 type AccountType = keyof typeof TYPE_LABEL;
-
-// How the broker picks which purchases a sale uses. Every gain in the app
-// follows it; crypto exchanges often use highest cost first.
-const LOT_METHOD_LABEL = {
-  fifo: "oldest first",
-  hifo: "highest cost first",
-} as const;
-type LotMethod = keyof typeof LOT_METHOD_LABEL;
 
 export default function AccountsPage() {
   const trpc = useTRPC();
@@ -69,12 +61,7 @@ export default function AccountsPage() {
   const total = (holdings.data ?? []).reduce((s, h) => s + h.value, 0);
   const typeOf = new Map((accounts.data ?? []).map((a) => [a.id, a.accountType as AccountType]));
   const move = useMutation(trpc.accounts.update.mutationOptions());
-  // A new matching method changes every gain, cost and tax figure.
-  const setLotMethod = useMutation(
-    trpc.accounts.update.mutationOptions({
-      onSuccess: () => void queryClient.invalidateQueries(),
-    }),
-  );
+  const saveLotMethod = useMutation(trpc.accounts.update.mutationOptions());
   // Moving an account between portfolios is only a choice once there are two.
   const canMove = (portfolios.data?.length ?? 0) > 1;
   const byPortfolio = (portfolios.data ?? []).map((p) => {
@@ -134,6 +121,73 @@ export default function AccountsPage() {
     ]);
   }
 
+  /** A new matching method changes every gain, cost and tax figure. The box
+   *  switches at once and the toast says what it changed: the box used to
+   *  show the old method until the save landed, with nothing saying it took
+   *  or what moved (barristan, mission 137). "Undo" switches it back. */
+  async function setLotMethod(
+    id: string,
+    field: "lotMethod" | "cryptoLotMethod",
+    to: LotMethod,
+    undoing = false,
+  ) {
+    const account = accounts.data?.find((a) => a.id === id);
+    if (!account || account[field] === to) return;
+    const from = account[field];
+    const listKey = trpc.accounts.list.queryKey({});
+    const setMethod = (m: LotMethod) =>
+      queryClient.setQueryData(listKey, (old) =>
+        old?.map((a) => (a.id === id ? { ...a, [field]: m } : a)),
+      );
+    setMethod(to);
+    const kind = field === "lotMethod" ? "stock and fund" : "crypto";
+    const toastId = toast.loading(`Saving: ${account.name} matches ${kind} sales ${LOT_METHOD_LABEL[to]}…`);
+    // Gains from sales before and after, across every portfolio (the
+    // Dashboard's figure with All portfolios picked).
+    const overview = trpc.portfolio.overview.queryOptions({ portfolioId: undefined });
+    const before = await queryClient
+      .ensureQueryData(overview)
+      .then((d) => d.totals)
+      .catch(() => null);
+    try {
+      await saveLotMethod.mutateAsync({ id, [field]: to });
+    } catch (err) {
+      setMethod(from);
+      toast.error(`Couldn't change how ${account.name} matches sales: ${(err as Error).message}`, {
+        id: toastId,
+      });
+      return;
+    }
+    await queryClient.invalidateQueries();
+    const after = await queryClient
+      .fetchQuery(overview)
+      .then((d) => d.totals)
+      .catch(() => null);
+    const same = (a: number, b: number) => Math.abs(a - b) < 0.005;
+    const change = (a: number, b: number) =>
+      same(a, b) ? `${fmtUsd(b)}, unchanged` : `${fmtUsd(a)} → ${fmtUsd(b)}`;
+    toast.success(
+      undoing
+        ? `${account.name} is back to matching ${kind} sales ${LOT_METHOD_LABEL[to]}`
+        : `Saved: ${account.name} now matches ${kind} sales ${LOT_METHOD_LABEL[to]}`,
+      {
+        id: toastId,
+        description:
+          before && after
+            ? `Net gain from sales in ${after.thisYear}: ${change(before.realizedThisYear, after.realizedThisYear)}. ` +
+              `All time: ${change(before.realized, after.realized)}. ` +
+              (same(before.realized, after.realized)
+                ? "No sale recorded so far comes out different; it applies to every sale, past and future."
+                : `Every gain, cost and tax figure in the app uses it now.`)
+            : "Every gain, cost and tax figure in the app uses it now.",
+        duration: 12_000,
+        action: undoing
+          ? undefined
+          : { label: "Undo", onClick: () => void setLotMethod(id, field, from, true) },
+      },
+    );
+  }
+
   // One account can hold stocks and crypto, and brokers often match them
   // differently (stocks oldest first, crypto highest cost first).
   const lotMethodSelect = (
@@ -144,11 +198,11 @@ export default function AccountsPage() {
   ) => (
     <Select
       value={a[field]}
-      onValueChange={(m) => setLotMethod.mutate({ id: a.id, [field]: m as LotMethod })}
+      onValueChange={(m) => void setLotMethod(a.id, field, m as LotMethod)}
     >
       <SelectTrigger
         size="sm"
-        className="mt-1.5 ml-auto w-48 sm:w-60"
+        className="mt-1.5 ml-auto w-52 sm:w-68"
         aria-label={`How ${a.name} matches ${kind.toLowerCase()} sales to purchases`}
       >
         <span className="text-muted-foreground">
@@ -211,8 +265,12 @@ export default function AccountsPage() {
               })()}
             </p>
           )}
+          {/* A bare grey box read as "the list never loads" (barristan,
+              mission 137); a failed load said "No accounts yet". */}
           {accounts.isLoading ? (
-            <Skeleton className="h-40 w-full" />
+            <TabLoading label="Loading your accounts…" className="h-40" />
+          ) : accounts.isError ? (
+            <TabError what="your accounts" onRetry={() => void accounts.refetch()} />
           ) : accounts.data && accounts.data.length > 0 ? (
             <Table>
               <TableHeader>
@@ -253,7 +311,8 @@ export default function AccountsPage() {
                           update.mutate({ id: a.id, accountType: accountType as AccountType })
                         }
                       >
-                        <SelectTrigger size="sm" className="ml-auto w-48 sm:w-60">
+                        {/* Wide enough for "Stocks & funds: highest cost first" */}
+                        <SelectTrigger size="sm" className="ml-auto w-52 sm:w-68">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent align="end">
