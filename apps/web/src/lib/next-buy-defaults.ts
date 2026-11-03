@@ -25,12 +25,17 @@ const USUAL_FROM = 6;
  * What the next-buy box starts at: the median of the last few days money went
  * in (a rise in the invested line), so one bigger buy doesn't set it. luna puts
  * in $100 a month; her last rise was a $150 NVDA buy, and the box said $150
- * ("why would it guess that?", missions 64/66/67). `usual` is false when there
- * are fewer than three deposits to go by, and the amount is just the last one.
+ * ("why would it guess that?", missions 64/66/67). `from` says what it is:
+ * `usual` (the median of three or more), `last` (fewer to go by: the last one),
+ * or `start` (the only money in is the first day's, the holdings typed in at
+ * setup: luna's $300 VOO + $150 NVDA read as "your last deposit was $450",
+ * mission 140).
  */
+export type DepositFrom = "usual" | "last" | "start";
+
 export function usualDeposit(
   points: { invested: number }[] | undefined,
-): { usd: number; usual: boolean } | null {
+): { usd: number; from: DepositFrom } | null {
   if (!points) return null;
   const steps: number[] = [];
   for (let i = points.length - 1; i > 0 && steps.length < USUAL_FROM; i--) {
@@ -39,13 +44,16 @@ export function usualDeposit(
   }
   // The first day's money is a deposit too.
   const first = points[0]?.invested ?? 0;
-  if (steps.length < USUAL_FROM && points.length > 0 && first >= 1) steps.push(first);
+  if (steps.length < USUAL_FROM && points.length > 0 && first >= 1) {
+    if (steps.length === 0) return { usd: first, from: "start" };
+    steps.push(first);
+  }
   if (steps.length === 0) return null;
-  if (steps.length < 3) return { usd: steps[0]!, usual: false };
+  if (steps.length < 3) return { usd: steps[0]!, from: "last" };
   const sorted = [...steps].sort((a, b) => a - b);
   const mid = sorted.length >> 1;
   const usd = sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
-  return { usd, usual: true };
+  return { usd, from: "usual" };
 }
 
 /** The candidates the section can offer, largest first like the overview. */

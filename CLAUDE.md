@@ -134,7 +134,7 @@ agent: chat UI → /api/chat (SSE) → @beobeo/agent tool runner → PortfolioAp
 - Page layouts (`dashboard/`, `transactions/`, `tax-center/`, `compare/`) warm their first batch's computations during the HTML request; the nav's `warm` map prefetches on hover. Add both for a new page whose first paint waits on a heavy query.
 - Shared page building blocks: `components/page-section.tsx` (`PageHeader`, `Section`, `StatStrip`, `StatTile`) and `MetricHover`. The dashboard is the reference page.
 - Tax Center: tabs Now / Raise Cash / Harvest Losses / All Lots / Tax Profile (`?tab=`); every tab leads with one plain verdict sentence and shows sections only when they have content. Sales match purchases per (account, asset) with the account's method (`replayByAccount`, `lotMethodFor`).
-- Device-only state (until a human `db:push` adds server columns): target mix, income/filing status, saved selections. The chat agent can't see device-only state.
+- Device-only state (until a human `db:push` adds server columns): target mix, income/filing status, the next-buy amount last typed, saved selections. The chat agent can't see device-only state.
 - Auth: Better Auth with session cookie cache (5 min). Middleware does an optimistic redirect; the real check is in `(app)/layout.tsx` + tRPC. The app always shows who is signed in.
 - Add-transaction dialog: outside clicks don't close it, price auto-fill is derived at render, entry by total is supported, dates use `date-picker.tsx` (never `<input type=date>`).
 - Restart the dev server after changing a workspace package; if CSS changes don't show, stop it and `rm -rf apps/web/.next`.

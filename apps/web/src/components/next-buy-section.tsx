@@ -15,8 +15,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TabLoading } from "@/components/tax-center/tab-state";
-import { defaultNextBuyAmount } from "@/lib/next-buy-defaults";
+import { defaultNextBuyAmount, type DepositFrom } from "@/lib/next-buy-defaults";
 import { useTRPC } from "@/lib/trpc";
+import { useStoredState } from "@/lib/use-stored-state";
 import { fmtUsd } from "@/lib/viz";
 
 const MAX_OPTIONS = 5;
@@ -28,7 +29,8 @@ const pctText = (x: number) => `${Number((Math.abs(x) * 100).toFixed(1))}%`;
  * one to five options; core `pickNextBuy` (via `portfolio.nextBuy`) names
  * one with one reason and the account it belongs in, and "Show me another"
  * walks down the ranking. Starts from the three largest holdings and the
- * last deposit, so it answers before anything is typed.
+ * amount typed here last time (else the usual deposit), so it answers before
+ * anything is typed.
  */
 export function NextBuySection({
   holdings,
@@ -37,12 +39,25 @@ export function NextBuySection({
   /** Largest first, like the overview. */
   holdings: PickedAsset[];
   /** undefined while the history is still loading (null = no deposit in it). */
-  deposit: { usd: number; usual: boolean } | null | undefined;
+  deposit: { usd: number; from: DepositFrom } | null | undefined;
 }) {
   const trpc = useTRPC();
-  const { portfolioId } = usePortfolio();
+  const { portfolioId, userId } = usePortfolio();
   const targets = useTargetMix();
-  const [amount, setAmount] = useState<string | null>(null);
+  const [typedNow, setTypedNow] = useState<string | null>(null);
+  // The amount typed here before, kept per portfolio on this device: the history
+  // can't know a habit it hasn't seen (luna's $150 a month, after setup's $450
+  // of starting holdings, mission 140), so what she types is what it asks next time.
+  const [remembered, setRemembered] = useStoredState<number | null>(
+    `beobeo.next-buy.amount.${userId}.${portfolioId ?? "all"}`,
+    null,
+  );
+  const amount = typedNow ?? (remembered !== null && remembered > 0 ? String(remembered) : null);
+  const setAmount = (value: string) => {
+    setTypedNow(value);
+    const usd = Number(value);
+    if (usd > 0) setRemembered(usd);
+  };
   const [picked, setPicked] = useState<PickedAsset[] | null>(null);
   const [adding, setAdding] = useState(false);
   const [shown, setShown] = useState({ key: "", index: 0 });
@@ -55,11 +70,12 @@ export function NextBuySection({
   const waiting = amount === null && deposit === undefined;
   const amountStr = amount ?? (waiting ? "" : String(defaultAmount));
   const amountUsd = Math.max(0, Number(amountStr) || 0);
-  // Only typing is debounced: the default goes out at once, and exactly as the
-  // dashboard layout warmed it.
-  const typed = useDebounced(amount, 300);
+  // Only typing is debounced: the default (or remembered amount) goes out at once.
+  const typed = useDebounced(typedNow, 300);
   const debouncedAmount =
-    amount === null ? amountUsd : Math.max(0, Number(typed ?? defaultAmount) || 0);
+    typedNow === null
+      ? amountUsd
+      : Math.max(0, Number(typed ?? (remembered !== null && remembered > 0 ? remembered : defaultAmount)) || 0);
   const assetIds = options.map((o) => o.id);
 
   const query = useQuery({
@@ -157,11 +173,15 @@ export function NextBuySection({
       </div>
       {/* An unexplained starting amount read as a wrong guess (luna, missions
           64/66/67), so it says where it came from until the user types. */}
-      {amount === null && !waiting && (
+      {typedNow === null && !waiting && (
         <p className="-mt-1 text-xs text-muted-foreground">
-          {deposit
-            ? `$${defaultAmount.toLocaleString("en-US")} is ${deposit.usual ? "what you usually put in" : "your last deposit"}. Type the amount you have.`
-            : "Type the amount you have."}
+          {amount !== null
+            ? `${fmtUsd(amountUsd)} is the amount you typed here last time. Type another to change it.`
+            : deposit
+              ? deposit.from === "start"
+                ? `${fmtUsd(deposit.usd)} is what your holdings cost when you added them, and nothing's been put in since. Type what you usually put in; it's kept for next time.`
+                : `$${defaultAmount.toLocaleString("en-US")} is ${deposit.from === "usual" ? "what you usually put in" : "your last deposit"}. Type the amount you have.`
+              : "Type the amount you have."}
         </p>
       )}
 
