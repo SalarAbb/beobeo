@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { DatePicker, localIsoDate } from "@/components/date-picker";
 import { usePortfolio } from "@/components/portfolio-context";
@@ -93,10 +93,19 @@ function savedSummary(
   )}${account ? `, in ${account}` : ""}. ${term}`;
 }
 
+/** One setup holding's save, as `onSaveState` reports it. */
+export type HoldingSave = {
+  id: number;
+  /** "VOO buy" */
+  what: string;
+  /** Units, cost, date, holding period (and the account once it's in). */
+  summary: string;
+  status: "saving" | "saved" | "failed";
+};
+
 export function AddTransactionDialog({
   onCreated,
-  onSaving,
-  onSaved,
+  onSaveState,
   accountsPending,
   defaultOpen = false,
   defaultType = "buy",
@@ -109,13 +118,11 @@ export function AddTransactionDialog({
   /** Accounts still being created (welcome step 2): the form opens at once,
    *  and a Save that beats them waits for them instead of making "Default". */
   accountsPending?: Promise<unknown> | null;
-  /** Called with what's being saved ("VOO buy") when Save is pressed, and
-   *  with null if the save fails (the welcome step says so on the page). */
-  onSaving?: (what: string | null) => void;
-  /** With `owned`, called once the holding is in with what was saved in
-   *  words (units, cost, date, account, holding period) and what it was
-   *  ("VOO buy"). */
-  onSaved?: (summary: string, what: string) => void;
+  /** With `owned`, follows each holding's save so the welcome step can list
+   *  it: "saving" when Save is pressed (with what was typed, in words),
+   *  "saved" once it's in (the words now name the account), "failed" if it
+   *  didn't land. */
+  onSaveState?: (save: HoldingSave) => void;
   /** What opens the dialog (default: the "Add transaction" button). */
   trigger?: React.ReactNode;
   /** Open on mount (the welcome flow links to /transactions?add=1). */
@@ -133,8 +140,17 @@ export function AddTransactionDialog({
 }) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState(defaultOpen);
+  const [open, setOpenState] = useState(defaultOpen);
   const [saving, setSaving] = useState(false);
+  // Setup's saves run one after another (two at once could each make a
+  // "Default" account), while the form is already free for the next holding.
+  const chain = useRef<Promise<unknown>>(Promise.resolve());
+  const saveCount = useRef(0);
+  const isOpen = useRef(defaultOpen);
+  function setOpen(next: boolean) {
+    isOpen.current = next;
+    setOpenState(next);
+  }
 
   const { portfolioId } = usePortfolio();
   const accounts = useQuery(
@@ -238,7 +254,13 @@ export function AddTransactionDialog({
   // a button sitting on "Saving…" through a slow round trip read as a hang
   // (hermione, barristan). The values stay in state until the save lands, so
   // a failure reopens the form exactly as it was.
-  async function onSubmit(e: React.FormEvent) {
+  //
+  // Setup (`owned`) goes further: the form is blank again at once and the
+  // step lists the holding while it saves, with "Type in another holding" and
+  // Done still there. A step showing only "Saving your VOO buy…" read as a
+  // dead screen (hermione, luna: missions 126, 127, 129, 133). This render's
+  // values are the snapshot the save uses; a failure puts them back.
+  function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (saving) return;
     if (!asset) {
@@ -249,11 +271,45 @@ export function AddTransactionDialog({
       toast.error(owned ? "Add roughly when you bought it" : "Pick a date");
       return;
     }
-    const what = `${asset.symbol} ${type.replace("_", " ")}`;
-    setSaving(true);
     setOpen(false);
+    if (!owned) {
+      setSaving(true);
+      void save().finally(() => setSaving(false));
+      return;
+    }
+    const id = ++saveCount.current;
+    const what = `${asset.symbol} ${type.replace("_", " ")}`;
+    onSaveState?.({
+      id,
+      what,
+      summary: savedSummary(effectiveQuantity, asset.symbol, total, date, today, undefined),
+      status: "saving",
+    });
+    const typed = { asset, date, quantity, price, priceTouched, totalInput, fees, note };
+    resetForm();
+    setAsset(null);
+    setDate("");
+    const run = chain.current.then(() => save(id));
+    chain.current = run.catch(() => {});
+    void run.catch(() => {
+      // Back as it was, unless the next holding is being typed in already.
+      if (isOpen.current) return;
+      setAsset(typed.asset);
+      setDate(typed.date);
+      setQuantity(typed.quantity);
+      setPrice(typed.price);
+      setPriceTouched(typed.priceTouched);
+      setTotalInput(typed.totalInput);
+      setFees(typed.fees);
+      setNote(typed.note);
+    });
+  }
+
+  /** Saves this render's values; rejects (after the toast) if it fails. */
+  async function save(id?: number) {
+    if (!asset) return;
+    const what = `${asset.symbol} ${type.replace("_", " ")}`;
     const toastId = toast.loading(`Saving ${what}…`);
-    onSaving?.(what);
     try {
       let acctId = effectiveAccountId;
       let acctName = accounts.data?.find((a) => a.id === acctId)?.name;
@@ -306,25 +362,24 @@ export function AddTransactionDialog({
         ...(summary && { duration: 10_000 }),
       });
       // The toast's title already names the account; the page line doesn't.
-      if (summary)
-        onSaved?.(savedSummary(effectiveQuantity, asset.symbol, total, date, today, acctName), what);
-      resetForm();
-      // Setup can add another holding: it starts blank, not on the last one's
-      // ticker and date.
-      if (owned) {
-        setAsset(null);
-        setDate("");
-      }
+      if (id !== undefined)
+        onSaveState?.({
+          id,
+          what,
+          summary: savedSummary(effectiveQuantity, asset.symbol, total, date, today, acctName),
+          status: "saved",
+        });
+      // Setup's form was cleared when Save was pressed.
+      if (!owned) resetForm();
       onCreated?.(created);
     } catch (err) {
-      onSaving?.(null);
+      if (id !== undefined) onSaveState?.({ id, what, summary: "", status: "failed" });
       toast.error(`Couldn't save the ${what}: ${(err as Error).message}`, {
         id: toastId,
         duration: 10_000,
         action: { label: "Open it again", onClick: () => setOpen(true) },
       });
-    } finally {
-      setSaving(false);
+      if (owned) throw err;
     }
   }
 

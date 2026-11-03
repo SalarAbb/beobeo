@@ -475,7 +475,7 @@ function RatesCheck({
               from <span className="data">{fmtUsd(own.incomeFrom, 0)}</span>
             </>
           )}{" "}
-          to <span className="data">{fmtUsd(own.incomeTo, 0)}</span>, so about{" "}
+          to <span className="data">{fmtUsd(own.incomeTo, 0)}</span>, so{" "}
           <span className="data">{fmtUsd(own.incomeTo - complete.taxableIncomeUsd, 0)}</span>{" "}
           more taxable income before {next.ordinaryRatePct}%.
         </>

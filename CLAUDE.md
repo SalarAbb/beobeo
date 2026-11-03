@@ -109,7 +109,7 @@ agent: chat UI → /api/chat (SSE) → @beobeo/agent tool runner → PortfolioAp
 - **The dashboard shows no drawdown/peak metric and no best/worst day** (each rejected by the user). Don't reintroduce one without asking.
 - **React-compiler lint:** no `Date.now()`/impure calls in render or `useMemo`; no sync setState in effects (derive at render, or `useSyncExternalStore`). Default dates use `localIsoDate()`, never `toISOString().slice(0,10)` (that's tomorrow on a US evening).
 - **Destructive actions are undoable; icon-only buttons have `aria-label`** (the sim reports unlabeled ones). Transaction rows have no inline delete.
-- **Forms never wait on a save:** Save closes at once and a sonner toast carries it (loading → done, with "Open it again"/"Undo"); repeat submits are ignored. A button stuck on "Saving…" reads as a hang.
+- **Forms never wait on a save:** Save closes at once and a sonner toast carries it (loading → done, with "Open it again"/"Undo"); repeat submits are ignored. A button stuck on "Saving…" reads as a hang. Setup's add form (`owned`) clears at once and chains its saves; the step lists each holding as saving → recorded (`onSaveState`) and never hides its options.
 - **Real-user data will be inconsistent:** one asset's `EngineError` goes to `dataIssues[]`, never a 500 for the page.
 - **Selections that should survive navigation use `useStoredState`** (`lib/use-stored-state.ts`); tabs unmount on switch.
 - **When the app gains a flow, add it to `FEATURES`** in `packages/sim/src/features.ts`, or missions never test it. Keep the labels the sim clicks: "Create account", "Continue", "Skip, show me the app", the welcome step titles, and the `radio` role on income bands.

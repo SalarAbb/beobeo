@@ -15,7 +15,10 @@ import {
   type FilingStatus,
 } from "@beobeo/core/tax-brackets";
 import { AuthShell } from "@/components/auth/auth-shell";
-import { AddTransactionDialog } from "@/components/transactions/add-transaction-dialog";
+import {
+  AddTransactionDialog,
+  type HoldingSave,
+} from "@/components/transactions/add-transaction-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -573,22 +576,37 @@ function FirstHoldingStep({
   recap: RecapLine[];
 }) {
   const router = useRouter();
-  // After Save the step itself says what's happening: a small "Saving…"
-  // toast over unchanged options read as "the page didn't advance, did VOO
-  // land?" (hermione, mission 35).
-  const [saving, setSaving] = useState<string | null>(null);
-  // Each holding that's in stays listed with what went in (units, cost, date,
-  // account, holding period), so it can be checked (hermione, mission 115).
-  // The step no longer jumps to the dashboard after the first one: setup
-  // "ended after one holding" and the redirect read as a spinner to sit
-  // through (luna, mission 125; missions 72, 78, 102). You add another or
-  // open the dashboard yourself; it's prefetched so it opens at once.
-  const [recorded, setRecorded] = useState<{ what: string; summary: string }[]>([]);
+  // Each holding is listed the moment Save is pressed, with what went in
+  // (units, cost, date, holding period; the account once it's in), so it can
+  // be checked (hermione, mission 115) and the page visibly moves on (a
+  // "Saving…" toast over unchanged options, mission 35). The options stay:
+  // a step showing only "Saving your VOO buy…" read as a dead screen
+  // (missions 126, 127, 129, 133). Setup doesn't jump to the dashboard after
+  // the first one either (luna, mission 125): you add another or open the
+  // dashboard yourself; it's prefetched so it opens at once.
+  const [saves, setSaves] = useState<HoldingSave[]>([]);
+  // Done pressed while a holding is still saving: the dashboard opens once
+  // it's in, never on a portfolio that looks empty.
+  const [leaving, setLeaving] = useState(false);
   useEffect(() => router.prefetch("/dashboard"), [router]);
+  const savingNow = saves.find((s) => s.status === "saving");
+  useEffect(() => {
+    if (leaving && !savingNow) router.push("/dashboard");
+  }, [leaving, savingNow, router]);
+  function onSaveState(save: HoldingSave) {
+    // A failed one leaves the list; its toast says so and reopens the form.
+    if (save.status === "failed") setLeaving(false);
+    setSaves((list) =>
+      save.status === "failed"
+        ? list.filter((s) => s.id !== save.id)
+        : list.some((s) => s.id === save.id)
+          ? list.map((s) => (s.id === save.id ? save : s))
+          : [...list, save],
+    );
+  }
   // The accounts still saving don't block anything: the import's account
   // pick comes after a file is chosen, and the add form waits on its Save.
-  const busy = saving !== null;
-  const done = recorded.length > 0;
+  const done = saves.length > 0;
   const card = `${choice(false)} flex w-full items-start gap-3 py-3`;
   return (
     <AuthShell
@@ -599,35 +617,37 @@ function FirstHoldingStep({
           ? "Add another the same way, or open your dashboard. You can add more any time from Transactions."
           : "One holding is enough to start; the dashboard fills in as you add more."
       }
-      // While a holding saves, the step shows only that: "Skip, show me the
-      // app" under the saving line made her wonder if Skip would drop her lot
-      // (hermione, mission 101). A failed save brings it back.
+      // Once a holding is saving, Skip is gone: "Skip, show me the app"
+      // under it made her wonder if Skip would drop her lot (hermione,
+      // mission 101). A failed save brings it back.
       footer={
-        busy ? null : done ? (
+        done ? (
           <>Everything here can be changed later.</>
         ) : (
           <StepFooter label="Skip, show me the app" onSkip={() => router.push("/dashboard")} />
         )
       }
     >
-      {recorded.length > 0 && (
+      {saves.length > 0 && (
         <ul role="status" className="grid gap-1.5 text-sm">
-          {recorded.map((r, i) => (
-            <li key={i} className="flex items-start gap-1.5">
-              {/* A check, not a spinner: a spinner beside "recorded" read as a wait (mission 78). */}
-              <Check className="mt-0.5 size-3.5 shrink-0 text-gain" aria-hidden />
+          {saves.map((s) => (
+            <li key={s.id} className="flex items-start gap-1.5">
+              {s.status === "saved" ? (
+                // A check, not a spinner: a spinner beside "recorded" read as a wait (mission 78).
+                <Check className="mt-0.5 size-3.5 shrink-0 text-gain" aria-hidden />
+              ) : (
+                <Loader2
+                  className="mt-0.5 size-3.5 shrink-0 animate-spin text-muted-foreground"
+                  aria-hidden
+                />
+              )}
               <span>
-                Your {r.what} is recorded: <span className="data">{r.summary}</span>
+                Your {s.what} {s.status === "saved" ? "is recorded" : "is saving"}:{" "}
+                <span className="data">{s.summary}</span>
               </span>
             </li>
           ))}
         </ul>
-      )}
-      {saving && (
-        <p role="status" className="flex items-start gap-1.5 text-sm text-muted-foreground">
-          <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin" aria-hidden />
-          Saving your {saving}…
-        </p>
       )}
       {accountsError && (
         <p className="text-sm text-destructive">
@@ -645,16 +665,12 @@ function FirstHoldingStep({
           ))}
         </dl>
       )}
-      {/* Hidden, not unmounted, while saving: the dialog owns the save. */}
-      <div className={busy ? "hidden" : "grid gap-1.5"}>
+      <div className="grid gap-1.5">
         {/* The form opens right here (it used to send you to /transactions,
-            which read as being dropped out of setup). */}
+            which read as being dropped out of setup). It owns the saves, so
+            it stays mounted until the dashboard opens. */}
         <AddTransactionDialog
-          onSaved={(summary, what) => {
-            setRecorded((r) => [...r, { what, summary }]);
-            setSaving(null);
-          }}
-          onSaving={setSaving}
+          onSaveState={onSaveState}
           accountsPending={accountsPending}
           defaultEntry="total"
           owned
@@ -681,11 +697,23 @@ function FirstHoldingStep({
           <LinkProgress />
         </Link>
       </div>
-      {done && !busy && (
-        <Button asChild>
-          <Link href="/dashboard">Done, open my dashboard</Link>
-        </Button>
-      )}
+      {done &&
+        (savingNow ? (
+          <Button type="button" disabled={leaving} onClick={() => setLeaving(true)}>
+            {leaving ? (
+              <>
+                <Loader2 className="size-4 animate-spin" aria-hidden />
+                Opening once your {savingNow.what} is in…
+              </>
+            ) : (
+              "Done, open my dashboard"
+            )}
+          </Button>
+        ) : (
+          <Button asChild>
+            <Link href="/dashboard">Done, open my dashboard</Link>
+          </Button>
+        ))}
     </AuthShell>
   );
 }
