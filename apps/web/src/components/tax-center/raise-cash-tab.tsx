@@ -1,7 +1,7 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { ChevronDown, Loader2, X } from "lucide-react";
 import { Section, StatStrip, StatTile } from "@/components/page-section";
 import { usePortfolio } from "@/components/portfolio-context";
 import { LossBreakdownBar } from "@/components/tax-center/loss-breakdown-bar";
@@ -18,7 +18,12 @@ import {
 } from "@/components/ui/select";
 import { RetirementNote } from "@/components/tax-center/retirement-note";
 import { TabError, TabLoading } from "@/components/tax-center/tab-state";
-import { RAISE_CASH_DEFAULT, RAISE_CASH_KEY, type RaiseCashState } from "@/lib/raise-cash-state";
+import {
+  RAISE_CASH_DEFAULT,
+  RAISE_CASH_KEY,
+  raiseCashDoNotSell,
+  type RaiseCashState,
+} from "@/lib/raise-cash-state";
 import { useTRPC } from "@/lib/trpc";
 import { useStoredState } from "@/lib/use-stored-state";
 import { fmtUsd } from "@/lib/viz";
@@ -32,19 +37,24 @@ function parseAmount(input: string): number | null {
 
 export function RaiseCashTab() {
   const trpc = useTRPC();
-  const { portfolioId } = usePortfolio();
+  const { portfolioId, portfolios, activeName } = usePortfolio();
   const scope = { portfolioId: portfolioId ?? undefined };
 
   // Kept on the device: tabs unmount on switch, and petyr's $20,000 kept snapping back to
   // $10,000 every time he checked All Lots (mission 2). One value for every portfolio: the
   // cash you need doesn't change when you switch scope (a per-portfolio key reset it, mission 15).
-  const [{ amountInput, target, doNotSell, accountId: storedAccountId }, setState] =
-    useStoredState<RaiseCashState>(RAISE_CASH_KEY, RAISE_CASH_DEFAULT);
+  const [state, setState] = useStoredState<RaiseCashState>(RAISE_CASH_KEY, RAISE_CASH_DEFAULT);
+  const { amountInput, target, doNotSell, accountId: storedAccountId } = state;
 
   const lots = useQuery(trpc.tax.lots.queryOptions(scope));
   const symbols = [...new Set((lots.data ?? []).map((l) => l.symbol))].sort();
   // The list is shared across portfolios; only count what this one holds.
   const excludedHere = doNotSell.filter((s) => symbols.includes(s)).length;
+  // "Sell part of it" on a holding's page plans that holding alone (molly
+  // wanted $2,000 of Ginny's VT and got a $10,000 plan across everything,
+  // mission 132). It counts once the lots say this portfolio holds it.
+  const only = state.only && symbols.includes(state.only) ? state.only : undefined;
+  const planDoNotSell = raiseCashDoNotSell(state, symbols);
   // Taxable accounts that hold something here. A stored account this portfolio
   // doesn't have means "any account", same as the do-not-sell count above.
   const accounts = [
@@ -58,11 +68,12 @@ export function RaiseCashTab() {
     ...trpc.tax.plan.queryOptions({
       ...scope,
       targetProceeds: target ?? 0,
-      doNotSell,
+      doNotSell: planDoNotSell,
       accountId,
     }),
-    // A saved account waits for the lot list, so the plan isn't worked out twice.
-    enabled: target !== null && target > 0 && (!storedAccountId || !lots.isPending),
+    // A saved account or holding waits for the lot list, so the plan isn't worked out twice.
+    enabled:
+      target !== null && target > 0 && ((!storedAccountId && !state.only) || !lots.isPending),
     placeholderData: keepPreviousData,
   });
 
@@ -110,6 +121,17 @@ export function RaiseCashTab() {
           </div>
         </div>
 
+        {only ? (
+          <Button
+            variant="outline"
+            className="bg-accent text-primary"
+            onClick={() => setState((s) => ({ ...s, only: undefined }))}
+            aria-label={`Selling only ${only}. Remove to plan across every holding`}
+          >
+            Only {only}
+            <X className="ml-1 size-3.5 opacity-60" aria-hidden />
+          </Button>
+        ) : (
         <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -142,6 +164,7 @@ export function RaiseCashTab() {
               )}
           </PopoverContent>
         </Popover>
+        )}
 
         {accounts.length > 1 && (
           <div className="grid gap-1.5">
@@ -216,7 +239,11 @@ export function RaiseCashTab() {
                 value={fmtUsd(Math.abs(d.optimized.totalTaxCost))}
                 tone={d.optimized.totalTaxCost < -0.005 ? "text-gain" : undefined}
                 subTone="text-muted-foreground"
-                sub="estimated, at your saved rates"
+                sub={
+                  portfolios.length > 1 && portfolioId
+                    ? `estimated, at ${activeName}'s saved rates`
+                    : "estimated, at your saved rates"
+                }
               />
               <StatTile
                 hero={false}
@@ -240,10 +267,12 @@ export function RaiseCashTab() {
 
           <PlanView
             sales={d.optimized.sales}
-            blocked={d.optimized.blocked}
+            blocked={
+              only ? d.optimized.blocked.filter((b) => b.symbol === only) : d.optimized.blocked
+            }
             totalProceeds={d.optimized.totalProceeds}
             shortfall={d.optimized.shortfall}
-            excluded={d.optimized.excluded}
+            excluded={only ? undefined : d.optimized.excluded}
             startingRealizedGain={d.startingRealizedGain}
           />
           </div>

@@ -3,13 +3,15 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { AssetLogo } from "@/components/asset-logo";
 import { METRIC_LABEL_CLASS, MetricHover } from "@/components/metric-hover";
 import { Section, StatStrip, StatTile } from "@/components/page-section";
 import { usePortfolio } from "@/components/portfolio-context";
 import { PriceChart } from "@/components/charts/price-chart";
 import { RealizedBars } from "@/components/charts/realized-bars";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { TabError, TabLoading } from "@/components/tax-center/tab-state";
@@ -22,7 +24,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { RAISE_CASH_DEFAULT, RAISE_CASH_KEY, type RaiseCashState } from "@/lib/raise-cash-state";
 import { useTRPC } from "@/lib/trpc";
+import { useStoredState } from "@/lib/use-stored-state";
 import { fmtPct, fmtQty, fmtUsd, gainClass } from "@/lib/viz";
 
 type LotsView = "lots" | "sales";
@@ -169,14 +173,78 @@ function SellAllNote({
         {!scopeId && holdingPortfolios.length > 1 &&
           ` Its taxable shares sit in ${holdingPortfolios.map(nameOf).join(" and ")}, each with its own Tax Profile: pick one in the portfolio switcher to see its tax at its own rates.`}
       </p>
-      <p className="max-w-3xl text-sm text-muted-foreground">
-        To sell only part of it, Tax Center →{" "}
-        <Link href="/tax-center?tab=cash" className="underline underline-offset-2">
-          Raise Cash
-        </Link>{" "}
-        picks the purchases that cost the least tax.
-      </p>
+      <SellPart symbol={symbol} scopeId={scopeId} scopeName={scopeId ? nameOf(scopeId) : undefined} />
     </Section>
+  );
+}
+
+/**
+ * "Sell part of it": the amount and this holding go to Tax Center → Raise
+ * Cash, on the holding's own portfolio when it sits in one. molly wanted
+ * $2,000 of Ginny's VT for braces, and the old link opened a $10,000 plan
+ * across all portfolios at the household's rates (mission 132).
+ */
+function SellPart({
+  symbol,
+  scopeId,
+  scopeName,
+}: {
+  symbol: string;
+  scopeId: string | undefined;
+  scopeName: string | undefined;
+}) {
+  const router = useRouter();
+  const { portfolioId, setPortfolioId, portfolios } = usePortfolio();
+  const [, setRaise] = useStoredState<RaiseCashState>(RAISE_CASH_KEY, RAISE_CASH_DEFAULT);
+  const [input, setInput] = useState("");
+  const amount = Number(input.replace(/[^0-9.]/g, ""));
+  const valid = Number.isFinite(amount) && amount > 0;
+  const switching = scopeId !== undefined && scopeId !== portfolioId;
+
+  function plan() {
+    if (!valid) return;
+    setRaise((s) => ({
+      ...s,
+      amountInput: String(amount),
+      target: amount,
+      only: symbol,
+      accountId: undefined,
+    }));
+    if (switching) setPortfolioId(scopeId);
+    router.push("/tax-center?tab=cash");
+  }
+
+  return (
+    <form
+      className="grid max-w-3xl gap-1.5"
+      onSubmit={(e) => {
+        e.preventDefault();
+        plan();
+      }}
+    >
+      <label htmlFor="sell-part" className="text-sm text-muted-foreground">
+        To sell only part of it, type how much cash you need:
+      </label>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-muted-foreground">$</span>
+        <Input
+          id="sell-part"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          inputMode="decimal"
+          placeholder="2,000"
+          className="data w-32"
+        />
+        <Button type="submit" size="sm" disabled={!valid}>
+          Plan it
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Tax Center → Raise Cash picks the {symbol} purchases that cost the least tax
+        {portfolios.length > 1 && scopeName ? `, at the ${scopeName} portfolio's rates` : ""}
+        {switching ? ` (it switches you to ${scopeName})` : ""}.
+      </p>
+    </form>
   );
 }
 

@@ -81,6 +81,7 @@ export function WithdrawalSection({
                     ...s,
                     amountInput: String(pace.usualUsd),
                     target: pace.usualUsd,
+                    only: undefined,
                   }))
                 }
               >

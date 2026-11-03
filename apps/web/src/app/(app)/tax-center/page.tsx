@@ -12,7 +12,12 @@ import { RaiseCashTab } from "@/components/tax-center/raise-cash-tab";
 import { TaxProfileTab } from "@/components/tax-center/tax-profile-tab";
 import { useIncome } from "@/components/tax-center/use-income";
 import { HARVEST_DEFAULT, HARVEST_KEY, type HarvestState } from "@/lib/harvest-state";
-import { RAISE_CASH_DEFAULT, RAISE_CASH_KEY, type RaiseCashState } from "@/lib/raise-cash-state";
+import {
+  RAISE_CASH_DEFAULT,
+  RAISE_CASH_KEY,
+  raiseCashDoNotSell,
+  type RaiseCashState,
+} from "@/lib/raise-cash-state";
 import { useTRPC } from "@/lib/trpc";
 import { readStored } from "@/lib/use-stored-state";
 
@@ -65,7 +70,7 @@ export default function TaxCenterPage({
           trpc.tax.plan.queryOptions({
             ...scope,
             targetProceeds: raise.target,
-            doNotSell: raise.doNotSell,
+            doNotSell: raiseCashDoNotSell(raise, [...new Set(lots.map((l) => l.symbol))].sort()),
             accountId,
           }),
         );
