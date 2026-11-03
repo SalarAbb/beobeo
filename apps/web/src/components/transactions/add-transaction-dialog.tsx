@@ -114,7 +114,7 @@ export function AddTransactionDialog({
   trigger,
 }: {
   /** Gets the saved row, so a list can point at it. */
-  onCreated?: (txn: { id: string; assetId: string; accountId: string }) => void;
+  onCreated?: (txn: { id: string; assetId: string; accountId: string; type: string }) => void;
   /** Accounts still being created (welcome step 2): the form opens at once,
    *  and a Save that beats them waits for them instead of making "Default". */
   accountsPending?: Promise<unknown> | null;

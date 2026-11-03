@@ -17,18 +17,20 @@ const positiveDecimalString = z
     message: "must be positive",
   });
 
+const transactionType = z.enum([
+  "buy",
+  "sell",
+  "dividend",
+  "split",
+  "transfer_in",
+  "transfer_out",
+  "fee",
+]);
+
 export const transactionInput = z.object({
   accountId: z.uuid(),
   assetId: z.uuid(),
-  type: z.enum([
-    "buy",
-    "sell",
-    "dividend",
-    "split",
-    "transfer_in",
-    "transfer_out",
-    "fee",
-  ]),
+  type: transactionType,
   quantity: positiveDecimalString,
   pricePerUnit: decimalString.nullable(),
   fees: decimalString.default("0"),
@@ -45,6 +47,8 @@ export const transactionsRouter = router({
           assetId: z.uuid().optional(),
           accountId: z.uuid().optional(),
           portfolioId: z.uuid().optional(),
+          /** Only these kinds ("just the buys", olenna, mission 136). */
+          types: z.array(transactionType).max(7).optional(),
           limit: z.number().int().min(1).max(500).default(200),
         })
         .default({ limit: 200 }),

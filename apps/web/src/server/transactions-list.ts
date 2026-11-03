@@ -1,6 +1,8 @@
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@beobeo/db";
 import { sharedRun, userCacheKey } from "./cache";
+
+type TransactionType = (typeof schema.transactions.$inferSelect)["type"];
 
 /**
  * The Transactions page's three reads, shared by the routers and the page's
@@ -16,7 +18,13 @@ const LINGER = { lingerMs: 5_000 };
 
 export function loadTransactionList(
   userId: string,
-  input: { assetId?: string; accountId?: string; portfolioId?: string; limit: number },
+  input: {
+    assetId?: string;
+    accountId?: string;
+    portfolioId?: string;
+    types?: TransactionType[];
+    limit: number;
+  },
 ) {
   const key = userCacheKey(
     userId,
@@ -24,6 +32,7 @@ export function loadTransactionList(
     input.portfolioId ?? "all",
     input.assetId ?? "-",
     input.accountId ?? "-",
+    input.types?.length ? [...input.types].sort().join("+") : "-",
     String(input.limit),
   );
   return sharedRun(key, async () => {
@@ -31,6 +40,7 @@ export function loadTransactionList(
     if (input.assetId) conditions.push(eq(schema.transactions.assetId, input.assetId));
     if (input.accountId) conditions.push(eq(schema.transactions.accountId, input.accountId));
     if (input.portfolioId) conditions.push(eq(schema.accounts.portfolioId, input.portfolioId));
+    if (input.types?.length) conditions.push(inArray(schema.transactions.type, input.types));
     return db
       .select({
         txn: schema.transactions,

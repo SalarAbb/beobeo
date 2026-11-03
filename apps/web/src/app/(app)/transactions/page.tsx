@@ -47,6 +47,21 @@ const TYPE_PILL: Record<string, string> = {
   fee: "border text-muted-foreground",
 };
 
+/** The list's kind filter: olenna couldn't spot a wrong buy among 46 buys and
+ *  payouts mixed together (mission 136). */
+const TYPE_FILTERS = {
+  buy: { label: "Buys", noun: "buys", types: ["buy"] },
+  sell: { label: "Sales", noun: "sales", types: ["sell"] },
+  dividend: { label: "Dividends", noun: "dividends", types: ["dividend"] },
+  other: {
+    label: "Splits, transfers, fees",
+    noun: "splits, transfers and fees",
+    types: ["split", "transfer_in", "transfer_out", "fee"],
+  },
+} as const satisfies Record<string, { label: string; noun: string; types: readonly TransactionType[] }>;
+type TransactionType = TransactionRow["txn"]["type"];
+type TypeFilter = keyof typeof TYPE_FILTERS;
+
 const fmtMoney = (v: string | null) =>
   v === null
     ? "—"
@@ -94,12 +109,15 @@ export default function TransactionsPage({
     trpc.accounts.list.queryOptions({ portfolioId: portfolioId ?? undefined }),
   );
   const accountFilter = accounts.data?.find((a) => a.id === accountPick) ?? null;
+  const [typePick, setTypePick] = useState<TypeFilter | null>(null);
+  const typeFilter = typePick ? TYPE_FILTERS[typePick] : null;
   const list = useQuery({
     ...trpc.transactions.list.queryOptions({
       limit: 200,
       portfolioId: portfolioId ?? undefined,
       assetId: assetFilter?.id,
       accountId: accountFilter?.id,
+      types: typeFilter ? [...typeFilter.types] : undefined,
     }),
     // Switching the asset keeps the old rows (dimmed) instead of flashing a
     // loading line, but never across portfolios.
@@ -112,18 +130,21 @@ export default function TransactionsPage({
   // While a pick's rows load, the old list is narrowed to it at once: every
   // coin's rows under "23 O transactions" read as a filter that didn't apply
   // (olenna, mission 99).
-  const narrowing = list.isPlaceholderData && (assetFilter !== null || accountFilter !== null);
+  const filtered = assetFilter !== null || accountFilter !== null || typeFilter !== null;
+  const narrowing = list.isPlaceholderData && filtered;
   const rows = narrowing
     ? list.data?.filter(
         (r) =>
           (!assetFilter || r.asset.id === assetFilter.id) &&
-          (!accountFilter || r.account.id === accountFilter.id),
+          (!accountFilter || r.account.id === accountFilter.id) &&
+          (!typeFilter || (typeFilter.types as readonly string[]).includes(r.txn.type)),
       )
     : list.data;
-  // How many rows the pick will show, when the asset counts say (not per account).
-  const expected = assetFilter && !accountFilter ? Math.min(assetFilter.count, 200) : null;
-  // "your O transactions in Roth IRA", for the labels.
-  const what = `your ${assetFilter ? `${assetFilter.symbol} ` : ""}transactions${accountFilter ? ` in ${accountFilter.name}` : ""}`;
+  // How many rows the pick will show, when the asset counts say (not per account or kind).
+  const expected =
+    assetFilter && !accountFilter && !typeFilter ? Math.min(assetFilter.count, 200) : null;
+  // "your O buys in Roth IRA", for the labels.
+  const what = `your ${assetFilter ? `${assetFilter.symbol} ` : ""}${typeFilter?.noun ?? "transactions"}${accountFilter ? ` in ${accountFilter.name}` : ""}`;
   const remove = useMutation(trpc.transactions.remove.mutationOptions());
   const restore = useMutation(trpc.transactions.restore.mutationOptions());
   const update = useMutation(trpc.transactions.update.mutationOptions());
@@ -131,6 +152,10 @@ export default function TransactionsPage({
   const [pendingDelete, setPendingDelete] = useState<ReadonlySet<string>>(new Set());
   // Rows open their details; editing and deleting happen there.
   const [opened, setOpened] = useState<TransactionRow | null>(null);
+  // The row just typed in (or put back by Undo) is marked and scrolled to: a
+  // backdated payout lands below newer rows, and olenna went back and forth to
+  // find hers (missions 112, 113, 136).
+  const [marked, setMarked] = useState<{ id: string; tag: "just added" | "back" } | null>(null);
 
   const unhide = (id: string) =>
     setPendingDelete((s) => {
@@ -139,14 +164,18 @@ export default function TransactionsPage({
       return next;
     });
 
-  // Everything derived from transactions: the list, holdings, charts, tax.
-  const refreshAll = () =>
-    Promise.all([
-      queryClient.invalidateQueries({ queryKey: trpc.transactions.pathKey() }),
+  // Everything derived from transactions: the list, holdings, charts, tax. The
+  // returned promise is the list's alone: waiting on every recomputed
+  // holding kept an undone delete's row hidden and the "46 O transactions"
+  // count a step behind (olenna, mission 136).
+  const refreshAll = () => {
+    void Promise.all([
       queryClient.invalidateQueries({ queryKey: trpc.portfolio.pathKey() }),
       queryClient.invalidateQueries({ queryKey: trpc.tax.pathKey() }),
       queryClient.invalidateQueries({ queryKey: trpc.compare.pathKey() }),
     ]);
+    return queryClient.invalidateQueries({ queryKey: trpc.transactions.pathKey() });
+  };
 
   /** Deletes commit at once and "Undo" puts the row back. A delete that waited
    *  for its toast to close was lost when the page was left before then, and
@@ -183,6 +212,9 @@ export default function TransactionsPage({
 
   async function undoDelete(txn: TransactionRow["txn"], label: string, description: string) {
     const toastId = toast.loading(`Putting back ${label}…`, { description });
+    // An Undo tapped before the delete's refresh finished: the row is still in
+    // the list's data, only hidden.
+    unhide(txn.id);
     try {
       await restore.mutateAsync({
         id: txn.id,
@@ -196,11 +228,14 @@ export default function TransactionsPage({
         note: txn.note ?? undefined,
         source: txn.source,
       });
-      toast.success(`${label} is back`, { id: toastId, description });
     } catch {
       toast.error(`Couldn't put back ${label}`, { id: toastId, description });
+      return;
     }
-    await refreshAll();
+    // "is back" once the list shows it, not while it still reads as deleted.
+    await refreshAll().catch(() => {});
+    setMarked({ id: txn.id, tag: "back" });
+    toast.success(`${label} is back`, { id: toastId, description });
   }
 
   /** Saves an edit and offers to undo it (the old values go back). */
@@ -244,14 +279,12 @@ export default function TransactionsPage({
     await refreshAll();
   }
 
-  // The row just typed in is marked and scrolled to: a backdated payout lands
-  // below newer rows, and olenna went back and forth to find hers (missions 112, 113).
-  const [justAdded, setJustAdded] = useState<string | null>(null);
-  function onCreated(txn: { id: string; assetId: string; accountId: string }) {
-    setJustAdded(txn.id);
+  function onCreated(txn: { id: string; assetId: string; accountId: string; type: string }) {
+    setMarked({ id: txn.id, tag: "just added" });
     // A filter that would hide it steps aside.
     if (assetFilter && assetFilter.id !== txn.assetId) setAssetPick(null);
     if (accountFilter && accountFilter.id !== txn.accountId) setAccountPick(null);
+    if (typeFilter && !(typeFilter.types as readonly string[]).includes(txn.type)) setTypePick(null);
     void refresh();
   }
 
@@ -291,7 +324,7 @@ export default function TransactionsPage({
         }
       />
 
-      {((assets.data?.length ?? 0) > 1 || (accounts.data?.length ?? 0) > 1) && (
+      {((list.data?.length ?? 0) > 1 || filtered) && (
         <div className="-mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
           <span id="txn-show" className="eyebrow">
             Show
@@ -340,7 +373,26 @@ export default function TransactionsPage({
               </SelectContent>
             </Select>
           )}
-          {(assetFilter || accountFilter) && (
+          <Select
+            value={typePick ?? "all"}
+            onValueChange={(v) => setTypePick(v === "all" ? null : (v as TypeFilter))}
+          >
+            <SelectTrigger
+              aria-label="Kind"
+              className={cn("w-40", typeFilter && "bg-accent text-primary")}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All kinds</SelectItem>
+              {(Object.keys(TYPE_FILTERS) as TypeFilter[]).map((k) => (
+                <SelectItem key={k} value={k}>
+                  {TYPE_FILTERS[k].label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {filtered && (
             <span className="text-sm text-muted-foreground">
               {expected === null
                 ? `${(rows?.length ?? 0) >= 200 ? "The newest 200 of" : "All"} ${what}, newest first.`
@@ -353,6 +405,7 @@ export default function TransactionsPage({
                 onClick={() => {
                   setAssetPick(null);
                   setAccountPick(null);
+                  setTypePick(null);
                 }}
               >
                 Show all
@@ -369,7 +422,7 @@ export default function TransactionsPage({
           <TabError what={what} onRetry={() => void list.refetch()} />
         ) : (rows?.length ?? 0) === 0 ? (
           <div className="py-12 text-center text-sm text-muted-foreground">
-            {assetFilter || accountFilter
+            {filtered
               ? `No ${what.replace(/^your /, "")} yet.`
               : "No transactions yet. Add one manually or import a broker CSV."}
           </div>
@@ -390,8 +443,8 @@ export default function TransactionsPage({
               {rows!.filter(({ txn }) => !pendingDelete.has(txn.id)).map(({ txn, asset, account }) => (
                 <TableRow
                   key={txn.id}
-                  ref={txn.id === justAdded ? scrollToRow : undefined}
-                  className={cn("cursor-pointer", txn.id === justAdded && "bg-accent/60")}
+                  ref={txn.id === marked?.id ? scrollToRow : undefined}
+                  className={cn("cursor-pointer", txn.id === marked?.id && "bg-accent/60")}
                   onClick={() => setOpened({ txn, asset, account })}
                   // A sale's details replay the asset's sales; start it on the way to the click.
                   onPointerEnter={
@@ -426,9 +479,9 @@ export default function TransactionsPage({
                     >
                       {txn.type.replace("_", " ")}
                     </span>
-                    {txn.id === justAdded && (
+                    {txn.id === marked?.id && (
                       <span className="ml-1.5 rounded-full border border-primary/40 px-1.5 py-0.5 text-[11px] whitespace-nowrap text-primary">
-                        just added
+                        {marked.tag}
                       </span>
                     )}
                     {swapIds.has(txn.id) && (

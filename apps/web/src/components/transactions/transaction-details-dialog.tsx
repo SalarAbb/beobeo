@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import Link, { useLinkStatus } from "next/link";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import { DatePicker } from "@/components/date-picker";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/routers";
@@ -233,9 +234,7 @@ function Details({
         </div>
       ) : (
         <DialogFooter className="flex-row items-center justify-between sm:justify-between">
-          <Button variant="link" className="px-0" asChild>
-            <Link href={`/positions/${asset.id}`}>Open {asset.symbol}</Link>
-          </Button>
+          <OpenHolding assetId={asset.id} symbol={asset.symbol} portfolioId={portfolioId} />
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"
@@ -252,6 +251,45 @@ function Details({
         </DialogFooter>
       )}
     </>
+  );
+}
+
+/** The link to the holding's page warms its data on the way to the click and
+ *  says "Opening…" until the page is up: olenna tapped "Open O", saw the
+ *  dialog sit still, and tapped again (mission 136). */
+function OpenHolding({
+  assetId,
+  symbol,
+  portfolioId,
+}: {
+  assetId: string;
+  symbol: string;
+  portfolioId: string | undefined;
+}) {
+  const trpc = useTRPC();
+  const queryClient = useQueryClient();
+  const warm = () => {
+    void queryClient.prefetchQuery(trpc.portfolio.position.queryOptions({ assetId, portfolioId }));
+    // The page's "Held in <account>" line.
+    void queryClient.prefetchQuery(trpc.accounts.holdings.queryOptions({ portfolioId }));
+  };
+  return (
+    <Button variant="link" className="px-0" asChild>
+      <Link href={`/positions/${assetId}`} onPointerEnter={warm} onFocus={warm}>
+        <OpenHoldingLabel symbol={symbol} />
+      </Link>
+    </Button>
+  );
+}
+
+function OpenHoldingLabel({ symbol }: { symbol: string }) {
+  const { pending } = useLinkStatus();
+  return pending ? (
+    <span className="flex items-center gap-1.5">
+      <Loader2 className="size-3.5 animate-spin" aria-hidden /> Opening {symbol}…
+    </span>
+  ) : (
+    <>Open {symbol}</>
   );
 }
 
