@@ -25,10 +25,13 @@ running — ask the user to `pnpm dev` if it isn't) then `pnpm sim:digest`.
    (read the report for it, the git log won't show it). The evening digest adds that evening's
    missions, which tried the morning's changes: check them first.
 2. `REQUESTS.md` — the user's own asks.
-3. `PLAN.md` — **Principles are binding.** When an ask conflicts with a principle, the principle
+3. `PLAN.md` up to the Evolution log only (`sed -n '1,/^## Evolution log/p' PLAN.md`; the log
+   itself is history, 100+ KB, and today's entries are in the report). **Principles are binding.** When an ask conflicts with a principle, the principle
    wins and the theme gets `wontfix` with a note.
 4. The digest. Look at screenshots it cites (Read the PNGs) for any UI theme you act on.
-5. `CLAUDE.md` — conventions, gotchas, rules (money is Decimal, multi-tenancy, viz tokens, cache invalidation…).
+5. `CLAUDE.md` (already loaded) — the rules. Before changing an area, read that area's section of
+   `docs/notes.md` (`grep -n "<topic>" docs/notes.md`, then read around it), not the whole file:
+   it records why things are as they are, including designs the user rejected.
 
 ## 2. Pick the ONE next item
 - **Odd rounds: the user's top request** whose status is `open` or `in progress`. Take the next
@@ -60,7 +63,9 @@ running — ask the user to `pnpm dev` if it isn't) then `pnpm sim:digest`.
   hot-reloads your edits) and Read the images — light, dark and mobile. Fix what looks wrong.
 - **If you can't get it green**, don't commit broken work: `git stash push -u -m "abandoned: <item>"`
   (recoverable), note it under "Considered, not done", and move on.
-- Update `CLAUDE.md` for anything technical that changed (non-negotiable — see its header).
+- Update `CLAUDE.md` for anything technical that changed (non-negotiable — see its header): the
+  rule or fact in a line or two. The story behind it (incident, mission, measurements) goes in
+  `docs/notes.md` under the matching heading, never in `CLAUDE.md`.
   Append one entry to `PLAN.md` → Evolution log for this item (newest first):
   `- **<today> · <short title>.** what changed · request or theme keys · expected signal`.
   Re-rank/trim the PLAN.md backlog if priorities changed; keep the **Capability map** accurate.

@@ -278,12 +278,12 @@ function dayData(date: string, idx: number) {
       date,
     )
     .map((m) => {
-      const v = m.verdict ? (JSON.parse(m.verdict) as { debrief?: { issues?: { title: string; severity: number; expected: string; actual: string }[]; trusted?: boolean; suggestion?: string | null } }) : null;
+      const v = m.verdict ? (JSON.parse(m.verdict) as { plan?: { misbelief?: string | null }; outOfSteps?: boolean; debrief?: { issues?: { title: string; severity: number; expected: string; actual: string }[]; trusted?: boolean; suggestion?: string | null } }) : null;
       const path = j
         .all<{ detail: string }>("SELECT detail FROM actions WHERE kind = 'mission_step' AND json_extract(detail, '$.missionId') = ? ORDER BY id", m.id)
         .map((r) => JSON.parse(r.detail) as { route: string; action: { kind: string; text: string | null }; error: string | null; surprise: string | null });
       const { verdict: _v, ...rest } = m;
-      return { ...rest, issues: v?.debrief?.issues ?? [], trusted: v?.debrief?.trusted ?? null, suggestion: v?.debrief?.suggestion ?? null, path: path.map((s) => ({ route: s.route, kind: s.action.kind, text: s.action.text, error: !!s.error, surprise: s.surprise })) };
+      return { ...rest, issues: v?.debrief?.issues ?? [], trusted: v?.debrief?.trusted ?? null, suggestion: v?.debrief?.suggestion ?? null, outOfSteps: v?.outOfSteps ?? false, misbelief: v?.plan?.misbelief ?? null, path: path.map((s) => ({ route: s.route, kind: s.action.kind, text: s.action.text, error: !!s.error, surprise: s.surprise })) };
     });
 
   return {

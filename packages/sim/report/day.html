@@ -165,8 +165,9 @@ $("voices").innerHTML = D.voices.map((v) => `<article class="voice">
 const statusPill = { achieved: "good", struggled: "warn", failed: "bad", aborted: "none", running: "none" };
 $("missions").innerHTML = D.missions.length ? D.missions.map((m) => `<article class="mission">
   <div class="mhead"><b>${esc(byId[m.persona]?.name ?? m.persona)}</b><span class="mono muted">${esc(m.feature)}${m.viewport === "mobile" ? " · on a phone" : ""}</span>
-    <span class="pill ${statusPill[m.status] ?? "none"}">${esc(m.status)}</span>${m.difficulty ? `<span class="muted" style="font-size:12.5px">difficulty ${m.difficulty}/5</span>` : ""}${m.trusted === false ? `<span class="pill bad">didn't trust the numbers</span>` : ""}</div>
+    <span class="pill ${statusPill[m.status] ?? "none"}">${esc(m.status)}</span>${m.difficulty ? `<span class="muted" style="font-size:12.5px">difficulty ${m.difficulty}/5</span>` : ""}${m.trusted === false ? `<span class="pill bad">didn't trust the numbers</span>` : ""}${m.outOfSteps ? `<span class="pill none" title="Used every step before finishing: a limit of the test, not the app">ran out of steps</span>` : ""}</div>
   <p class="quote">${esc(m.goal)}</p>
+  ${m.misbelief ? `<p class="muted" style="font-size:13px">Started from a planted mistake: ${esc(m.misbelief)}</p>` : ""}
   ${m.summary ? `<p class="ink2" style="font-size:14px">${esc(m.summary)}</p>` : ""}
   <div class="path">${m.path.map((s, i) => `${i ? "<i>→</i>" : ""}<span class="${s.error ? "err" : s.surprise ? "sur" : ""}" title="${esc(s.surprise ?? s.route)}">${esc(s.kind === "type" ? `type "${(s.text ?? "").slice(0, 18)}"` : s.kind === "goto" ? s.text ?? s.route : s.kind)}</span>`).join("")}</div>
   ${m.issues.length ? `<ul class="checks">${m.issues.map((i) => `<li><span class="pill ${i.severity >= 4 ? "bad" : "warn"}">sev ${i.severity}</span><span>${esc(i.title)}</span><small>Expected: ${esc(i.expected)} · Got: ${esc(i.actual)}</small></li>`).join("")}</ul>` : ""}

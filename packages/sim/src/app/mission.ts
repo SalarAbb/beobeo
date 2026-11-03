@@ -19,7 +19,12 @@ import { APP_URL } from "./client";
  * the persona's data (`cloneSimUser`), so it may save, edit, delete and import freely.
  */
 
-const MAX_STEPS = Number(process.env.SIM_MISSION_MAX_STEPS || 18);
+// 18 left 11 of 80 missions (Oct 29–Nov 2) stopped mid-task with the goal in reach.
+const MAX_STEPS = Number(process.env.SIM_MISSION_MAX_STEPS || 24);
+/** About one mission in six starts from something the persona misremembers, labeled
+ *  as such, so the app is judged on how it corrects a confused user instead of the
+ *  mission counting as a failure (olenna hunted a duplicate buy that never existed). */
+const MISBELIEF_SHARE = 1 / 6;
 
 // ---------------------------------------------------------------- what the persona sees
 
@@ -215,14 +220,15 @@ export const planSchema = z.object({
   goal: z.string().describe("Your concrete goal in first person, with real specifics from YOUR situation (amounts, symbols you hold, dates). One or two sentences."),
   expectation: z.string().describe("What you'd expect to see if the app handles this well."),
   checks: z.string().describe("What you'll double-check before trusting the result (a number to verify, a total that should add up, a rule you know)."),
+  misbelief: z.string().nullable().describe("Only when asked to misremember something: the one thing you believe that isn't true. Otherwise null."),
 });
 export type Plan = z.infer<typeof planSchema>;
 
 export const debriefSchema = z.object({
-  status: z.enum(["achieved", "struggled", "failed"]).catch("struggled").describe("achieved = done without real trouble; struggled = done but it was hard or you're not sure it's right; failed = couldn't do it or gave up"),
+  status: z.enum(["achieved", "struggled", "failed"]).catch("struggled").describe("ONLY whether you got the task done: achieved = done without real trouble; struggled = done, but getting there was hard; failed = couldn't do it or gave up. A number you couldn't verify or didn't trust does NOT change this: put that in `trusted` and `issues`."),
   difficulty: z.number().int().min(1).max(5).describe("1 = effortless, 5 = gave up"),
   summary: z.string().describe("Two sentences in your voice: what you tried and how it went."),
-  trusted: z.boolean().describe("Do you trust the numbers you ended up with? Did your checks pass?"),
+  trusted: z.boolean().describe("Do you trust the numbers you ended up with? Did your checks pass? Judged separately from status."),
   issues: z
     .array(
       feedbackItem.extend({
@@ -249,6 +255,16 @@ Each turn you get the current screen: its controls (with refs) and its text, plu
 
 function brief(feature: Feature, plan: Plan): string {
   return `YOUR MISSION (${feature.id}): ${plan.goal}\nYou'd expect: ${plan.expectation}\nYou'll double-check: ${plan.checks}`;
+}
+
+/** The mission used every step without choosing "finish". */
+const ranOut = (taken: number, max: number, finished: boolean) => !finished && taken >= max;
+
+/** A number in [0, 1) from a string, stable across runs (FNV-1a). */
+function seeded(key: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 0x01000193);
+  return (h >>> 0) / 2 ** 32;
 }
 
 // ---------------------------------------------------------------- the mission loop
@@ -285,6 +301,8 @@ export async function runMission(
   const llm = { journal, runId, personaId: p.id, reserveUsd: 0.5 };
   const system = `${personaSystem(p)}\n${MISSION_RULES}`;
 
+  // Seeded by persona, date and feature, so a re-run asks for the same plan.
+  const misremember = seeded(`${p.id}:${o.date}:${feature.id}`) < MISBELIEF_SHARE;
   const plan = await askStructured({
     ...llm,
     purpose: "mission_plan",
@@ -293,6 +311,8 @@ export async function runMission(
     estimateUsd: 0.02,
     content: `Today is ${o.date}. You open Beobeo because you want to: ${feature.does}.
 Make it concrete and real for YOU: what exactly do you want to find out or get done today? Use your real holdings and numbers.
+Every fact you state about your own account (a holding, an amount, a date, a duplicate, a rate you expect) must come from what's listed below or from your profile. Don't invent one: a goal built on something untrue can't be judged.${misremember ? `
+This time you misremember ONE thing about your own account, the way people do (a buy you think you entered twice, an amount or date that's a bit off, a rate you assume). Build the goal around checking it, and name the false belief in "misbelief".` : ` Set "misbelief" to null.`}
 
 What the app currently shows you hold:
 ${o.holdingsBrief}${o.csvFile ? `\n\nYou have a CSV export of your recent stock trades on your computer (${o.csvFile.split("/").pop()}). It's in Robinhood's export format (your broker's own export isn't one the app reads yet, so you converted it), and it overlaps with trades you've already entered.${o.csvNote ? ` ${o.csvNote}` : ""}` : ""}`,
@@ -333,6 +353,7 @@ ${o.holdingsBrief}${o.csvFile ? `\n\nYou have a CSV export of your recent stock 
     // Setup with two holdings and a Tax Profile check needs ~25 steps: at 18,
     // every such run stopped mid-second-holding (missions 129–131).
     const maxSteps = Math.max(MAX_STEPS, feature.maxSteps ?? 0);
+    let finished = false;
     for (let i = 1; i <= maxSteps; i++) {
       const obs = await observe(page);
       const shot = join(o.outDir, `mission-${missionId}-${String(i).padStart(2, "0")}.jpg`);
@@ -377,7 +398,10 @@ ${o.holdingsBrief}${o.csvFile ? `\n\nYou have a CSV export of your recent stock 
       steps.push({ i, route: obs.route, action: step.action, expect: step.expect, noticed: step.noticed, surprise: step.surprise, error, ms: lastMs, shot });
       journal.action({ runId, personaId: p.id, simDate: o.date, kind: "mission_step", detail: { missionId, ...steps.at(-1)! }, ok: !error, error: error ?? undefined, latencyMs: lastMs });
       console.log(`      ${String(i).padStart(2)}. ${obs.route.padEnd(14)} ${step.action.kind}${step.action.ref ? ` ${step.action.ref}` : ""}${step.action.text ? ` "${step.action.text.slice(0, 40)}"` : ""}${error ? `  ✗ ${error.slice(0, 80)}` : ""}${step.surprise ? `  ⚑ ${step.surprise.slice(0, 80)}` : ""}`);
-      if (step.action.kind === "finish") break;
+      if (step.action.kind === "finish") {
+        finished = true;
+        break;
+      }
       failures = error ? failures + 1 : 0;
       if (failures >= 3) break;
     }
@@ -403,7 +427,9 @@ ${o.holdingsBrief}${o.csvFile ? `\n\nYou have a CSV export of your recent stock 
   ${log || "(nothing: you couldn't get started)"}
   ${appErrors.length ? `\nErrors the app reported behind the scenes: ${appErrors.map((e) => `${e.message} on ${e.route}`).join("; ")}` : ""}
 
-  The screenshot is where you ended up. Look back honestly: did you get it done, was it right, what got in your way?
+  The screenshot is where you ended up. Look back honestly: did you get it done, was it right, what got in your way?${ranOut(steps.length, maxSteps, finished) ? `
+  You ran out of time (the step limit) before you finished. That's a limit of this session, not something the app did: judge only what you got to, and don't report "never got to X" as a problem.` : ""}${plan.misbelief ? `
+  You started out believing something that isn't true: ${plan.misbelief}. If the app showed you the truth clearly and you could see you'd misremembered, that counts as achieved. Report a problem only if the app made it hard to see.` : ""}
 
   Existing feedback themes (reuse a key when it's the same problem):
   ${o.themes}`,
@@ -413,7 +439,8 @@ ${o.holdingsBrief}${o.csvFile ? `\n\nYou have a CSV export of your recent stock 
     await page.close();
     const ms = performance.now() - t0;
     const status = debrief?.status ?? "aborted";
-    journal.finishMission(missionId, { status, difficulty: debrief?.difficulty ?? null, steps: steps.length, ms, summary: debrief?.summary ?? "(no debrief)", verdict: { plan, debrief, appErrors } });
+    const outOfSteps = ranOut(steps.length, maxSteps, finished);
+    journal.finishMission(missionId, { status, difficulty: debrief?.difficulty ?? null, steps: steps.length, ms, summary: debrief?.summary ?? "(no debrief)", verdict: { plan, debrief, appErrors, outOfSteps } });
     writeFileSync(join(o.outDir, `mission-${missionId}.json`), JSON.stringify({ persona: p.id, feature: feature.id, plan, steps, debrief, appErrors }, null, 2));
     return { missionId, plan, steps, debrief, appErrors, ms };
   } catch (e) {
