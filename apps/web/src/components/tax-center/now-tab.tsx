@@ -312,14 +312,32 @@ function SavingMath({
  * their tax number and called this page wrong (barristan: "$11,589 here but I
  * was told $23,857", `tax-center-realized-gains-mismatch`).
  */
-function SalesBehindTotals({ data: d }: { data: Now }) {
+function SalesBehindTotals({
+  data: d,
+  onAddOutside,
+}: {
+  data: Now;
+  /** Opens Tax Profile, where sales made outside the app are added. */
+  onAddOutside: () => void;
+}) {
   const sales = d.ytdSales;
   const allTime = d.dashboardRealized?.allTime ?? null;
   const salesSum = sales.reduce((s, x) => s + x.shortTermGain + x.longTermGain, 0);
   const iraGain = d.ytdTaxAdvantagedGain;
   const showsAllTime = allTime !== null && Math.abs(allTime - salesSum) >= 1;
   const showsIra = Math.abs(iraGain) >= 1;
-  if (sales.length === 0 && !showsAllTime) return null;
+  const addOutside = (
+    <button
+      type="button"
+      onClick={onAddOutside}
+      className="underline underline-offset-2 hover:text-foreground"
+    >
+      Add it in Tax Profile
+    </button>
+  );
+  if (sales.length === 0 && !showsAllTime) {
+    return <p className="text-sm text-muted-foreground">Sold something outside this app? {addOutside}.</p>;
+  }
   const earlier = allTime === null ? 0 : allTime - salesSum - iraGain;
   const bridge = [
     ...(sales.length > 0 ? [{ label: `this year (the two gains above)`, usd: salesSum }] : []),
@@ -355,9 +373,13 @@ function SalesBehindTotals({ data: d }: { data: Now }) {
             = <span className="data">{fmtUsd(allTime, 0)}</span>. Only this year&apos;s sales in
             taxable accounts are taxed this year.
           </>
-        )}
+        )}{" "}
+        Sold something outside this app? {addOutside}.
       </p>
-      {sales.length > 0 && (
+      {/* One list, never two: when the all-time list shows, it already holds
+          this year's sales as its first group (two "Show…" links read as
+          two different sets of sales). */}
+      {sales.length > 0 && !(showsAllTime && d.allSales.length > 0) && (
         <details className="group">
           <summary className="w-fit cursor-pointer text-primary marker:text-muted-foreground">
             Show the{" "}
@@ -403,7 +425,7 @@ function SalesBehindTotals({ data: d }: { data: Now }) {
         </details>
       )}
       {showsAllTime && d.allSales.length > 0 && (
-        <AllTimeSales sales={d.allSales} dashboardTotal={allTime} />
+        <AllTimeSales sales={d.allSales} dashboardTotal={allTime} thisYear={sales.length} />
       )}
     </div>
   );
@@ -415,7 +437,16 @@ function SalesBehindTotals({ data: d }: { data: Now }) {
  * (mission 104) read "counts every year" and still couldn't tie his −$1,523
  * to anything: "Show me the sales that add up to that number."
  */
-function AllTimeSales({ sales, dashboardTotal }: { sales: Now["allSales"]; dashboardTotal: number }) {
+function AllTimeSales({
+  sales,
+  dashboardTotal,
+  thisYear,
+}: {
+  sales: Now["allSales"];
+  dashboardTotal: number;
+  /** This year's taxable sales, the first group of the list. */
+  thisYear: number;
+}) {
   const gainOf = (s: Now["allSales"][number]) => s.shortTermGain + s.longTermGain;
   const years = new Map<string, Now["allSales"]>();
   for (const s of sales) {
@@ -426,14 +457,18 @@ function AllTimeSales({ sales, dashboardTotal }: { sales: Now["allSales"]; dashb
   return (
     <details className="group">
       <summary className="w-fit cursor-pointer text-primary marker:text-muted-foreground">
-        Show {sales.length === 1 ? "the sale" : <>all <span className="data">{sales.length}</span> sales</>}
-        {Math.abs(total - dashboardTotal) < 1 ? (
+        Show the sales
+        {thisYear > 0 && (
+          <>
+            : <span className="data">{thisYear}</span> taxed this year
+          </>
+        )}
+        , <span className="data">{sales.length}</span> in all
+        {Math.abs(total - dashboardTotal) < 1 && (
           <>
             {" "}
-            behind the Dashboard&apos;s <span className="data">{fmtUsd(dashboardTotal, 0)}</span>
+            (the Dashboard&apos;s <span className="data">{fmtUsd(dashboardTotal, 0)}</span>)
           </>
-        ) : (
-          ", every year"
         )}
       </summary>
       <div className="mt-2 grid gap-3">
@@ -848,20 +883,8 @@ export function NowTab({
           </StatStrip>
         )}
 
-        <SalesBehindTotals data={d} />
+        <SalesBehindTotals data={d} onAddOutside={() => onNavigate("profile")} />
 
-        <p className="text-xs text-muted-foreground">
-          {hasSales
-            ? "Every number here builds on these gains. Sold something outside this app?"
-            : "Sold something outside this app?"}{" "}
-          <button
-            type="button"
-            onClick={() => onNavigate("profile")}
-            className="underline underline-offset-2 hover:text-foreground"
-          >
-            Add it in Tax Profile
-          </button>
-        </p>
       </div>
 
       {moves.length > 0 && (
