@@ -308,7 +308,8 @@ function SavingMath({
 
 /**
  * Ties the year's totals to the sales they add up from, and to the
- * Dashboard's all-time "Gain from sales" tile: personas read that tile as
+ * Dashboard's "Net gain from sales" tile (this year, retirement accounts
+ * included; all time under it): personas once read an all-time tile as
  * their tax number and called this page wrong (barristan: "$11,589 here but I
  * was told $23,857", `tax-center-realized-gains-mismatch`).
  */
@@ -338,12 +339,6 @@ function SalesBehindTotals({
   if (sales.length === 0 && !showsAllTime) {
     return <p className="text-sm text-muted-foreground">Sold something outside this app? {addOutside}.</p>;
   }
-  const earlier = allTime === null ? 0 : allTime - salesSum - iraGain;
-  const bridge = [
-    ...(sales.length > 0 ? [{ label: `this year (the two gains above)`, usd: salesSum }] : []),
-    ...(showsIra ? [{ label: "this year in retirement accounts (not taxed)", usd: iraGain }] : []),
-    ...(Math.abs(earlier) >= 1 ? [{ label: "in earlier years", usd: earlier }] : []),
-  ];
 
   return (
     <div className="grid gap-2 text-sm">
@@ -357,21 +352,15 @@ function SalesBehindTotals({
         ) : (
           <>You haven&apos;t sold anything in a taxable account in {d.taxYear}.</>
         )}
-        {showsAllTime && (
+        {/* The Dashboard's tile is this year's net gain from sales, retirement
+            accounts included; say what the difference is when there is one. */}
+        {showsIra && (
           <>
             {" "}
-            {/* Spelled out as a sum of parts this page shows, because the
-                Dashboard's figure isn't on this page: "counts every year"
-                named a $12,510 the user couldn't find anywhere here. */}
-            The Dashboard&apos;s Gain from sales is all-time:{" "}
-            {bridge.map((part, i) => (
-              <Fragment key={part.label}>
-                {i > 0 && " + "}
-                <span className="data">{fmtUsd(part.usd, 0)}</span> {part.label}
-              </Fragment>
-            ))}{" "}
-            = <span className="data">{fmtUsd(allTime, 0)}</span>. Only this year&apos;s sales in
-            taxable accounts are taxed this year.
+            The Dashboard&apos;s net gain from sales this year,{" "}
+            <span className="data">{fmtUsd(salesSum + iraGain, 0)}</span>, also counts{" "}
+            <span className="data">{fmtUsd(iraGain, 0)}</span> from sales inside retirement
+            accounts, which aren&apos;t taxed.
           </>
         )}{" "}
         Sold something outside this app? {addOutside}.
@@ -467,7 +456,8 @@ function AllTimeSales({
         {Math.abs(total - dashboardTotal) < 1 && (
           <>
             {" "}
-            (the Dashboard&apos;s <span className="data">{fmtUsd(dashboardTotal, 0)}</span>)
+            (all time <span className="data">{fmtUsd(dashboardTotal, 0)}</span>, as on the
+            Dashboard)
           </>
         )}
       </summary>

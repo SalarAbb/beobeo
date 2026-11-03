@@ -767,12 +767,12 @@ export default function DashboardPage() {
           />
         )}
         <StatTile
-          label={windowed ? `Gain from sales · ${windowLabel}` : "Gain from sales"}
-          value={fmtUsd(totals.realized)}
-          tone={gainClass(totals.realized)}
-          // All time on its own reads as "this year" next to the Tax Center
-          // and chat (personas asked which one to put on their taxes). With
-          // nothing sold, "All time · $0.00 this year" was two zeros to decode.
+          // This year's net (gains minus losses) on the All window: the
+          // figure people look for at tax time (the user's call, 2026-11-03);
+          // all time moved to the sub-line.
+          label={`Net gain from sales · ${windowed ? windowLabel : totals.thisYear}`}
+          value={fmtUsd(windowed ? totals.realized : totals.realizedThisYear)}
+          tone={gainClass(windowed ? totals.realized : totals.realizedThisYear)}
           sub={
             windowed
               ? undefined
@@ -782,7 +782,7 @@ export default function DashboardPage() {
                   // The sales it adds up from (petyr, mission 104: "Show me
                   // the sales that add up to that number").
                   <>
-                    All time · {fmtUsd(totals.realizedThisYear)} this year ·{" "}
+                    All time {fmtUsd(totals.realized)} ·{" "}
                     <Link href="/tax-center?tab=now" className="underline underline-offset-2">
                       see the sales
                     </Link>

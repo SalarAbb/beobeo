@@ -470,6 +470,8 @@ async function computeOverviewUncached(
       realized: totalRealized,
       /** Realized gains in this calendar year, whatever the window. */
       realizedThisYear,
+      /** That calendar year (UTC), for the tile's label. */
+      thisYear: Number(thisYear),
       dividends: totalDividends,
       /** Flow-adjusted portfolio gain over the window (includes positions
        *  closed during it); null when window="all". */

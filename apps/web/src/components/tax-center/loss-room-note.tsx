@@ -73,8 +73,8 @@ function AllTimeTie({ taxYear }: { taxYear: number }) {
   if (!r || Math.abs(r.allTime - r.thisYear) < 1) return null;
   return (
     <p>
-      The Dashboard&apos;s Gain from sales, <span className="data">{fmtUsd(r.allTime, 0)}</span>,
-      counts every year
+      The all-time figure under the Dashboard&apos;s Net gain from sales,{" "}
+      <span className="data">{fmtUsd(r.allTime, 0)}</span>, counts every year
       {Math.abs(r.thisYear) >= 1 ? (
         <>
           {" "}

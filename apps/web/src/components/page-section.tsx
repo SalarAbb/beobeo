@@ -89,7 +89,8 @@ export function StatTile({
 }) {
   return (
     <div className={`min-w-0 bg-card px-4 py-4 sm:px-5 ${className ?? ""}`}>
-      <p className="eyebrow truncate">{label}</p>
+      {/* Wraps instead of truncating: "Net gain from sales · 2026" ended in "…" on a phone. */}
+      <p className="eyebrow text-balance">{label}</p>
       <p
         className={`figure mt-2 truncate ${hero ? "text-[22px] sm:text-[28px]" : "text-xl"} ${tone ?? ""}`}
       >
