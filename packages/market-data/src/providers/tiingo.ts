@@ -105,7 +105,11 @@ export class TiingoProvider implements PriceProvider {
     if (assets.length === 0) return new Map();
     const tickers = assets.map((a) => encodeURIComponent(a.symbol.toLowerCase())).join(",");
     const url = `https://api.tiingo.com/iex/?tickers=${tickers}&token=${this.apiKey}`;
-    const raw = await this.request(url, this.interactiveThrottle);
+    // Not held back by a pause another call set off: the dashboard's dividend
+    // lookups (one per holding) hit the hourly cap, and the pause then kept a
+    // 22-holding user on the previous close all day while Tiingo itself was
+    // still answering quotes (2026-11-05). A real refusal costs one request.
+    const raw = await this.request(url, this.interactiveThrottle, { ignorePause: true });
     const rows = z
       .array(
         z.object({
@@ -126,8 +130,9 @@ export class TiingoProvider implements PriceProvider {
   private async request(
     url: string,
     throttle: Throttle = this.throttle,
+    opts: { ignorePause?: boolean } = {},
   ): Promise<unknown> {
-    const limited = () => Date.now() < this.limitedUntil;
+    const limited = () => !opts.ignorePause && Date.now() < this.limitedUntil;
     return throttle.run(async () => {
       if (limited()) throw new ProviderError(this.name, "RATE_LIMITED", "rate limited (pausing)");
       const res = await this.fetchImpl(url, {

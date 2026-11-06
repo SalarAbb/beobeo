@@ -112,6 +112,24 @@ describe("TiingoProvider", () => {
     expect(quotes).toEqual(new Map([["VTI", "377.5"], ["BND", "72.1"]]));
   });
 
+  it("still asks for live quotes while a rate-limit pause holds other calls back", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({}, 429))
+      .mockResolvedValue(jsonResponse([{ ticker: "VTI", last: 377.5 }]));
+    const provider = new TiingoProvider("key", mockFetch);
+    await expect(
+      provider.getDailyCloses({ symbol: "VTI", class: "etf" }, "2024-01-01", "2024-01-05"),
+    ).rejects.toMatchObject({ kind: "RATE_LIMITED" });
+    // Paused: a daily-close call fails without a request…
+    await expect(
+      provider.getDailyCloses({ symbol: "VTI", class: "etf" }, "2024-01-01", "2024-01-05"),
+    ).rejects.toMatchObject({ kind: "RATE_LIMITED" });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    // …but a live quote still goes out.
+    expect(await provider.getIntradayQuote({ symbol: "VTI", class: "etf" })).toBe("377.5");
+  });
+
   it("gives every request a deadline, so a hung call can't hold the throttle", async () => {
     const mockFetch = vi.fn().mockResolvedValue(jsonResponse([]));
     await new TiingoProvider("key", mockFetch).search("app");
