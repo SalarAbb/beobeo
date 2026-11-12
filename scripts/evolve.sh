@@ -26,7 +26,7 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$PATH"   # launch
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 SIM_HOME="${SIM_HOME:-$HOME/beobeo-sim}"
 WT="${EVOLVE_WORKTREE:-$(dirname "$REPO")/beobeo-evolve}"
-BASE="${EVOLVE_BASE:-salarabb/phase_1}"
+BASE="${EVOLVE_BASE:-main}"
 SIM_PORT="${SIM_PORT:-3100}"
 DATE="$(date +%F)"
 SIM_ONLY=0; [[ "${1:-}" == "--sim-only" ]] && SIM_ONLY=1

@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="A personal portfolio tracker built via a fully automated self-improving loop: user agents test the app and file feedback, developer agents implement fixes.">
+<meta property="og:title" content="The Beobeo Loop">
+<meta property="og:description" content="A personal portfolio tracker built via a fully automated self-improving loop: user agents test the app and file feedback, developer agents implement fixes.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://salarabb.github.io/beobeo/">
+<meta property="og:image" content="https://salarabb.github.io/beobeo/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>body{margin:0}[hidden]{display:none!important}img{max-width:100%}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>The Beobeo Loop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap">
+<style>
+/* Layout: one calm column (Beobeo's own identity: indigo-biased neutrals, one ai-iro accent);
+   the loop ring is the hero, the people who drive it follow, then evidence. */
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --ink: #15171c;
+  --ink-2: #4a4e59;
+  --ink-3: #6e7381;
+  --rule: #e3e5ea;
+  --ai: #264478;
+  --ai-soft: #e6ebf4;
+  --user: #b4532a;       /* warm: the user agents */
+  --user-soft: #fbece3;
+  --good: #0f7a3d;
+  --good-soft: #e3f3e9;
+  --font: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1115; --surface: #161920; --ink: #eceef3; --ink-2: #b4b9c5; --ink-3: #8b91a0;
+    --rule: #262a33; --ai: #9db4e0; --ai-soft: #1d2433; --user: #f0a27c; --user-soft: #2e1d15;
+    --good: #4cc27f; --good-soft: #13261b; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1115; --surface: #161920; --ink: #eceef3; --ink-2: #b4b9c5; --ink-3: #8b91a0;
+  --rule: #262a33; --ai: #9db4e0; --ai-soft: #1d2433; --user: #f0a27c; --user-soft: #2e1d15;
+  --good: #4cc27f; --good-soft: #13261b; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font);
+  font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1040px; margin: 0 auto; padding-block: 56px 72px; display: grid; gap: 96px; }
+section { display: grid; gap: 28px; min-width: 0; }
+h1, h2, h3 { margin: 0; text-wrap: balance; letter-spacing: -0.02em; }
+h1 { font-size: clamp(2.4rem, 6vw, 4.1rem); line-height: 1.02; font-weight: 800; }
+h2 { font-size: clamp(1.6rem, 3.4vw, 2.2rem); line-height: 1.1; font-weight: 750; }
+h3 { font-size: 1.08rem; font-weight: 700; letter-spacing: -0.01em; }
+p { margin: 0; max-width: 64ch; color: var(--ink-2); }
+.eyebrow { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+.figure { font-variant-numeric: tabular-nums; }
+.head { display: grid; gap: 12px; }
+
+/* Hero */
+.hero { display: grid; gap: 28px; }
+.hero h1 em { font-style: normal; color: var(--ai); }
+.lede { font-size: 1.22rem; line-height: 1.5; color: var(--ink-2); max-width: 54ch; }
+.lede b { color: var(--user); font-weight: 650; }
+.lede strong { color: var(--ai); font-weight: 650; }
+.crowd { display: flex; flex-wrap: wrap; align-items: center; gap: 0; }
+.crowd .av { width: 52px; height: 52px; margin-right: -8px; border-radius: 50%; box-shadow: 0 0 0 3px var(--bg); transition: transform .2s ease; }
+.crowd .av:hover { transform: translateY(-4px); }
+.crowd .plus { margin-left: 22px; display: flex; align-items: center; gap: 10px; color: var(--ink-3); font-size: .95rem; }
+.crowd .bot { width: 52px; height: 52px; }
+
+/* Stats */
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+.stat { padding: 22px 18px 22px 0; display: grid; gap: 2px; }
+.stat + .stat { padding-left: 18px; border-left: 1px solid var(--rule); }
+.stat:nth-child(5) { border-left: 0; padding-left: 0; }
+.stat:nth-child(n+5) { border-top: 1px solid var(--rule); }
+.stat .n { font-size: 2rem; font-weight: 750; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.stat .l { font-size: .9rem; color: var(--ink-3); line-height: 1.35; }
+
+/* Loop */
+.loop { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; align-items: center; }
+.ring { width: 100%; max-width: 520px; height: auto; justify-self: center; }
+.ring text { font-family: var(--font); }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 18px; counter-reset: s; }
+.steps li { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps li::before {
+  counter-increment: s; content: counter(s);
+  width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  font-weight: 700; font-size: .85rem; background: var(--surface); border: 1px solid var(--rule); color: var(--ink-2);
+}
+.steps li.u::before { background: var(--user-soft); border-color: transparent; color: var(--user); }
+.steps li.d::before { background: var(--ai-soft); border-color: transparent; color: var(--ai); }
+.steps h3 { margin-bottom: 2px; }
+.steps p { font-size: .95rem; }
+.key { display: flex; flex-wrap: wrap; gap: 18px; font-size: .88rem; color: var(--ink-3); }
+.key span { display: inline-flex; align-items: center; gap: 8px; }
+.key i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+
+/* Two kinds of agents */
+.kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.kind { background: var(--surface); border: 1px solid var(--rule); border-radius: 18px; padding: 26px; display: grid; gap: 16px; align-content: start; }
+.kind .top { display: flex; align-items: center; gap: 14px; }
+.kind .top svg { width: 56px; height: 56px; flex: none; }
+.kind .tag { font-size: .78rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.kind.user .tag { color: var(--user); }
+.kind.dev .tag { color: var(--ai); }
+.parts { margin: 0; display: grid; gap: 12px; }
+.parts div { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; font-size: .95rem; }
+.parts dt { font-weight: 700; color: var(--ink); }
+.parts dd { margin: 0; color: var(--ink-2); }
+
+/* Cast */
+.cast { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 16px; padding: 18px; display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 14px; align-items: start; transition: border-color .2s ease, transform .2s ease; }
+.card:hover { border-color: var(--user); transform: translateY(-2px); }
+.card svg { width: 56px; height: 56px; }
+.card .who { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.card .name { font-weight: 700; }
+.card .age { color: var(--ink-3); font-size: .85rem; font-variant-numeric: tabular-nums; }
+.card .habit { font-size: .9rem; color: var(--ink-2); line-height: 1.45; margin-top: 2px; }
+.card .trait { margin-top: 8px; display: inline-block; font-size: .76rem; font-weight: 600; color: var(--user); background: var(--user-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Complaint → commit */
+.pairs { display: grid; gap: 14px; }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1fr); align-items: stretch; }
+.said, .shipped { border-radius: 16px; padding: 18px 20px; display: grid; gap: 10px; align-content: start; }
+.said { background: var(--user-soft); }
+.shipped { background: var(--surface); border: 1px solid var(--rule); }
+.said .by { display: flex; align-items: center; gap: 10px; font-size: .85rem; font-weight: 600; color: var(--ink-2); }
+.said .by svg { width: 30px; height: 30px; }
+.said q { font-size: 1.02rem; line-height: 1.5; color: var(--ink); quotes: "\201C" "\201D"; }
+.said .mission { font-size: 1rem; color: var(--ink); }
+.shipped .meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: .82rem; color: var(--ink-3); }
+.pill { font-weight: 700; color: var(--good); background: var(--good-soft); padding: 2px 9px; border-radius: 999px; font-size: .76rem; letter-spacing: .02em; }
+.hash { font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.shipped p { color: var(--ink); font-size: .98rem; }
+.arrow { display: grid; place-items: center; color: var(--ink-3); }
+
+/* Lessons */
+.lesson { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 40px; align-items: center; }
+.bars { display: grid; gap: 18px; }
+.bar { display: grid; gap: 6px; }
+.bar .row { display: flex; justify-content: space-between; font-size: .9rem; color: var(--ink-2); gap: 12px; }
+.bar .row b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.track { height: 12px; border-radius: 6px; background: var(--rule); overflow: hidden; }
+.fill { height: 100%; border-radius: 6px; background: var(--ai); }
+.lesson h3 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+.fixes { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.fixes li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; color: var(--ink-2); font-size: .95rem; }
+.fixes li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ai); margin-top: 9px; }
+
+.rails { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.rail { border-top: 2px solid var(--ink); padding-top: 14px; display: grid; gap: 6px; }
+.rail p { font-size: .92rem; }
+
+footer { border-top: 1px solid var(--rule); padding-top: 24px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; color: var(--ink-3); font-size: .88rem; }
+
+@media (max-width: 860px) {
+  .loop, .lesson { grid-template-columns: minmax(0, 1fr); }
+  .cast { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rails { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 620px) {
+  .wrap { padding-block: 36px 56px; gap: 72px; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat:nth-child(odd) { border-left: 0; padding-left: 0; }
+  .stat:nth-child(n+3) { border-top: 1px solid var(--rule); }
+  .stat:nth-child(5) { padding-left: 0; }
+  .kinds, .cast, .rails { grid-template-columns: minmax(0, 1fr); }
+  .pair { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .arrow { transform: rotate(90deg); height: 28px; }
+  .crowd .av, .crowd .bot { width: 42px; height: 42px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before { transition: none !important; animation: none !important; }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.orbit { transform-origin: 320px 320px; animation: spin 40s linear infinite; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="hero">
+    <div class="eyebrow">Beobeo · how it was built</div>
+    <h1>A portfolio tracker that <em>builds itself</em> from its users' complaints.</h1>
+    <p class="lede">Beobeo is a personal portfolio tracker built by a fully automated, self-improving loop. <b>User agents</b> use the real app and file feedback. <strong>Developer agents</strong> turn that feedback into fixes. Twice a day, the loop starts again.</p>
+    <div class="crowd" id="crowd" aria-label="The twelve user agents and the developer agent"></div>
+  </header>
+
+  <section aria-labelledby="by-the-numbers">
+    <div class="head">
+      <div class="eyebrow" id="by-the-numbers">The first 14 days · Oct 23 to Nov 5, 2026</div>
+    </div>
+    <div class="stats">
+      <div class="stat"><span class="n">12</span><span class="l">user agents, each with their own money and habits</span></div>
+      <div class="stat"><span class="n">160</span><span class="l">simulated sessions in the real app</span></div>
+      <div class="stat"><span class="n">1,014</span><span class="l">pieces of feedback filed</span></div>
+      <div class="stat"><span class="n">144</span><span class="l">goal-driven missions</span></div>
+      <div class="stat"><span class="n">440</span><span class="l">themes found in that feedback</span></div>
+      <div class="stat"><span class="n">167</span><span class="l">themes fixed and shipped</span></div>
+      <div class="stat"><span class="n">196</span><span class="l">commits on the main branch</span></div>
+      <div class="stat"><span class="n">$28.89</span><span class="l">total spent on the user agents' thinking</span></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="loop-title">
+    <div class="head">
+      <div class="eyebrow">The loop</div>
+      <h2 id="loop-title">Six steps, twice a day, with no one at the keyboard.</h2>
+      <p>A scheduled job on my Mac runs the whole cycle at 08:00 and 20:00. The morning cycle lets every user agent live an ordinary day. The evening cycle sends some of them on missions with one concrete goal each.</p>
+    </div>
+    <div class="loop">
+      <svg class="ring" id="ring" viewBox="0 0 640 640" role="img" aria-label="Loop diagram: Simulate, Journal, Digest, Build, Check, Merge, then back to Simulate"></svg>
+      <div style="display:grid;gap:22px;min-width:0">
+        <ol class="steps">
+          <li class="u"><div><h3>Simulate</h3><p>User agents sign in to the real app in Chrome and use it on real market prices: they log trades, ask the chat assistant questions, and review pages in light mode, dark mode and on a phone.</p></div></li>
+          <li><div><h3>Journal</h3><p>Every click, wait, answer and complaint goes into a local SQLite journal, along with 1,507 page and answer timings.</p></div></li>
+          <li><div><h3>Digest</h3><p>Feedback is grouped into themes and ranked by how many people hit the problem, how badly, and on how many days. The last cycle's fixes are checked against the new complaints.</p></div></li>
+          <li class="d"><div><h3>Build</h3><p>Developer agents run headless Claude Code. Each one takes the top theme to a branch in its own worktree with its own dev server, then screenshots the result as the persona who asked. A cycle runs up to 12 rounds.</p></div></li>
+          <li class="d"><div><h3>Check</h3><p>The branch has to pass type checks, lint, every test and a production build. A branch that fails stays unmerged.</p></div></li>
+          <li><div><h3>Merge</h3><p>Passing work merges into the main branch. The next cycle's user agents meet the changed app and react to it.</p></div></li>
+        </ol>
+        <div class="key"><span><i style="background:var(--user)"></i>user agents</span><span><i style="background:var(--ai)"></i>developer agents</span><span><i style="background:var(--ink-3)"></i>plain code</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="kinds-title">
+    <div class="head">
+      <div class="eyebrow">Two kinds of agents</div>
+      <h2 id="kinds-title">One side uses the app. The other side fixes it.</h2>
+    </div>
+    <div class="kinds">
+      <article class="kind user">
+        <div class="top"><span id="kind-user"></span><div><div class="tag">User agent</div><h3>A simulated investor with a temperament</h3></div></div>
+        <dl class="parts">
+          <div><dt>Habits</dt><dd>Plain code for their routine, such as “$250 of VOO every Monday”. It's cheap and repeatable, and it replays months of history so every portfolio has real purchases and sales.</dd></div>
+          <div><dt>Mind</dt><dd>A Claude model that sees only that person, their own portfolio and prices up to “today”. It makes the judgment-call trades, asks questions and forms opinions.</dd></div>
+          <div><dt>Hands</dt><dd>Playwright driving a real Chrome window: sign-up, forms, the chat and every page.</dd></div>
+          <div><dt>Temper</dt><dd>Patience, tech comfort and taste. A low-patience agent complains when a page takes more than its budget.</dd></div>
+        </dl>
+      </article>
+      <article class="kind dev">
+        <div class="top"><span id="kind-dev"></span><div><div class="tag">Developer agent</div><h3>An engineer with a rulebook</h3></div></div>
+        <dl class="parts">
+          <div><dt>Reads</dt><dd>My own requests first, since they outrank the personas. Then the day's ranked digest, the product principles and the project rulebook.</dd></div>
+          <div><dt>Builds</dt><dd>One change per round on its own branch, with tests to match. Money logic gets hand-computed test cases before any screen changes.</dd></div>
+          <div><dt>Proves</dt><dd>Screenshots the change as the persona who asked, re-runs the mission that found the bug, and records timings before and after.</dd></div>
+          <div><dt>Writes</dt><dd>A report, an entry in the evolution log and an update to the rulebook, so the next round starts already knowing what this one learned.</dd></div>
+        </dl>
+      </article>
+    </div>
+  </section>
+
+  <section aria-labelledby="cast-title">
+    <div class="head">
+      <div class="eyebrow">The cast</div>
+      <h2 id="cast-title">Twelve investors, each wrong about something in their own way.</h2>
+      <p>They're named after Game of Thrones and Harry Potter characters so they're easy to tell apart in the logs. Each has their own accounts, their own tax situation, and the biases that come with how they invest.</p>
+    </div>
+    <div class="cast" id="cast"></div>
+  </section>
+
+  <section aria-labelledby="pairs-title">
+    <div class="head">
+      <div class="eyebrow">From complaint to commit</div>
+      <h2 id="pairs-title">What they said, and what shipped.</h2>
+      <p>The quotes are word for word from the journal. Every fix was found, built, checked and merged by the loop.</p>
+    </div>
+    <div class="pairs" id="pairs"></div>
+  </section>
+
+  <section aria-labelledby="lesson-title">
+    <div class="head">
+      <div class="eyebrow">What the loop got wrong</div>
+      <h2 id="lesson-title">At first, most of the failures were in the test, not the app. Both are fixed now.</h2>
+    </div>
+    <div class="lesson">
+      <div style="display:grid;gap:16px;min-width:0">
+        <p>In the first missions, user agents almost never reached their goal. When I read the runs, most failures came from the simulation itself, not from the app. I fixed it in two passes.</p>
+        <h3>Fix 1 · how the agents use the app <span class="pill">Fixed</span></h3>
+        <ul class="fixes">
+          <li>Clicks missed menus and dialogs. Those now get their own references, so a click lands on the thing the agent meant.</li>
+          <li>Agents acted while a closing layer still covered the page. They now wait for it to clear.</li>
+          <li>First-run setup missions started from a copy of the persona's history. They now start from an empty account, as a new user would.</li>
+        </ul>
+        <p>This fix, plus the app bugs those cleaner missions then found, explains the jump in the bars.</p>
+        <h3>Fix 2 · how missions are scored <span class="pill">Fixed</span></h3>
+        <ul class="fixes">
+          <li>Goals sometimes made up facts the persona's data didn't support. Every goal now comes from their real portfolio, except about one in six, which carries a labeled, deliberate mistake to test whether the app corrects people.</li>
+          <li>“Got it done” and “trusted the answer” were mixed up. They're now scored separately.</li>
+          <li>Runs that hit the step limit counted as app failures. They're now marked as running out of steps.</li>
+        </ul>
+        <p>Only 8 missions ran under the new scoring before I paused the loop (4 achieved), which is too few to judge yet.</p>
+      </div>
+      <div class="bars" role="img" aria-label="Missions achieved: 2 of 47 before the fixes, 38 of 80 after">
+        <div class="bar"><div class="row"><span>Oct 26–28, before fix 1</span><b>2 of 47 · 4%</b></div><div class="track"><div class="fill" style="width:4.3%"></div></div></div>
+        <div class="bar"><div class="row"><span>Oct 29 to Nov 2, after fix 1</span><b>38 of 80 · 48%</b></div><div class="track"><div class="fill" style="width:47.5%"></div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="rails-title">
+    <div class="head">
+      <div class="eyebrow">Guardrails</div>
+      <h2 id="rails-title">Autonomous, within limits.</h2>
+    </div>
+    <div class="rails">
+      <div class="rail"><h3>Branches only</h3><p>Developer agents never push, never touch secrets, and never merge their own work. The script merges a branch only after its checks pass.</p></div>
+      <div class="rail"><h3>A daily budget</h3><p>The user agents' thinking stops at $5 a day. Page reviews are the first thing cut when money runs low.</p></div>
+      <div class="rail"><h3>Humans own the data</h3><p>Database schema changes wait for a person to run them. The loop asks for them in writing.</p></div>
+      <div class="rail"><h3>Exact money</h3><p>Plain code computes the numbers and the model only explains them. Every engine change comes with hand-checked test cases.</p></div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Built with Next.js, tRPC, Postgres, Playwright and Claude.</span>
+    <span>Beobeo · 2026</span>
+  </footer>
+</div>
+
+<script>
+// Little faces. Each persona: skin, hair colour, hair style, extras, and a soft backdrop.
+const P = [
+  { id: "augusta", name: "Augusta Longbottom", age: 74, habit: "A fixed amount every month, kept at 60% stocks / 40% bonds like her advisor said.", trait: "Hates clutter", skin: "#f3d2bb", hair: "#c9c4cf", style: "bun", extra: ["hat"], bg: "#e8e1f3" },
+  { id: "samwell", name: "Samwell Tarly", age: 31, habit: "$250 of VOO every Monday, plus his Roth IRA into VTI. Never sells.", trait: "Asks “am I on track?”", skin: "#f1c9a8", hair: "#6b4a2f", style: "short", extra: ["chubby"], bg: "#dfeee5" },
+  { id: "arya", name: "Arya Stark", age: 38, habit: "Steady VOO, with extra buys of NVDA, AMZN, BTC and ETH on red weeks.", trait: "Buys the dip", skin: "#ecc3a0", hair: "#3a2a22", style: "messy", extra: [], bg: "#e3e7ef" },
+  { id: "fred", name: "Fred Weasley", age: 26, habit: "Weekly BTC and ETH. Piles into SOL after a 12% drop.", trait: "Crypto, all in", skin: "#f6d6bf", hair: "#d0562a", style: "messy", extra: ["freckles"], bg: "#fbe5d6" },
+  { id: "petyr", name: "Petyr Baelish", age: 52, habit: "Monthly VTI, VXUS and QQQ. Harvests losses at 10% using look-alike funds.", trait: "Wants exact dollars", skin: "#efc8a9", hair: "#2f2a28", style: "slick", extra: ["goatee"], bg: "#dfe9f2" },
+  { id: "minerva", name: "Minerva McGonagall", age: 45, habit: "A three-fund portfolio, rebalanced every quarter with fresh money.", trait: "Watches the drift", skin: "#f2d4c0", hair: "#3b3236", style: "bun", extra: ["witch", "squares"], bg: "#dcecdf" },
+  { id: "gilderoy", name: "Gilderoy Lockhart", age: 34, habit: "Every week buys whichever big-tech name won the month. Takes half off at +25%.", trait: "Overtrades", skin: "#f6d3b6", hair: "#e3b53e", style: "wavy", extra: ["sparkle"], bg: "#f6ecd2" },
+  { id: "olenna", name: "Olenna Tyrell", age: 61, habit: "$1,500 a month into dividend payers: SCHD, VIG, Coca-Cola, P&G.", trait: "Lives on income", skin: "#f1d1bc", hair: "#e4e1e8", style: "bun", extra: ["rose"], bg: "#f3e2e6" },
+  { id: "luna", name: "Luna Lovegood", age: 22, habit: "$150 on the 1st: VOO because a video said so, and NVDA because it's fun.", trait: "First-time investor", skin: "#f7ddc9", hair: "#efd98d", style: "long", extra: ["specs"], bg: "#efe6f6" },
+  { id: "hermione", name: "Hermione Granger", age: 40, habit: "$3,000 a month into a diversified mix with 10% BTC. Uses keyboard shortcuts and CSV files.", trait: "Rages at latency", skin: "#eec5a6", hair: "#7a4f2e", style: "bushy", extra: [], bg: "#f1e5d8" },
+  { id: "barristan", name: "Barristan Selmy", age: 70, habit: "Withdraws $3,500 on the 3rd of every month, from whatever has grown the most.", trait: "Retired, withdrawing", skin: "#f0cdb3", hair: "#f2f1ee", style: "short", extra: ["beard"], bg: "#e1e9ee" },
+  { id: "molly", name: "Molly Weasley", age: 47, habit: "A joint account plus a child's account for Ginny, topped up 60/25/15.", trait: "Runs the family's money", skin: "#f5d4bd", hair: "#c4502b", style: "curly", extra: [], bg: "#fbe3d9" },
+];
+const byId = Object.fromEntries(P.map(p => [p.id, p]));
+
+function face(p) {
+  const h = p.hair, s = p.skin, ink = "#2a2430";
+  let back = "", front = "", top = "", low = "";
+  switch (p.style) {
+    case "bushy": back = `<circle cx="32" cy="31" r="21" fill="${h}"/><circle cx="14" cy="40" r="8" fill="${h}"/><circle cx="50" cy="40" r="8" fill="${h}"/>`;
+                  front = `<path d="M17 31 Q20 19 32 19 Q44 19 47 31 Q41 25 32 26 Q23 25 17 31Z" fill="${h}"/>`; break;
+    case "long":  back = `<path d="M15 34 Q15 15 32 15 Q49 15 49 34 L50 55 Q46 52 43 55 L21 55 Q18 52 14 55Z" fill="${h}"/>`;
+                  front = `<path d="M17 33 Q18 19 32 19 Q46 19 47 33 Q42 25 33 24 Q24 25 17 33Z" fill="${h}"/>`; break;
+    case "curly": back = `<circle cx="20" cy="30" r="7" fill="${h}"/><circle cx="44" cy="30" r="7" fill="${h}"/><circle cx="32" cy="14" r="6.5" fill="${h}"/>`;
+                  front = `<path d="M16 34 Q15 19 32 19 Q49 19 48 34 Q44 25 32 25 Q20 25 16 34Z" fill="${h}"/><circle cx="24" cy="21" r="4.5" fill="${h}"/><circle cx="32" cy="19.5" r="4.5" fill="${h}"/><circle cx="40" cy="21" r="4.5" fill="${h}"/>`; break;
+    case "bun":   back = `<circle cx="32" cy="15" r="6" fill="${h}"/>`;
+                  front = `<path d="M16 34 Q16 19 32 19 Q48 19 48 34 Q45 26 32 25 Q19 26 16 34Z" fill="${h}"/>`; break;
+    case "messy": front = `<path d="M16 34 Q15 18 32 18 Q49 18 48 34 L45 28 L42 31 L39 26 L35 29 L32 25 L28 29 L25 26 L21 30 L19 27Z" fill="${h}"/>`; break;
+    case "slick": front = `<path d="M16 33 Q16 18 32 18 Q48 18 48 33 Q46 25 38 23 Q30 25 22 25 Q18 27 16 33Z" fill="${h}"/>`; break;
+    case "wavy":  front = `<path d="M15 33 Q14 16 30 16 Q44 15 49 27 Q50 32 48 34 Q46 27 40 25 Q42 29 37 28 Q34 24 28 26 Q23 26 21 29 Q19 27 15 33Z" fill="${h}"/>`; break;
+    default:      front = `<path d="M16 33 Q16 19 32 19 Q48 19 48 33 Q44 26 32 25 Q20 26 16 33Z" fill="${h}"/>`;
+  }
+  const x = p.extra;
+  if (x.includes("hat"))   top += `<rect x="20" y="8" width="24" height="15" rx="3" fill="#7a3d4f"/><rect x="14" y="21" width="36" height="4" rx="2" fill="#5e2d3c"/><circle cx="40" cy="7" r="3.2" fill="#4a4250"/><path d="M42.5 6 L47 5 L43 8Z" fill="#e5a33a"/>`;
+  if (x.includes("witch")) top += `<path d="M21 21 L33 0 L43 21Z" fill="#245a3c"/><ellipse cx="32" cy="21.5" rx="17" ry="3.4" fill="#1b4730"/>`;
+  if (x.includes("rose"))  top += `<circle cx="44" cy="22" r="3.6" fill="#d9536f"/><circle cx="44" cy="22" r="1.5" fill="#a83250"/>`;
+  if (x.includes("beard")) low += `<path d="M18 38 Q19 54 32 56 Q45 54 46 38 Q42 45 32 45.5 Q22 45 18 38Z" fill="${h}"/><path d="M28 47 Q32 49.5 36 47" stroke="${ink}" stroke-width="1.6" fill="none" stroke-linecap="round"/>`;
+  if (x.includes("goatee"))low += `<path d="M29.5 46 L32 51 L34.5 46Z" fill="${h}"/><path d="M27 43.5 Q32 42 37 43.5" stroke="${h}" stroke-width="1.6" fill="none" stroke-linecap="round"/>`;
+  const r = x.includes("chubby") ? 17.5 : 16;
+  const eyes = `<circle cx="26.5" cy="36" r="1.9" fill="${ink}"/><circle cx="37.5" cy="36" r="1.9" fill="${ink}"/>`;
+  const cheeks = `<ellipse cx="23" cy="41" rx="3" ry="1.9" fill="#ef8f8f" opacity=".45"/><ellipse cx="41" cy="41" rx="3" ry="1.9" fill="#ef8f8f" opacity=".45"/>`;
+  const smile = x.includes("beard") ? "" : `<path d="M28.5 42.5 Q32 45.5 35.5 42.5" stroke="${ink}" stroke-width="1.6" fill="none" stroke-linecap="round"/>`;
+  let acc = "";
+  if (x.includes("freckles")) acc += [[24,39],[26,40.5],[38,40.5],[40,39],[25,41.6],[39,41.6]].map(([a,b]) => `<circle cx="${a}" cy="${b}" r=".7" fill="#b9582d"/>`).join("");
+  if (x.includes("squares")) acc += `<rect x="22.5" y="32.5" width="8" height="7" rx="1.5" fill="none" stroke="${ink}" stroke-width="1.3"/><rect x="33.5" y="32.5" width="8" height="7" rx="1.5" fill="none" stroke="${ink}" stroke-width="1.3"/><path d="M30.5 35.5 L33.5 35.5" stroke="${ink}" stroke-width="1.3"/>`;
+  if (x.includes("specs")) acc += `<circle cx="26.5" cy="36" r="5" fill="#f5a3c4" opacity=".55" stroke="#d6538a" stroke-width="1.5"/><circle cx="37.5" cy="36" r="5" fill="#9fd4f2" opacity=".55" stroke="#d6538a" stroke-width="1.5"/><path d="M31.5 36 L32.5 36" stroke="#d6538a" stroke-width="1.5"/>`;
+  if (x.includes("sparkle")) acc += `<path d="M52 12 L53.3 15.7 L57 17 L53.3 18.3 L52 22 L50.7 18.3 L47 17 L50.7 15.7Z" fill="#e3b53e"/>`;
+  return `<svg class="av" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="${p.name}"><circle cx="32" cy="32" r="32" fill="${p.bg}"/>`
+    + `<g>${back}<circle cx="32" cy="36" r="${r}" fill="${s}"/>${low}${eyes}${cheeks}${smile}${acc}${front}${top}</g></svg>`;
+}
+
+function bot(cls = "bot") {
+  return `<svg class="${cls}" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Developer agent"><circle cx="32" cy="32" r="32" fill="#dfe6f3"/>`
+    + `<path d="M32 12 L32 18" stroke="#264478" stroke-width="2.4" stroke-linecap="round"/><circle cx="32" cy="10.5" r="3" fill="#e3b53e"/>`
+    + `<rect x="15" y="18" width="34" height="28" rx="9" fill="#264478"/><rect x="11" y="27" width="4" height="10" rx="2" fill="#3c5a92"/><rect x="49" y="27" width="4" height="10" rx="2" fill="#3c5a92"/>`
+    + `<rect x="20" y="24" width="24" height="15" rx="5" fill="#eaf0fa"/><rect x="25" y="28" width="4" height="6" rx="2" fill="#264478"/><rect x="35" y="28" width="4" height="6" rx="2" fill="#264478"/>`
+    + `<path d="M28 42 Q32 44.5 36 42" stroke="#9db4e0" stroke-width="1.8" fill="none" stroke-linecap="round"/>`
+    + `<rect x="22" y="47" width="20" height="9" rx="3" fill="#3c5a92"/><path d="M27 51.5 L30 51.5 M34 51.5 L37 51.5" stroke="#9db4e0" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+}
+
+// Hero crowd
+document.getElementById("crowd").innerHTML = P.map(face).join("")
+  + `<span class="plus">${bot()}<span>12 users, 1 tireless engineer</span></span>`;
+document.getElementById("kind-user").innerHTML = face(byId.hermione);
+document.getElementById("kind-dev").innerHTML = bot("");
+
+// Cast
+document.getElementById("cast").innerHTML = P.map(p => `
+  <article class="card">${face(p)}<div style="min-width:0">
+    <div class="who"><span class="name">${p.name}</span><span class="age">${p.age}</span></div>
+    <div class="habit">${p.habit}</div><span class="trait">${p.trait}</span></div></article>`).join("");
+
+// Complaint → commit
+const pairs = [
+  { who: "augusta", quote: "I can see the $9,600 I put in only in small print above the chart. I'd like it next to my total so I know what I started with.",
+    when: "Oct 29", hash: null, fix: "The dashboard now puts what you've put in right beside what it's worth today." },
+  { who: "molly", quote: "The assistant had to tell me the $35.73 on the screen was using our rates, not Ginny's. The screen itself should show her number.",
+    when: "Nov 2", hash: "993e4ac", fix: "Selling part of a holding opens Raise Cash in that holding's own portfolio, at that portfolio's tax rates, and the tax figure says whose rates it uses." },
+  { who: "luna", mission: "Mission: decide how much to put in next. The app called the holdings she started with “your last deposit”.",
+    when: "Nov 2", hash: "9fcfce5", fix: "Starting holdings are described as what they cost, not as a deposit, and the amount you type is remembered for each portfolio." },
+  { who: "arya", mission: "Mission: check whether her dip buys beat a benchmark. She picked one, and the trade list still showed SPY.",
+    when: "Nov 2", hash: "e5ef8a7", fix: "Compare's trade list now opens on the benchmark you just picked, even when the comparison comes from the cache." },
+];
+const arrow = `<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+document.getElementById("pairs").innerHTML = pairs.map(x => {
+  const p = byId[x.who];
+  const body = x.quote ? `<q>${x.quote}</q>` : `<div class="mission">${x.mission}</div>`;
+  return `<div class="pair">
+    <div class="said"><div class="by">${face(p)}<span>${p.name.split(" ")[0]} · ${x.quote ? "feedback" : "mission"}</span></div>${body}</div>
+    <div class="arrow">${arrow}</div>
+    <div class="shipped"><div class="meta"><span class="pill">Shipped</span><span>${x.when}</span>${x.hash ? `<span class="hash">${x.hash}</span>` : ""}</div><p>${x.fix}</p></div>
+  </div>`;
+}).join("");
+
+// The ring
+(function ring() {
+  const svg = document.getElementById("ring");
+  const C = 320, R = 228;
+  const nodes = [
+    { label: "Simulate", kind: "u" }, { label: "Journal" }, { label: "Digest" },
+    { label: "Build", kind: "d" }, { label: "Check", kind: "d" }, { label: "Merge" },
+  ];
+  const pt = (deg, r = R) => [C + r * Math.cos(deg * Math.PI / 180), C + r * Math.sin(deg * Math.PI / 180)];
+  let out = `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="var(--rule)" stroke-width="2"/>`;
+  out += `<g class="orbit"><circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="var(--ai)" stroke-width="2" stroke-dasharray="2 14" stroke-linecap="round" opacity=".55"/></g>`;
+  for (let i = 0; i < 6; i++) {
+    const a = -60 + i * 60;
+    const [x, y] = pt(a);
+    out += `<polygon points="-7,-7 8,0 -7,7" fill="var(--ink-3)" transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${a + 90})"/>`;
+  }
+  nodes.forEach((n, i) => {
+    const [x, y] = pt(-90 + i * 60);
+    const fill = n.kind === "u" ? "var(--user-soft)" : n.kind === "d" ? "var(--ai-soft)" : "var(--surface)";
+    const stroke = n.kind === "u" ? "var(--user)" : n.kind === "d" ? "var(--ai)" : "var(--rule)";
+    const ink = n.kind === "u" ? "var(--user)" : n.kind === "d" ? "var(--ai)" : "var(--ink-3)";
+    out += `<g><circle cx="${x}" cy="${y}" r="62" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`
+      + `<text x="${x}" y="${y - 6}" text-anchor="middle" font-size="18" font-weight="700" fill="${ink}">${i + 1}</text>`
+      + `<text x="${x}" y="${y + 20}" text-anchor="middle" font-size="21" font-weight="700" fill="var(--ink)">${n.label}</text></g>`;
+  });
+  // Centre: a few faces and the bot, plus the clock
+  const mini = ["luna", "petyr", "augusta"].map((id, k) => `<g transform="translate(${C - 86 + k * 40} ${C - 92}) scale(.78)">${face(byId[id]).replace('class="av"', "")}</g>`).join("");
+  out += mini + `<g transform="translate(${C + 34} ${C - 92}) scale(.78)">${bot("")}</g>`;
+  out += `<text x="${C}" y="${C + 20}" text-anchor="middle" font-size="30" font-weight="800" fill="var(--ink)">Twice a day</text>`;
+  out += `<text x="${C}" y="${C + 52}" text-anchor="middle" font-size="18" fill="var(--ink-2)">08:00 an ordinary day</text>`;
+  out += `<text x="${C}" y="${C + 78}" text-anchor="middle" font-size="18" fill="var(--ink-2)">20:00 missions</text>`;
+  svg.innerHTML = out;
+})();
+</script>
+</body>
+</html>

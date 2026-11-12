@@ -84,7 +84,7 @@ the earlier one wins.
   dropped first.
 - **Autonomous merging** — the loop runs unattended for weeks (the user's call:
   "if I'm gone a month, I expect dramatic improvements"). Each cycle starts by
-  merging the previous cycles' `evolve/*` branches into `salarabb/phase_1`, but only
+  merging the previous cycles' `evolve/*` branches into `main`, but only
   those whose report says `Checks: PASSED`, then branches today's work from there.
   A failed branch stays unmerged for a human, and nothing builds on it. When the
   user says "merge", merge right away.
@@ -92,7 +92,7 @@ the earlier one wins.
   one improvement each (odd rounds: your top request; even rounds: the top persona
   theme), until `EVOLVE_HOURS` (default 3) runs out, `EVOLVE_MAX_ROUNDS` (12) is hit,
   or a round finds nothing worthwhile left. Then `evolve.sh` runs the full checks
-  and, if they pass, merges the branch into `salarabb/phase_1` the same day.
+  and, if they pass, merges the branch into `main` the same day.
 - **Safety valve** — `/evolve` itself never pushes, merges, or touches `.env`
   (`evolve.sh` does the merging). With 3 branches that couldn't be merged, or two
   failed check runs, it only *proposes*.

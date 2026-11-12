@@ -55,7 +55,7 @@ const runIdsOn = (date: string) => j.all<{ id: number; app_branch: string; app_s
 const within = (ids: { id: number }[], col = "run_id") => (ids.length ? `${col} IN (${ids.map((r) => r.id).join(",")})` : "0");
 
 // ---------------------------------------------------------------- where PLAN.md / REQUESTS.md come from
-const unmerged = (sh(`git for-each-ref --sort=-refname --format='%(refname:short)' --no-merged salarabb/phase_1 'refs/heads/evolve/*'`) ?? "").split("\n").filter(Boolean);
+const unmerged = (sh(`git for-each-ref --sort=-refname --format='%(refname:short)' --no-merged main 'refs/heads/evolve/*'`) ?? "").split("\n").filter(Boolean);
 const planRef = opt("ref") ?? (unmerged[0] && sh(`git merge-base --is-ancestor ${unmerged[0]} HEAD && echo yes`) !== "yes" ? unmerged[0] : null);
 const repoFile = (f: string) => (planRef ? sh(`git show ${planRef}:${f}`) ?? "" : existsSync(`${repo}${f}`) ? readFileSync(`${repo}${f}`, "utf8") : "");
 

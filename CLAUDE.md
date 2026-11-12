@@ -83,7 +83,7 @@ Root `.env` (gitignored) is the single source; `apps/web/.env` is a **symlink** 
 | `SIM_EVENING_MISSIONS` | no | missions the day's second (20:00) cycle runs instead of a second persona day (default 3) |
 | `EVOLVE_HOURS` / `EVOLVE_MAX_ROUNDS` | no | evolve.sh build-phase budget: wall-clock hours (default 3) and max rounds (12) |
 | `EVOLVE_MIN_ROUND_MINUTES` | no | no new round starts with less than this left before the deadline (default 10; two rounds that started at 14:10 for a 14:11 deadline shipped nothing) |
-| `EVOLVE_WORKTREE` / `EVOLVE_BASE` / `SIM_PORT` | no | evolve.sh: worktree path (default `../beobeo-evolve`), base branch (default `salarabb/phase_1`), dev port (3100) |
+| `EVOLVE_WORKTREE` / `EVOLVE_BASE` / `SIM_PORT` | no | evolve.sh: worktree path (default `../beobeo-evolve`), base branch (default `main`), dev port (3100) |
 
 ## Monorepo layout & data flow
 
@@ -113,7 +113,7 @@ agent: chat UI → /api/chat (SSE) → @beobeo/agent tool runner → PortfolioAp
 - **Real-user data will be inconsistent:** one asset's `EngineError` goes to `dataIssues[]`, never a 500 for the page.
 - **Selections that should survive navigation use `useStoredState`** (`lib/use-stored-state.ts`); tabs unmount on switch.
 - **When the app gains a flow, add it to `FEATURES`** in `packages/sim/src/features.ts`, or missions never test it. Keep the labels the sim clicks: "Create account", "Continue", "Skip, show me the app", the welcome step titles, and the `radio` role on income bands.
-- **Git:** work on `salarabb/phase_1`; the loop commits only on `evolve/*` and `scripts/evolve.sh` merges. Never commit `.env` (only `.env.example`). Schema changes use `pnpm db:push` (no migrations yet), which a human runs.
+- **Git:** work on `main`; the loop commits only on `evolve/*` and `scripts/evolve.sh` merges. Never commit `.env` (only `.env.example`). Schema changes use `pnpm db:push` (no migrations yet), which a human runs.
 
 ## Engine and packages (details: `docs/notes.md` → Monorepo layout)
 
@@ -127,6 +127,7 @@ agent: chat UI → /api/chat (SSE) → @beobeo/agent tool runner → PortfolioAp
 - **`packages/importers`** — runs in the browser. Presets: Robinhood, Coinbase, Delta, generic mapping; unknown formats are AI-mapped (`suggestCsvMapping`, header + ≤8 rows only). `bulkCreate` skips rows the account already has (`splitDuplicates`). Quantities stay strings.
 - **`packages/agent`** — never touches the DB; tools run against `PortfolioApi` (`apps/web/src/server/agent-api.ts`, user-scoped, read-only). Tools return totals so the model never sums rows; when a question type is slow because the model computes, add the total to a tool. Every turn gets a cached snapshot (`getContextSnapshot`) warmed on page open. The system prompt carries an **app map: keep it in sync when a flow moves or is renamed.** Turn timings log one `[chat] …` line per turn in the dev log.
 - **`packages/sim`** — the loop's simulated users (see "The loop" below).
+- **`site/`** — the public loop showcase (`index.html`, plain HTML, no build), deployed to https://salarabb.github.io/beobeo/ by `.github/workflows/pages.yml` on push to `main`. Its numbers are a snapshot (first 14 days); re-shoot `site/og.png` and `docs/loop-preview.png` when the page changes. The repo is MIT-licensed and public-ready: nothing personal (real portfolios, emails, the journal) is ever committed.
 
 ## Web app (`apps/web`; details: `docs/notes.md` → Gotchas, Visual identity)
 
@@ -141,7 +142,7 @@ agent: chat UI → /api/chat (SSE) → @beobeo/agent tool runner → PortfolioAp
 
 ## The loop (details: `PLAN.md` → The loop, `docs/notes.md` → packages/sim)
 
-- `scripts/evolve.sh` runs twice a day (08:00, 20:00): merges passing `evolve/*` branches into `salarabb/phase_1`, simulates (morning: a persona day; evening: missions), digests, then runs rounds of `claude -p /evolve` in the `../beobeo-evolve` worktree on :3100, then checks and merges. Limits pause the cycle until the reset. `/evolve` must never push, merge, reset or touch `.env`.
+- `scripts/evolve.sh` runs twice a day (08:00, 20:00): merges passing `evolve/*` branches into `main`, simulates (morning: a persona day; evening: missions), digests, then runs rounds of `claude -p /evolve` in the `../beobeo-evolve` worktree on :3100, then checks and merges. Limits pause the cycle until the reset. `/evolve` must never push, merge, reset or touch `.env`.
 - Personas: `packages/sim/personas/*.json`, named after Game of Thrones / Harry Potter characters (ids are first names; email `sim+<id>@beobeo.sim`). **Bump `version` on any persona edit.** Sim scripts `import "../src/env"` first.
 - Missions (`src/app/mission.ts`): one feature from `FEATURES` per persona, on a disposable twin account. Status is only whether the task got done; `trusted` is separate; goals must use the persona's real data, except a labeled `misbelief` (about one in six); `outOfSteps` marks a run that hit the step limit (default 24, `maxSteps` per feature). After each action a mission waits (≤5s) for `[data-slot=skeleton]` and `TabLoading`'s spinner to clear (`networkidle` resolves at once on a client-side navigation), so a new loading indicator should be one of those.
 - Sim-caused themes: `pnpm sim:theme wontfix <key> --note "SIM ARTIFACT: …"`.
