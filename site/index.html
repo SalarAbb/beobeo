@@ -71,11 +71,16 @@ p { margin: 0; max-width: 64ch; color: var(--ink-2); }
 .lede { font-size: 1.22rem; line-height: 1.5; color: var(--ink-2); max-width: 54ch; }
 .lede b { color: var(--user); font-weight: 650; }
 .lede strong { color: var(--ai); font-weight: 650; }
-.crowd { display: flex; flex-wrap: wrap; align-items: center; gap: 0; }
+.crowd { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 14px 22px; }
+.crowd .row { display: contents; }
+.crowd .faces { display: flex; flex-wrap: wrap; padding-right: 8px; }
 .crowd .av { width: 52px; height: 52px; margin-right: -8px; border-radius: 50%; box-shadow: 0 0 0 3px var(--bg); transition: transform .2s ease; }
 .crowd .av:hover { transform: translateY(-4px); }
-.crowd .plus { margin-left: 22px; display: flex; align-items: center; gap: 10px; color: var(--ink-3); font-size: .95rem; }
 .crowd .bot { width: 52px; height: 52px; }
+.crowd .who { font-size: .95rem; color: var(--ink-2); line-height: 1.35; }
+.crowd .who b { font-weight: 650; }
+.crowd .u b { color: var(--user); }
+.crowd .d b { color: var(--ai); }
 
 /* Stats */
 .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
@@ -185,6 +190,8 @@ footer { border-top: 1px solid var(--rule); padding-top: 24px; display: flex; fl
   .pair { grid-template-columns: minmax(0, 1fr); gap: 6px; }
   .arrow { transform: rotate(90deg); height: 28px; }
   .crowd .av, .crowd .bot { width: 42px; height: 42px; }
+  .crowd { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .crowd .row + .row .faces { margin-top: 10px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before { transition: none !important; animation: none !important; }
@@ -401,8 +408,9 @@ function bot(cls = "bot") {
 }
 
 // Hero crowd
-document.getElementById("crowd").innerHTML = P.map(face).join("")
-  + `<span class="plus">${bot()}<span>12 users, 1 tireless engineer</span></span>`;
+document.getElementById("crowd").innerHTML =
+  `<div class="row u"><div class="faces">${P.map(face).join("")}</div><span class="who"><b>12 user agents</b> use the app and file feedback</span></div>`
+  + `<div class="row d"><div class="faces">${bot()}</div><span class="who"><b>Developer agents</b> turn the feedback into fixes</span></div>`;
 document.getElementById("kind-user").innerHTML = face(byId.hermione);
 document.getElementById("kind-dev").innerHTML = bot("");
 
